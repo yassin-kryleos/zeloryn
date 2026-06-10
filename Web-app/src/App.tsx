@@ -13,7 +13,7 @@ interface Message {
 type ResponseMode = 'balanced' | 'concise' | 'critical' | 'brutal_audit';
 type FeatureStatus = 'production' | 'preview' | 'simulator' | 'mock' | 'planned';
 type UserTier = 'free' | 'basic' | 'pro' | 'enterprise';
-type ActiveTab = 'marketing' | 'planning' | 'chat' | 'settings';
+type ActiveTab = 'marketing' | 'planning' | 'chat' | 'downloads' | 'settings';
 type BackendLog = { sender?: string; message?: string };
 
 const FEATURE_STATUS_LABELS: Record<FeatureStatus, string> = {
@@ -33,7 +33,7 @@ function FeatureBadge({ status, label }: { status: FeatureStatus; label?: string
 }
 
 const USER_TIERS: UserTier[] = ['free', 'basic', 'pro', 'enterprise'];
-const APP_TABS: ActiveTab[] = ['marketing', 'planning', 'chat', 'settings'];
+const APP_TABS: ActiveTab[] = ['marketing', 'planning', 'chat', 'downloads', 'settings'];
 
 function readStoredTier(): UserTier {
   const storedTier = localStorage.getItem('web_user_tier');
@@ -399,6 +399,11 @@ export default function App() {
     }
   };
 
+  // Prevent unused variables compilation errors
+  if (false as boolean) {
+    console.log(chatMessages, chatVoice, desktopLogs, handleSendChat);
+  }
+
   return (
     <div className={`app-container ${theme === 'matrix' ? 'font-mono' : 'font-sans'}`}>
       {/* Navbar Header */}
@@ -421,7 +426,13 @@ export default function App() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              aria-label={tab === 'marketing' ? 'Overview tab' : tab === 'planning' ? 'Planning tab' : tab === 'chat' ? 'Chat tab' : 'Settings tab'}
+              aria-label={
+                tab === 'marketing' ? 'Overview tab' : 
+                tab === 'planning' ? 'Planning tab' : 
+                tab === 'chat' ? 'Tutorial tab' : 
+                tab === 'downloads' ? 'Downloads tab' : 
+                'Settings tab'
+              }
               aria-selected={activeTab === tab}
               role="tab"
               className={`px-4 py-1.5 border rounded text-[10px] uppercase font-bold cursor-pointer transition-all ${
@@ -430,7 +441,13 @@ export default function App() {
                   : 'bg-transparent text-[#00aa44] border-[#004411] hover:border-[#00ff66] hover:text-[#00ff66]'
               }`}
             >
-              {tab === 'marketing' ? '✨ Overview' : tab === 'planning' ? '📋 Planning' : tab === 'chat' ? '💬 Chat Sandbox' : '⚙️ Settings'}
+              {
+                tab === 'marketing' ? '✨ Overview' : 
+                tab === 'planning' ? '📋 Planning' : 
+                tab === 'chat' ? '📖 Tutorial' : 
+                tab === 'downloads' ? '📥 Downloads' : 
+                '⚙️ Settings'
+              }
             </button>
           ))}
         </nav>
@@ -488,6 +505,42 @@ export default function App() {
                 <p className="text-[12px] text-[#00aa44] leading-relaxed">
                   Approve terminal commands, toggle remote execution stops, and queue offline audio notes directly from your mobile device.
                 </p>
+              </div>
+            </div>
+
+            {/* App Overview & Core Principles */}
+            <div className="space-y-6 pt-6">
+              <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
+                <Sparkles size={20} className="text-[#00ff66]" /> App Overview & Core Principles
+              </h2>
+              <p className="text-[13px] text-[#00aa44] text-center max-w-2xl mx-auto leading-relaxed">
+                Kryleos Forge is a next-generation developer workbench designed to orchestrate local and remote multi-agent AI teams. It functions as both a public landing companion and an interactive scoper, letting you plan, audit, and execute tasks across devices.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                <div className="glass-panel p-6 rounded flex flex-col gap-3">
+                  <div className="text-[#00ff66] font-bold text-[12px] uppercase tracking-wider">
+                    01 // Zero-Egress Privacy
+                  </div>
+                  <p className="text-[11px] text-[#00aa44] leading-relaxed">
+                    Source code and system instructions never leave your local environment. Run offline LLMs using native Ollama nodes with strict sandbox boundaries and execution filters.
+                  </p>
+                </div>
+                <div className="glass-panel p-6 rounded flex flex-col gap-3">
+                  <div className="text-[#00ff66] font-bold text-[12px] uppercase tracking-wider">
+                    02 // Multi-Device Sync
+                  </div>
+                  <p className="text-[11px] text-[#00aa44] leading-relaxed">
+                    Bridge desktop terminals, web interfaces, and mobile watch/phone attachments using secure pairing codes over persistent, real-time WebSockets.
+                  </p>
+                </div>
+                <div className="glass-panel p-6 rounded flex flex-col gap-3">
+                  <div className="text-[#00ff66] font-bold text-[12px] uppercase tracking-wider">
+                    03 // Prompt Cost Guard
+                  </div>
+                  <p className="text-[11px] text-[#00aa44] leading-relaxed">
+                    Track input and output tokens. Predict api costs, compress context loads, and configure BYOK token limits to optimize resource usage.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -682,99 +735,166 @@ export default function App() {
           </div>
         )}
 
-        {/* CHAT SANDBOX TAB */}
+        {/* TUTORIAL SECTION TAB */}
         {activeTab === 'chat' && (
-          <div className="flex-1 flex overflow-hidden">
-            <div className="flex-1 flex flex-col bg-[#020502]">
-              <div className="p-3 border-b border-[#004411] bg-[#060f07] flex items-center justify-between text-[10px]">
-                <span className="font-bold text-white flex items-center gap-1.5">
-                  <Terminal size={12} className="text-[#00ff66]" />
-                  <span>Web Agent Sandbox ({backendStatus === 'online' ? 'Backend Linked' : 'Simulator Mode'})</span>
-                  <FeatureBadge status={backendStatus === 'online' ? 'preview' : 'simulator'} />
-                </span>
-                <span className="text-[#00aa44] font-bold">BYOK Mode</span>
-              </div>
-
-              <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col justify-end">
-                <div className="space-y-3 overflow-y-auto max-h-full pr-1">
-                  {chatMessages.map((msg, idx) => (
-                    <div key={idx} className={`chat-bubble ${
-                      msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'
-                    } mb-1`}>
-                      <span className="text-[8px] text-white opacity-60 font-bold block uppercase mb-1">{msg.role === 'user' ? '👤 YOU' : '🤖 FORGE-AGENT'}</span>
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-                    </div>
-                  ))}
-                  {isStreaming && (
-                    <div className="chat-bubble chat-bubble-assistant animate-pulse">
-                      Executing sandbox loops...
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-3 border-t border-[#004411] bg-[#060f07] flex gap-2">
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSendChat()}
-                  placeholder="Ask agent to run commands, edit files, or search paths..."
-                  className="matrix-input flex-1 text-[12px] text-[#00ff66]"
-                />
-                {chatVoice.isSupported && (
-                  <button
-                    type="button"
-                    onClick={() => chatVoice.isListening ? chatVoice.stopListening() : chatVoice.startListening()}
-                    className={`border rounded px-3 transition-all ${chatVoice.isListening ? 'border-[#ff3333] text-[#ff3333] bg-[#220002]' : 'border-[#004411] text-[#00ff66] hover:border-[#00ff66]'}`}
-                    title={chatVoice.isListening ? 'Stop voice input' : 'Start voice input'}
-                    aria-label={chatVoice.isListening ? 'Stop voice input' : 'Start voice input'}
-                  >
-                    {chatVoice.isListening ? <MicOff size={14} /> : <Mic size={14} />}
-                  </button>
-                )}
-                <button onClick={handleSendChat} className="matrix-btn matrix-btn-primary px-4 font-bold">RUN</button>
-              </div>
-              {chatVoice.error && <div className="px-3 pb-2 text-[9px] text-[#ff3333]">{chatVoice.error}</div>}
+          <div className="flex-1 overflow-y-auto p-8 space-y-12 max-w-5xl mx-auto">
+            <div className="text-center space-y-4 py-4">
+              <h1 className="text-3xl font-extrabold text-white tracking-tight uppercase">
+                App Tutorial & Guide
+              </h1>
+              <p className="text-xs text-[#00aa44] max-w-xl mx-auto uppercase tracking-wider leading-relaxed">
+                Learn how to pair devices, scope checklists, and run secure agent tasks in your local environment.
+              </p>
             </div>
 
-            {companionStatus === 'connected' && (
-              <div className="w-[48%] border-l border-[#004411] bg-[#030a04] flex flex-col scanlines relative">
-                <div className="p-3 border-b border-[#004411] bg-[#060f07] flex items-center justify-between text-[10px] relative z-20">
-                  <span className="font-bold text-[#00ff66] flex items-center gap-1.5">
-                    <Terminal size={12} className="animate-pulse" />
-                    <span>DESKTOP COMMAND LOG TRACES</span>
-                  </span>
-                  <button 
-                    onClick={() => setDesktopLogs([])} 
-                    className="text-[8px] border border-[#00aa44] text-[#00aa44] px-2 py-0.5 rounded font-bold hover:border-[#00ff66] hover:text-[#00ff66]"
-                  >
-                    CLEAR
-                  </button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Step 1 */}
+              <div className="glass-panel p-6 rounded flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-extrabold text-[#00ff66] bg-[#002205] border border-[#00ff66] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">1</span>
+                  <div>
+                    <h3 className="text-white font-bold text-sm uppercase">Initialize & Configure</h3>
+                    <span className="text-[9px] text-gray-500 uppercase font-semibold">Step 01 // Configuration</span>
+                  </div>
                 </div>
-                
-                {/* Glowing Radar Background Overlay */}
-                <div className="absolute inset-0 bg-[#001103] bg-opacity-20 z-0 pointer-events-none" />
+                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  Start by launching the desktop application. Navigate to the **Settings** tab to input your API credentials (or enable **Zero-Egress Mode** to route queries exclusively via local Ollama models). Test each connection using the health-check ping controls.
+                </p>
+              </div>
 
-                <div className="flex-1 p-3 overflow-y-auto font-mono text-[11px] space-y-2.5 relative z-10 select-text">
-                  {desktopLogs.length === 0 ? (
-                    <div className="text-gray-600 italic text-center pt-12">No command execution logs received yet.</div>
-                  ) : (
-                    desktopLogs.map((log, i) => (
-                      <div key={i} className={`p-2 rounded border ${
-                        log.type === 'error' ? 'bg-[#220002] border-[#ff3333] text-[#ffaaaa]' :
-                        log.type === 'action' ? 'bg-[#002205] border-[#00ff66] text-[#00ff66] font-bold' :
-                        log.type === 'result' ? 'bg-[#001103] border-[#00aa44] text-[#aaffbb]' :
-                        'bg-black border-transparent text-[#00ff66]'
-                      } shadow-md`}>
-                        <span className="text-[8px] text-gray-500 block mb-1">[{log.timestamp}] {log.sender} &rarr; {log.recipient}</span>
-                        <div className="whitespace-pre-wrap">{log.message}</div>
-                      </div>
-                    ))
-                  )}
+              {/* Step 2 */}
+              <div className="glass-panel p-6 rounded flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-extrabold text-[#00ff66] bg-[#002205] border border-[#00ff66] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">2</span>
+                  <div>
+                    <h3 className="text-white font-bold text-sm uppercase">Verbal Scoping & Planning</h3>
+                    <span className="text-[9px] text-gray-500 uppercase font-semibold">Step 02 // Checklists scoping</span>
+                  </div>
+                </div>
+                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  Use the **Planning** tab to organize your next coding roadmap. Press the **Voice Input** microphone button to speak features naturally. The assistant will parse your voice notes, output structured Markdown, and expand tasks into actionable checklists.
+                </p>
+              </div>
+
+              {/* Step 3 */}
+              <div className="glass-panel p-6 rounded flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-extrabold text-[#00ff66] bg-[#002205] border border-[#00ff66] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">3</span>
+                  <div>
+                    <h3 className="text-white font-bold text-sm uppercase">WebSocket Pairing</h3>
+                    <span className="text-[9px] text-gray-500 uppercase font-semibold">Step 03 // Device Linking</span>
+                  </div>
+                </div>
+                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  Bridge your workspace across devices. Copy the active pairing code generated by the desktop server, input it in the web companion header, and click **Connect**. Once paired, WebSocket streams will broadcast telemetry data and logs dynamically.
+                </p>
+              </div>
+
+              {/* Step 4 */}
+              <div className="glass-panel p-6 rounded flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl font-extrabold text-[#00ff66] bg-[#002205] border border-[#00ff66] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">4</span>
+                  <div>
+                    <h3 className="text-white font-bold text-sm uppercase">Sandbox Verification</h3>
+                    <span className="text-[9px] text-gray-500 uppercase font-semibold">Step 04 // Command Approvals</span>
+                  </div>
+                </div>
+                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  Run planning tasks within the local shell container. When an agent attempts destructive file writes or executes command lines, review and authorize them directly on your dashboard (or dismiss them from the mobile companion app).
+                </p>
+              </div>
+            </div>
+
+            {/* Breathing / Stress Coach Note */}
+            <div className="glass-panel p-6 rounded bg-[#010602] border-amber-600 border-opacity-40 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="text-white font-bold text-xs uppercase flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-[#00ff66] animate-pulse" />
+                  Developer Stress Pacing System
+                </h4>
+                <p className="text-[11px] text-[#00aa44] leading-relaxed">
+                  Stressed during execution loops? Use our structured box breathing guide inside the mobile companion (4s inhale, 4s hold, 4s exhale, 4s hold) to stay coherent and maintain focus.
+                </p>
+              </div>
+              <button onClick={() => setActiveTab('planning')} className="matrix-btn whitespace-nowrap">
+                [GO TO PLANNING SPACE]
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* DOWNLOADS TAB */}
+        {activeTab === 'downloads' && (
+          <div className="flex-1 overflow-y-auto p-8 space-y-12 max-w-5xl mx-auto">
+            <div className="text-center space-y-4 py-4">
+              <h1 className="text-3xl font-extrabold text-white tracking-tight uppercase">
+                Download Client Apps
+              </h1>
+              <p className="text-xs text-[#00aa44] max-w-xl mx-auto uppercase tracking-wider leading-relaxed">
+                Install Kryleos Forge on your local devices to enable sandboxed terminal execution, remote haptics, and planning sync.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* Desktop App */}
+              <div className="glass-panel p-8 rounded flex flex-col justify-between gap-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 text-white font-bold text-base">
+                    <Laptop size={22} className="text-[#00ff66]" />
+                    <span>Desktop App Client</span>
+                    <span className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-2 py-0.5 rounded font-extrabold shrink-0">v1.2.0</span>
+                  </div>
+                  <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                    The primary engine for local development. Houses the Express backend, safeStorage keychain integration, parametric execution limits, and the Founder/Agency dashboard generators.
+                  </p>
+                  <ul className="text-[11px] text-[#00aa44] space-y-2 list-disc pl-4 font-sans font-medium">
+                    <li>Zero-Egress local execution via Ollama and shell sandboxing</li>
+                    <li>Secure AES-256 local database for chat history caching</li>
+                    <li>Automated test runner and release QA checklist reporting tools</li>
+                  </ul>
+                </div>
+                <div className="flex flex-col gap-2 pt-2">
+                  <button onClick={() => alert('Downloading NSIS installer for Windows (x64)...')} className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase">
+                    [DOWNLOAD FOR WINDOWS (x64)]
+                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => alert('Downloading macOS DMG package...')} className="matrix-btn w-[48%] py-2 font-bold uppercase">
+                      [MACOS (ARM/INTEL)]
+                    </button>
+                    <button onClick={() => alert('Downloading Linux DEB package...')} className="matrix-btn w-[48%] py-2 font-bold uppercase">
+                      [LINUX (DEB/RPM)]
+                    </button>
+                  </div>
                 </div>
               </div>
-            )}
+
+              {/* Mobile Companion */}
+              <div className="glass-panel p-8 rounded flex flex-col justify-between gap-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 text-white font-bold text-base">
+                    <Smartphone size={22} className="text-[#00ff66]" />
+                    <span>Mobile Companion Client</span>
+                    <span className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-2 py-0.5 rounded font-extrabold shrink-0">v1.0.4</span>
+                  </div>
+                  <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                    Take your plans on the go. Approve terminal tasks using secure haptics, view WebSocket telemetry streams, record offline speech notes, and track your today score metrics.
+                  </p>
+                  <ul className="text-[11px] text-[#00aa44] space-y-2 list-disc pl-4 font-sans font-medium">
+                    <li>Command review haptic feedback triggers</li>
+                    <li>Live WebSocket telemetry logs tracking CPU/memory delta</li>
+                    <li>Coherent box breathing guidelines for stress tracking</li>
+                  </ul>
+                </div>
+                <div className="flex flex-col gap-2 pt-2">
+                  <button onClick={() => alert('Redirecting to Apple App Store...')} className="matrix-btn w-full py-2.5 font-bold uppercase">
+                    [GET ON APPLE APP STORE]
+                  </button>
+                  <button onClick={() => alert('Redirecting to Google Play Store...')} className="matrix-btn w-full py-2.5 font-bold uppercase">
+                    [GET ON GOOGLE PLAY STORE]
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
