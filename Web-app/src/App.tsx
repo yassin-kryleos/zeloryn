@@ -40,6 +40,226 @@ function readStoredTier(): UserTier {
   return USER_TIERS.includes(storedTier as UserTier) ? (storedTier as UserTier) : 'free';
 }
 
+interface SimPlanFile {
+  action: 'NEW' | 'MODIFY';
+  path: string;
+}
+
+interface SimPlan {
+  checklist: string[];
+  files: SimPlanFile[];
+}
+
+interface SimCrewMessage {
+  agent: string;
+  msg: string;
+}
+
+interface SimFlow {
+  cardName: string;
+  stages: string[];
+}
+
+interface SimForge {
+  commands: string[];
+}
+
+interface SimTaskData {
+  title: string;
+  plan: SimPlan;
+  crew: SimCrewMessage[];
+  flow: SimFlow;
+  forge: SimForge;
+}
+
+const SIM_DATA: Record<'auth' | 'cache' | 'api' | 'custom', SimTaskData> = {
+  auth: {
+    title: '🔒 JWT Authentication flow',
+    plan: {
+      checklist: [
+        'Design authentication database schema',
+        'Implement password hashing (PBKDF2) and salt key generation',
+        'Add token signing and verification middleware',
+        'Write Vitest security verification tests',
+      ],
+      files: [
+        { action: 'NEW', path: 'src/middleware/auth.ts' },
+        { action: 'MODIFY', path: 'src/backend/server.ts' },
+        { action: 'NEW', path: 'src/__tests__/auth.test.ts' }
+      ]
+    },
+    crew: [
+      { agent: 'Architect', msg: 'System architecture mapped. Determined target dependencies: jsonwebtoken & bcrypt.' },
+      { agent: 'Developer', msg: 'Writing PBKDF2 cryptography wrappers and Express middleware interceptors.' },
+      { agent: 'Auditor', msg: 'Analyzing code boundary safety and designing vulnerability injection tests.' }
+    ],
+    flow: {
+      cardName: '🎫 Feature: JWT Auth',
+      stages: ['Backlog', 'In-Progress', 'Under Audit', 'Ready to Forge']
+    },
+    forge: {
+      commands: [
+        'npm install jsonwebtoken bcrypt @types/jsonwebtoken',
+        'npx tsc --noEmit',
+        'vitest run src/__tests__/auth.test.ts',
+        '✓ 12 tests passed successfully.',
+        'git add src/middleware/auth.ts src/backend/server.ts',
+        'git commit -m "feat(auth): implement secure JWT token credentials plan"',
+        '✓ WORKSPACE FORGED SUCCESSFULLY!'
+      ]
+    }
+  },
+  cache: {
+    title: '⚡ SQLite Caching layer',
+    plan: {
+      checklist: [
+        'Configure local memory cache dictionary',
+        'Implement read-through database caching logic',
+        'Configure async write-behind file syncing',
+        'Perform Vitest cache validation benchmarks',
+      ],
+      files: [
+        { action: 'MODIFY', path: 'src/backend/db.ts' },
+        { action: 'NEW', path: 'src/backend/cache.ts' }
+      ]
+    },
+    crew: [
+      { agent: 'Architect', msg: 'Identified db.ts bottleneck. Designed in-memory key-value cache layer.' },
+      { agent: 'Developer', msg: 'Writing synchronized write-behind callbacks and SQLite cache updates.' },
+      { agent: 'Auditor', msg: 'Verifying atomic cache validation states under high concurrency.' }
+    ],
+    flow: {
+      cardName: '🎫 Refactor: DB Caching',
+      stages: ['Backlog', 'In-Progress', 'Under Audit', 'Ready to Forge']
+    },
+    forge: {
+      commands: [
+        'npx tsc --noEmit',
+        'node qa/scripts/performance-test-scripts/node-load-test.mjs',
+        '✓ DB latency reduced: 67ms -> 0.8ms.',
+        'git add src/backend/db.ts src/backend/cache.ts',
+        'git commit -m "perf(db): implement in-memory query database caching"',
+        '✓ WORKSPACE FORGED SUCCESSFULLY!'
+      ]
+    }
+  },
+  api: {
+    title: '🔌 GitHub Issues sync integration',
+    plan: {
+      checklist: [
+        'Configure secure token headers for GitHub API',
+        'Add issue fetch, parse, and mapping utilities',
+        'Wired GitHub planning synchronization endpoints',
+        'Verify token lifecycle verification scenarios',
+      ],
+      files: [
+        { action: 'NEW', path: 'src/integrations/github.ts' },
+        { action: 'MODIFY', path: 'src/backend/server.ts' }
+      ]
+    },
+    crew: [
+      { agent: 'Architect', msg: 'Mapped GitHub REST API payload schemas to planning task models.' },
+      { agent: 'Developer', msg: 'Implementing secure personal token headers and client fetch blocks.' },
+      { agent: 'Auditor', msg: 'Scanning for secret exposure risks in sync payloads and API logs.' }
+    ],
+    flow: {
+      cardName: '🎫 Integration: GitHub Sync',
+      stages: ['Backlog', 'In-Progress', 'Under Audit', 'Ready to Forge']
+    },
+    forge: {
+      commands: [
+        'npx tsc --noEmit',
+        'vitest run src/integrations/__tests__/github.test.ts',
+        '✓ Issues mapping assertions passed.',
+        'git add src/integrations/github.ts src/backend/server.ts',
+        'git commit -m "feat(github): implement OAuth issues synchronization"',
+        '✓ WORKSPACE FORGED SUCCESSFULLY!'
+      ]
+    }
+  },
+  custom: {
+    title: '✏️ Custom Scoped Task',
+    plan: {
+      checklist: [
+        'Analyze custom prompt inputs and requirements',
+        'Generate custom project components plan',
+        'Wired verification tests for custom requirements',
+        'Finalize codebase implementation',
+      ],
+      files: [
+        { action: 'NEW', path: 'src/components/custom_task.ts' },
+        { action: 'MODIFY', path: 'src/App.tsx' }
+      ]
+    },
+    crew: [
+      { agent: 'Architect', msg: 'Resolved design bounds for: ' },
+      { agent: 'Developer', msg: 'Implementing custom logical handlers...' },
+      { agent: 'Auditor', msg: 'Verifying input bounds compliance.' }
+    ],
+    flow: {
+      cardName: '🎫 Custom: Scoped Task',
+      stages: ['Backlog', 'In-Progress', 'Under Audit', 'Ready to Forge']
+    },
+    forge: {
+      commands: [
+        'npx tsc --noEmit',
+        'npm run test',
+        '✓ All client validation tests passed.',
+        'git commit -m "feat(custom): implement custom scoped planning changes"',
+        '✓ WORKSPACE FORGED SUCCESSFULLY!'
+      ]
+    }
+  }
+};
+
+const getPlanChecklist = (type: 'auth' | 'cache' | 'api' | 'custom', customInput: string) => {
+  if (type === 'custom') {
+    return [
+      `Analyze requirements for: "${customInput || 'User Scoped Task'}"`,
+      'Generate component specifications checklist',
+      'Wired target validation endpoints',
+      'Execute Vitest regression audits',
+    ];
+  }
+  return SIM_DATA[type].plan.checklist;
+};
+
+const getPlanFiles = (type: 'auth' | 'cache' | 'api' | 'custom') => {
+  return SIM_DATA[type].plan.files;
+};
+
+const getCrewMessages = (type: 'auth' | 'cache' | 'api' | 'custom', customInput: string) => {
+  if (type === 'custom') {
+    return [
+      { agent: 'Architect', msg: `Resolved system design bounds for custom request: "${customInput || 'User Scoped Task'}"` },
+      { agent: 'Developer', msg: 'Writing components implementation under strict sandbox policy...' },
+      { agent: 'Auditor', msg: 'Verifying inputs bounds and checking unit tests coverages.' }
+    ];
+  }
+  return SIM_DATA[type].crew;
+};
+
+const getFlowCardName = (type: 'auth' | 'cache' | 'api' | 'custom', customInput: string) => {
+  if (type === 'custom') {
+    return `🎫 Task: ${customInput ? customInput.slice(0, 18) : 'Custom Scoped'}`;
+  }
+  return SIM_DATA[type].flow.cardName;
+};
+
+const getForgeCommands = (type: 'auth' | 'cache' | 'api' | 'custom', customInput: string) => {
+  if (type === 'custom') {
+    const commitMsg = `feat(custom): implement ${customInput ? customInput.slice(0, 25) : 'custom scoped'} changes`;
+    return [
+      'npx tsc --noEmit',
+      'npm run test',
+      '✓ All client validation tests passed.',
+      `git commit -m "${commitMsg}"`,
+      '✓ WORKSPACE FORGED SUCCESSFULLY!'
+    ];
+  }
+  return SIM_DATA[type].forge.commands;
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('marketing');
   
@@ -122,6 +342,42 @@ export default function App() {
   const [cpuHistory, setCpuHistory] = useState<number[]>(Array(15).fill(12));
   const [memoryHistory, setMemoryHistory] = useState<number[]>(Array(15).fill(210));
   const companionWsRef = React.useRef<WebSocket | null>(null);
+
+  // Simulator States
+  const [simTaskType, setSimTaskType] = useState<'auth' | 'cache' | 'api' | 'custom'>('auth');
+  const [simCustomInput, setSimCustomInput] = useState('');
+  const [simRunning, setSimRunning] = useState(false);
+  const [simStep, setSimStep] = useState<number>(0);
+  const [simProgress, setSimProgress] = useState<number>(0);
+
+  useEffect(() => {
+    if (!simRunning) return;
+
+    let currentStep = 0;
+    let currentProgress = 0;
+    const intervalTime = 100; // Tick every 100ms
+    const stepDuration = 3000; // 3 seconds per step
+    const totalSteps = 4;
+    
+    const timer = setInterval(() => {
+      currentProgress += (intervalTime / stepDuration) * 100;
+      if (currentProgress >= 100) {
+        currentProgress = 0;
+        currentStep += 1;
+        if (currentStep >= totalSteps) {
+          clearInterval(timer);
+          setSimRunning(false);
+          setSimProgress(100);
+          setSimStep(3);
+          return;
+        }
+        setSimStep(currentStep);
+      }
+      setSimProgress(Math.min(100, Math.floor(currentProgress)));
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, [simRunning]);
 
   const connectCompanion = (code: string) => {
     if (!code) return;
@@ -486,12 +742,15 @@ export default function App() {
         {activeTab === 'marketing' && (
           <div className="flex-1 overflow-y-auto p-8 space-y-12 max-w-5xl mx-auto">
             {/* Hero */}
-            <div className="text-center space-y-4 py-8">
-              <h1 className="text-4xl font-extrabold text-white tracking-tight leading-none">
+            <div className="text-center space-y-4 py-8 animate-fadeIn">
+              <h1 className="text-4xl font-extrabold text-white tracking-tight leading-none uppercase">
                 KRYLEOS <span className="text-[#00ff66] text-shadow-[0_0_8px_rgba(0,255,102,0.4)]">FORGE</span>
               </h1>
-              <p className="text-sm text-[#00aa44] max-w-xl mx-auto uppercase tracking-wider leading-relaxed">
-                Multi-Agent AI developer workspace. Scope architectures on the fly, synchronize checklists, and execute secure sandbox tasks.
+              <div className="inline-block px-3 py-1 bg-[#001f05] border border-[#00ff66] rounded text-[10px] text-[#00ff66] font-mono font-extrabold tracking-widest uppercase mb-2">
+                // AUTONOMOUS DEVELOPER PLANNER
+              </div>
+              <p className="text-sm text-[#00aa44] max-w-2xl mx-auto uppercase tracking-wider leading-relaxed">
+                Kryleos Forge is a next-generation developer workbench designed to orchestrate local and remote multi-agent AI teams. It functions as both a public landing companion and an interactive scoper, letting you plan, audit, and execute tasks across devices.
               </p>
               <div className="flex justify-center gap-4 pt-4">
                 <button onClick={() => setActiveTab('planning')} className="matrix-btn matrix-btn-primary px-5 py-2.5 font-bold uppercase rounded">
@@ -503,8 +762,380 @@ export default function App() {
               </div>
             </div>
 
+            {/* CONCEPT CLARITY: Chat Assistant vs Developer Planner */}
+            <div className="glass-panel p-6 rounded space-y-4 border border-[#00ff66] border-opacity-20 bg-[#020904] animate-fadeIn">
+              <h2 className="text-md font-bold text-white uppercase tracking-wider text-center border-b border-[#004411] pb-2">
+                Why Kryleos Forge is Actually a Planner (Not a Chatbot)
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                {/* Legacy Chatbots */}
+                <div className="border border-[#331111] bg-[#0c0505] p-5 rounded space-y-3">
+                  <div className="text-[#ff5555] font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+                    <ShieldAlert size={14} />
+                    <span>Legacy Chat Assistants (Outdated)</span>
+                  </div>
+                  <ul className="text-[11px] text-gray-500 space-y-2 list-disc pl-4 font-sans font-medium">
+                    <li>Vague conversations with zero structured tracking</li>
+                    <li>Code is dumped into chat windows, leaving compilation to you</li>
+                    <li>No concept of task lifecycle: you copy-paste files manually</li>
+                    <li>Unmonitored executions with potential command injection risks</li>
+                  </ul>
+                </div>
+                {/* Kryleos Planner */}
+                <div className="border border-[#004411] bg-[#001103] p-5 rounded space-y-3">
+                  <div className="text-[#00ff66] font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+                    <ShieldCheck size={14} />
+                    <span>Kryleos Developer Planner (10/10)</span>
+                  </div>
+                  <ul className="text-[11px] text-[#aaffbb] space-y-2 list-disc pl-4 font-sans font-medium">
+                    <li>**Checklist-First approach**: Prompts are immediately structured into granular planning files</li>
+                    <li>**Multi-Agent Crew**: Specialized bots take tasks from the checklist to work in parallel</li>
+                    <li>**Synchronized Status Board**: Track tasks moving across visual Kanban board columns</li>
+                    <li>**Local Compile Sandboxes**: Code changes build and test securely within isolated loops</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Interactive Task Flow Simulator Section */}
+            <div className="space-y-6 pt-6 animate-fadeIn">
+              <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
+                <Terminal size={20} className="text-[#00ff66]" /> Visual Task Lifecycle Simulator
+              </h2>
+              <p className="text-[13px] text-[#00aa44] text-center max-w-2xl mx-auto leading-relaxed">
+                Observe the lifecycle flow of tasks along the planning-execution pipeline. Run the simulator to trace any task from initial scoping to sandbox compilation:
+              </p>
+
+              {/* The Simulator Widget */}
+              <div className="glass-panel p-6 rounded space-y-6 relative border border-[#00ff66] border-opacity-30">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#004411] pb-4">
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <Sparkles className="text-[#00ff66]" size={18} />
+                      Interactive Task Flow Simulator
+                    </h3>
+                    <p className="text-[11px] text-[#00aa44]">
+                      Select or type a feature request and trace how Kryleos Forge plans, delegates, monitors, and compiles it.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Preset Buttons */}
+                    {(['auth', 'cache', 'api', 'custom'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          setSimTaskType(type);
+                          if (simRunning) {
+                            setSimRunning(false);
+                          }
+                          setSimStep(0);
+                          setSimProgress(100);
+                        }}
+                        className={`px-3 py-1 border rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
+                          simTaskType === type
+                            ? 'bg-[#002205] text-[#00ff66] border-[#00ff66] shadow-[0_0_8px_rgba(0,255,102,0.3)]'
+                            : 'bg-transparent text-[#00aa44] border-[#004411] hover:border-[#00ff66] hover:text-[#00ff66]'
+                        }`}
+                      >
+                        {type === 'auth' ? '🔒 Auth Flow' : type === 'cache' ? '⚡ DB Caching' : type === 'api' ? '🔌 GitHub API' : '✏️ Custom Task'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Custom Input Box if Custom Task is selected */}
+                {simTaskType === 'custom' && (
+                  <div className="flex flex-col gap-2 p-4 bg-black bg-opacity-40 border border-[#004411] rounded animate-fadeIn">
+                    <label className="text-[10px] uppercase text-[#00aa44] font-bold">Configure Custom Scoped Prompt</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={simCustomInput}
+                        onChange={e => setSimCustomInput(e.target.value)}
+                        placeholder="e.g., Integrate email confirmation using Nodemailer..."
+                        className="matrix-input flex-1 text-[12px] text-[#00ff66]"
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      <span className="text-[9px] text-[#00aa44] font-bold uppercase self-center">Suggestions:</span>
+                      {['Add Stripe webhooks', 'Refactor routing', 'Dockerize backend'].map(s => (
+                        <button
+                          key={s}
+                          onClick={() => setSimCustomInput(s)}
+                          className="text-[9px] border border-[#004411] text-[#00aa44] hover:border-[#00ff66] hover:text-[#00ff66] px-2 py-0.5 rounded uppercase font-semibold cursor-pointer"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Simulator Controls & Progress Header */}
+                <div className="flex flex-col gap-4">
+                  <div className="flex justify-between items-center bg-[#060f07] border border-[#004411] p-3 rounded">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => {
+                          if (simRunning) {
+                            setSimRunning(false);
+                          } else {
+                            setSimRunning(true);
+                            setSimStep(0);
+                            setSimProgress(0);
+                          }
+                        }}
+                        className="matrix-btn matrix-btn-primary px-4 py-1.5 text-[10px] font-bold rounded flex items-center gap-1.5"
+                      >
+                        <RefreshCw className={simRunning ? 'animate-spin' : ''} size={11} />
+                        <span>{simRunning ? 'RUNNING...' : 'RUN LIFE-CYCLE SIMULATION'}</span>
+                      </button>
+                      {simRunning && (
+                        <span className="text-[10px] text-[#00ff66] font-mono animate-pulse uppercase">
+                          Executing Phase {simStep + 1}/4: {simStep === 0 ? 'PLAN' : simStep === 1 ? 'CREW' : simStep === 2 ? 'FLOW' : 'FORGE'} ({simProgress}%)
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[9px] text-[#00aa44] font-bold uppercase">
+                      Active: {simTaskType === 'custom' ? `✏️ Custom: ${simCustomInput || 'User Scoped Task'}` : simTaskType === 'auth' ? '🔒 JWT Auth' : simTaskType === 'cache' ? '⚡ SQLite Caching' : '🔌 GitHub Sync'}
+                    </span>
+                  </div>
+
+                  {/* Timeline Progress Bar */}
+                  <div className="relative w-full h-1.5 bg-[#001103] border border-[#003311] rounded overflow-hidden">
+                    <div
+                      className="absolute top-0 left-0 h-full bg-[#00ff66] transition-all duration-100 ease-out shadow-[0_0_8px_#00ff66]"
+                      style={{ width: `${simRunning ? (simStep * 25 + simProgress / 4) : 100}%` }}
+                    />
+                  </div>
+
+                  {/* Tab Navigation for Phases */}
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    {['PLAN', 'CREW', 'FLOW', 'FORGE'].map((phase, idx) => {
+                      const isActive = simStep === idx;
+                      const isCompleted = simStep > idx || (!simRunning && simProgress === 100);
+                      return (
+                        <button
+                          key={phase}
+                          onClick={() => {
+                            setSimRunning(false);
+                            setSimStep(idx);
+                            setSimProgress(100);
+                          }}
+                          className={`py-2 border rounded transition-all cursor-pointer ${
+                            isActive
+                              ? 'bg-[#002205] border-[#00ff66] text-[#00ff66] shadow-[0_0_8px_rgba(0,255,102,0.25)] font-extrabold'
+                              : isCompleted
+                              ? 'border-[#008833] text-[#00dd55] font-semibold bg-[#000a02]'
+                              : 'border-[#003311] text-[#007722] hover:border-[#005522] hover:text-[#00aa44]'
+                          }`}
+                        >
+                          <div className="text-[11px] uppercase tracking-wider">{idx + 1}. {phase}</div>
+                          <div className="text-[8px] opacity-70">
+                            {idx === 0 ? 'Scoper' : idx === 1 ? 'Squad' : idx === 2 ? 'Board' : 'Sandbox'}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Simulation Active Pane */}
+                <div className="min-h-[260px] bg-black bg-opacity-50 border border-[#004411] rounded p-6 flex flex-col justify-between relative overflow-hidden">
+                  {/* Scanline Sweep Overlay */}
+                  <div className="absolute inset-0 pointer-events-none opacity-5 bg-gradient-to-b from-transparent via-[#00ff66] to-transparent bg-[length:100%_4px]" />
+
+                  {/* PLAN (Step 0) Display */}
+                  {simStep === 0 && (
+                    <div className="space-y-4 animate-fadeIn">
+                      <div className="flex justify-between items-center border-b border-[#004411] pb-2">
+                        <span className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <FileText size={13} className="text-[#00ff66]" />
+                          <span>01 // PLAN phase: Structured Scoper & Checklist Architect</span>
+                        </span>
+                        <span className="text-[9px] bg-[#00ff66] text-black px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Checklists Ready</span>
+                      </div>
+                      <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                        Kryleos Forge parses the prompt to generate granular checklists mapping strict acceptance criteria. It generates the implementation plan structure offline.
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                        {/* Checklist card */}
+                        <div className="border border-[#004411] bg-[#001103] p-4 rounded space-y-2">
+                          <div className="text-[9px] text-[#00ff66] font-bold uppercase tracking-wider border-b border-[#003311] pb-1">Generated Checklists</div>
+                          <ul className="text-[11px] text-[#aaffbb] space-y-1.5 font-mono">
+                            {getPlanChecklist(simTaskType, simCustomInput).map((item, index) => {
+                              const isVisible = !simRunning || simProgress > (index * 25);
+                              return (
+                                <li key={index} className={`flex items-start gap-1.5 transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0 translate-x-2'}`}>
+                                  <span className="text-[#00ff66] font-bold">{isVisible ? '[✓]' : '[ ]'}</span>
+                                  <span>{item}</span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                        {/* Target files card */}
+                        <div className="border border-[#004411] bg-[#001103] p-4 rounded space-y-2">
+                          <div className="text-[9px] text-cyan-400 font-bold uppercase tracking-wider border-b border-[#003311] pb-1">Targeted Files & Components</div>
+                          <div className="text-[11px] text-[#aaffbb] space-y-2 font-mono">
+                            {getPlanFiles(simTaskType).map((file, index) => {
+                              const isVisible = !simRunning || simProgress > (index * 30 + 10);
+                              return (
+                                <div key={index} className={`flex items-center justify-between transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+                                  <span className="text-white text-xs">{file.path}</span>
+                                  <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold ${file.action === 'NEW' ? 'bg-cyan-950 border border-cyan-500 text-cyan-200' : 'bg-amber-950 border border-amber-500 text-amber-200'}`}>
+                                    {file.action}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CREW (Step 1) Display */}
+                  {simStep === 1 && (
+                    <div className="space-y-4 animate-fadeIn">
+                      <div className="flex justify-between items-center border-b border-[#004411] pb-2">
+                        <span className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <Laptop size={13} className="text-[#00ff66]" />
+                          <span>02 // CREW phase: Autonomous Multi-Agent Squad</span>
+                        </span>
+                        <span className="text-[9px] bg-cyan-500 text-black px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Squad Engaged</span>
+                      </div>
+                      <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                        The planner constructs an agent crew (Architect, Developer, Auditor) to coordinate on the plan and divide task assignments.
+                      </p>
+                      
+                      {/* Agent Avatars Row */}
+                      <div className="grid grid-cols-3 gap-3">
+                        {['Architect', 'Developer', 'Auditor'].map((role, idx) => {
+                          const isRunningRole = simRunning && (
+                            (idx === 0 && simProgress < 40) ||
+                            (idx === 1 && simProgress >= 40 && simProgress < 80) ||
+                            (idx === 2 && simProgress >= 80)
+                          );
+                          const isPastRole = !simRunning || (idx === 0 && simProgress >= 40) || (idx === 1 && simProgress >= 80);
+                          return (
+                            <div
+                              key={role}
+                              className={`p-3 rounded border text-center transition-all duration-300 ${
+                                isRunningRole
+                                  ? 'border-cyan-400 bg-cyan-950 bg-opacity-20 shadow-[0_0_8px_rgba(34,211,238,0.25)] scale-105'
+                                  : isPastRole
+                                  ? 'border-[#005522] bg-[#001103] bg-opacity-50'
+                                  : 'border-[#002205] opacity-40'
+                              }`}
+                            >
+                              <div className="text-xs font-bold text-white uppercase">{role}</div>
+                              <div className={`text-[8px] font-mono mt-1 ${isRunningRole ? 'text-cyan-400 font-extrabold animate-pulse' : 'text-gray-500'}`}>
+                                {isRunningRole ? '// COMPUTING...' : isPastRole ? '// IDLE' : '// READY'}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Dialog bubble logs */}
+                      <div className="border border-[#004411] bg-black bg-opacity-40 p-3 rounded space-y-2 h-24 overflow-y-auto font-mono text-[10px]">
+                        {getCrewMessages(simTaskType, simCustomInput).map((msg, index) => {
+                          const isVisible = !simRunning || simProgress > (index * 35 + 10);
+                          return (
+                            <div key={index} className={`flex gap-2 transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+                              <span className="text-cyan-400 font-bold uppercase w-16">{msg.agent}:</span>
+                              <span className="text-[#aaffbb]">{msg.msg}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* FLOW (Step 2) Display */}
+                  {simStep === 2 && (
+                    <div className="space-y-4 animate-fadeIn">
+                      <div className="flex justify-between items-center border-b border-[#004411] pb-2">
+                        <span className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <Database size={13} className="text-[#00ff66]" />
+                          <span>03 // FLOW phase: Realtime Kanban Status Board</span>
+                        </span>
+                        <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Sync Status</span>
+                      </div>
+                      <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                        Visual status board syncs planning checklists across Electron, web overlays, and mobile pair devices in real-time.
+                      </p>
+
+                      {/* Board visualizer columns */}
+                      <div className="grid grid-cols-4 gap-2 font-mono text-[9px] pt-1">
+                        {['BACKLOG', 'DEVELOPING', 'AUDIT REVIEW', 'FORGE READY'].map((col, idx) => {
+                          const cardInCol = !simRunning
+                            ? idx === 3
+                            : (
+                                (simProgress <= 25 && idx === 0) ||
+                                (simProgress > 25 && simProgress <= 50 && idx === 1) ||
+                                (simProgress > 50 && simProgress <= 75 && idx === 2) ||
+                                (simProgress > 75 && idx === 3)
+                              );
+                          return (
+                            <div key={col} className="border border-[#003311] bg-black bg-opacity-30 p-2 rounded h-28 flex flex-col justify-start relative">
+                              <span className="text-[#00aa44] font-bold block text-center border-b border-[#003311] pb-1 uppercase">{col}</span>
+                              {cardInCol && (
+                                <div className="mt-2 p-2 bg-[#001f05] border border-[#00ff66] text-[#00ff66] text-[8px] rounded shadow-[0_0_8px_rgba(0,255,102,0.3)] animate-pulse transition-all duration-300">
+                                  <div className="font-bold uppercase leading-tight">{getFlowCardName(simTaskType, simCustomInput)}</div>
+                                  <div className="text-[6px] text-gray-500 uppercase mt-1">ID: #9948</div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* FORGE (Step 3) Display */}
+                  {simStep === 3 && (
+                    <div className="space-y-4 animate-fadeIn">
+                      <div className="flex justify-between items-center border-b border-[#004411] pb-2">
+                        <span className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <Terminal size={13} className="text-[#00ff66]" />
+                          <span>04 // FORGE phase: Safe Compilation Sandbox Terminal</span>
+                        </span>
+                        <span className="text-[9px] bg-purple-500 text-white px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Compiled</span>
+                      </div>
+                      <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                        Safe Express containers build source folders, run tests, and secure structural changes with offline git commit locks.
+                      </p>
+
+                      {/* Terminal display */}
+                      <div className="border border-[#00ff66] border-opacity-35 bg-black p-3 rounded h-28 overflow-y-auto font-mono text-[9px] text-[#00ff66] relative shadow-inner">
+                        <div className="absolute top-1 right-2 text-[7px] text-[#00aa44] font-bold uppercase animate-pulse">TERMINAL CONSOLE</div>
+                        <div className="space-y-1">
+                          {getForgeCommands(simTaskType, simCustomInput).map((cmd, index) => {
+                            const isVisible = !simRunning || simProgress > (index * 15 + 5);
+                            if (!isVisible) return null;
+                            const isOutput = !cmd.startsWith('npm') && !cmd.startsWith('vitest') && !cmd.startsWith('git') && !cmd.startsWith('node') && !cmd.startsWith('npx');
+                            return (
+                              <div key={index} className="transition-all duration-200">
+                                {isOutput ? (
+                                  <span className="text-[#aaffbb]">{cmd}</span>
+                                ) : (
+                                  <span><span className="text-gray-600 font-bold">$</span> {cmd}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Simulated Desktop Preview Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 animate-fadeIn">
               <div className="glass-panel p-6 rounded flex flex-col gap-3">
                 <div className="flex items-center gap-2.5 text-white font-bold text-sm mb-1">
                   <Laptop size={16} className="text-[#00ff66]" />
@@ -535,7 +1166,7 @@ export default function App() {
             </div>
 
             {/* App Overview & Core Principles */}
-            <div className="space-y-6 pt-6">
+            <div className="space-y-6 pt-6 animate-fadeIn">
               <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
                 <Sparkles size={20} className="text-[#00ff66]" /> App Overview & Core Principles
               </h2>
@@ -571,7 +1202,7 @@ export default function App() {
             </div>
 
             {/* Pricing Section */}
-            <div className="space-y-6 pt-6">
+            <div className="space-y-6 pt-6 animate-fadeIn">
               <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
                 Subscription Billing Tiers <FeatureBadge status="mock" label="Mock Billing" />
               </h2>
