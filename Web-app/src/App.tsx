@@ -119,6 +119,8 @@ export default function App() {
   const [pairingCode, setPairingCode] = useState(() => localStorage.getItem('web_pairing_code') || '');
   const [companionStatus, setCompanionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
   const [desktopLogs, setDesktopLogs] = useState<any[]>([]);
+  const [cpuHistory, setCpuHistory] = useState<number[]>(Array(15).fill(12));
+  const [memoryHistory, setMemoryHistory] = useState<number[]>(Array(15).fill(210));
   const companionWsRef = React.useRef<WebSocket | null>(null);
 
   const connectCompanion = (code: string) => {
@@ -144,6 +146,9 @@ export default function App() {
           setCompanionStatus('connected');
         } else if (data.type === 'update' && data.logs) {
           setDesktopLogs(data.logs);
+        } else if (data.type === 'telemetry_stream') {
+          setCpuHistory(prev => [...prev.slice(1), data.cpuLoad]);
+          setMemoryHistory(prev => [...prev.slice(1), data.memoryUsage]);
         } else if (data.type === 'error') {
           alert(`Companion error: ${data.message}`);
           setCompanionStatus('error');
@@ -373,6 +378,27 @@ export default function App() {
     const timer = window.setInterval(loadTelemetry, 8000);
     return () => window.clearInterval(timer);
   }, [backendUrl]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (companionStatus !== 'connected') {
+        // Fallback simulation: random walk CPU centered on 12%, Memory centered on 210MB
+        setCpuHistory(prev => {
+          const last = prev[prev.length - 1] ?? 12;
+          const delta = Math.floor(Math.random() * 5) - 2; // -2 to +2
+          const nextVal = Math.max(3, Math.min(65, last + delta));
+          return [...prev.slice(1), nextVal];
+        });
+        setMemoryHistory(prev => {
+          const last = prev[prev.length - 1] ?? 210;
+          const delta = Math.floor(Math.random() * 11) - 5; // -5 to +5
+          const nextVal = Math.max(120, Math.min(350, last + delta));
+          return [...prev.slice(1), nextVal];
+        });
+      }
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [companionStatus]);
 
   const handleImportRequest = () => {
     if (userTier === 'free') {
@@ -802,6 +828,147 @@ export default function App() {
                 <p className="text-[12px] text-[#00aa44] leading-relaxed">
                   Run planning tasks within the local shell container. When an agent attempts destructive file writes or executes command lines, review and authorize them directly on your dashboard (or dismiss them from the mobile companion app).
                 </p>
+              </div>
+            </div>
+
+            {/* Live System Telemetry Monitor Section */}
+            <div className="space-y-6 pt-6">
+              <div className="flex items-center justify-between border-b border-[#004411] pb-2">
+                <h2 className="text-xl font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <Terminal size={20} className="text-[#00ff66]" /> Live System Telemetry Monitor
+                </h2>
+                <div className="flex items-center gap-2 text-[10px]">
+                  <span className={`pulse-indicator ${companionStatus === 'connected' ? 'pulse-indicator-online' : 'pulse-indicator-offline'}`} />
+                  <span className="text-[#00aa44] uppercase font-bold">
+                    {companionStatus === 'connected' ? 'WS STREAM ACTIVE' : 'LOCAL SIMULATOR ACTIVE'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* CPU Monitor */}
+                <div className="glass-panel p-6 rounded flex flex-col gap-4">
+                  <div className="flex justify-between items-center text-white font-bold text-sm">
+                    <span className="uppercase tracking-wider">01 // CPU Load Monitor</span>
+                    <span className="font-mono text-[#00ff66] text-base">
+                      {cpuHistory[cpuHistory.length - 1]}%
+                    </span>
+                  </div>
+                  
+                  {/* SVG Chart */}
+                  <div className="relative h-32 bg-black bg-opacity-45 border border-[#003311] rounded overflow-hidden">
+                    {/* Grid Lines */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                      <line x1="0" y1="20" x2="300" y2="20" stroke="rgba(16, 185, 129, 0.05)" strokeWidth="1" />
+                      <line x1="0" y1="50" x2="300" y2="50" stroke="rgba(16, 185, 129, 0.05)" strokeWidth="1" />
+                      <line x1="0" y1="80" x2="300" y2="80" stroke="rgba(16, 185, 129, 0.05)" strokeWidth="1" />
+                      <line x1="75" y1="0" x2="75" y2="100" stroke="rgba(16, 185, 129, 0.05)" strokeWidth="1" />
+                      <line x1="150" y1="0" x2="150" y2="100" stroke="rgba(16, 185, 129, 0.05)" strokeWidth="1" />
+                      <line x1="225" y1="0" x2="225" y2="100" stroke="rgba(16, 185, 129, 0.05)" strokeWidth="1" />
+                    </svg>
+
+                    <svg className="w-full h-full" viewBox="0 0 300 100" preserveAspectRatio="none">
+                      {/* Area Fill */}
+                      <path
+                        d={(() => {
+                          const points = cpuHistory.map((val, i) => {
+                            const x = (i / (cpuHistory.length - 1)) * 300;
+                            const y = 100 - (val / 100) * 80 - 10;
+                            return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                          }).join(' ');
+                          return points ? `${points} L 300 100 L 0 100 Z` : 'M 0 100 Z';
+                        })()}
+                        fill="url(#cpuGrad)"
+                        opacity="0.3"
+                      />
+                      {/* Line Stroke */}
+                      <path
+                        d={cpuHistory.map((val, i) => {
+                          const x = (i / (cpuHistory.length - 1)) * 300;
+                          const y = 100 - (val / 100) * 80 - 10;
+                          return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                        }).join(' ')}
+                        fill="none"
+                        stroke="var(--matrix-neon)"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="filter drop-shadow-[0_0_4px_var(--matrix-neon)]"
+                      />
+                      <defs>
+                        <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--matrix-neon)" />
+                          <stop offset="100%" stopColor="transparent" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </div>
+                  <span className="text-[10px] text-[#00aa44] uppercase tracking-wider font-semibold">
+                    Simulated multi-agent thread operations load bounds
+                  </span>
+                </div>
+
+                {/* Memory Monitor */}
+                <div className="glass-panel p-6 rounded flex flex-col gap-4">
+                  <div className="flex justify-between items-center text-white font-bold text-sm">
+                    <span className="uppercase tracking-wider">02 // Memory Allocation</span>
+                    <span className="font-mono text-[#bb66ff] text-base">
+                      {memoryHistory[memoryHistory.length - 1]} MB
+                    </span>
+                  </div>
+                  
+                  {/* SVG Chart */}
+                  <div className="relative h-32 bg-black bg-opacity-45 border border-[#003311] rounded overflow-hidden">
+                    {/* Grid Lines */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
+                      <line x1="0" y1="20" x2="300" y2="20" stroke="rgba(187, 102, 255, 0.05)" strokeWidth="1" />
+                      <line x1="0" y1="50" x2="300" y2="50" stroke="rgba(187, 102, 255, 0.05)" strokeWidth="1" />
+                      <line x1="0" y1="80" x2="300" y2="80" stroke="rgba(187, 102, 255, 0.05)" strokeWidth="1" />
+                      <line x1="75" y1="0" x2="75" y2="100" stroke="rgba(187, 102, 255, 0.05)" strokeWidth="1" />
+                      <line x1="150" y1="0" x2="150" y2="100" stroke="rgba(187, 102, 255, 0.05)" strokeWidth="1" />
+                      <line x1="225" y1="0" x2="225" y2="100" stroke="rgba(187, 102, 255, 0.05)" strokeWidth="1" />
+                    </svg>
+
+                    <svg className="w-full h-full" viewBox="0 0 300 100" preserveAspectRatio="none">
+                      {/* Area Fill */}
+                      <path
+                        d={(() => {
+                          const points = memoryHistory.map((val, i) => {
+                            const x = (i / (memoryHistory.length - 1)) * 300;
+                            const y = 100 - (val / 512) * 80 - 10;
+                            return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                          }).join(' ');
+                          return points ? `${points} L 300 100 L 0 100 Z` : 'M 0 100 Z';
+                        })()}
+                        fill="url(#memGrad)"
+                        opacity="0.3"
+                      />
+                      {/* Line Stroke */}
+                      <path
+                        d={memoryHistory.map((val, i) => {
+                          const x = (i / (memoryHistory.length - 1)) * 300;
+                          const y = 100 - (val / 512) * 80 - 10;
+                          return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+                        }).join(' ')}
+                        fill="none"
+                        stroke="var(--matrix-purple)"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="filter drop-shadow-[0_0_4px_var(--matrix-purple)]"
+                      />
+                      <defs>
+                        <linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="var(--matrix-purple)" />
+                          <stop offset="100%" stopColor="transparent" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </div>
+                  <span className="text-[10px] text-[#00aa44] uppercase tracking-wider font-semibold">
+                    Dynamic process heap telemetry limits (Cap: 512 MB)
+                  </span>
+                </div>
               </div>
             </div>
 
