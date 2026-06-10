@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kryleos Forge // Premium Multi-Agent IDE Companion</title>
+  <meta name="description" content="Orchestrate autonomous agent squads, monitor budget safety with Cost Guard, and generate client-ready deliverables using the premium desktop companion for matrix-style coding.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #040805;
+      --bg-panel: rgba(6, 15, 9, 0.65);
+      --border-glow: rgba(16, 185, 129, 0.2);
+      --border-glow-hover: rgba(16, 185, 129, 0.6);
+      --neon-green: #10b981;
+      --neon-glow: #059669;
+      --text-main: #e2e8f0;
+      --text-dim: #94a3b8;
+      --matrix-dark: #0f1c12;
+      --indigo: #6366f1;
+      --emerald: #059669;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    /* Grid Background Effect */
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: -2;
+      background-image: 
+        radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.08) 0%, transparent 80%),
+        linear-gradient(rgba(16, 185, 129, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(16, 185, 129, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 40px 40px, 40px 40px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    header {
+      padding: 24px 0;
+      border-bottom: 1px solid var(--border-glow);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-flex {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 24px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+    }
+
+    .logo span {
+      background: linear-gradient(135deg, var(--neon-green), #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    nav {
+      display: flex;
+      gap: 32px;
+    }
+
+    nav a {
+      color: var(--text-dim);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    nav a:hover {
+      color: var(--neon-green);
+    }
+
+    .header-btn {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid var(--neon-green);
+      color: var(--neon-green);
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+
+    .header-btn:hover {
+      background: var(--neon-green);
+      color: #000;
+      box-shadow: 0 0 15px var(--neon-glow);
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+
+    .badge {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid var(--border-glow);
+      color: var(--neon-green);
+      padding: 6px 12px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      display: inline-flex;
+      margin-bottom: 24px;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.05);
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 56px;
+      font-weight: 800;
+      line-height: 1.15;
+      max-width: 800px;
+      margin: 0 auto 24px;
+      color: #fff;
+    }
+
+    h1 span {
+      background: linear-gradient(135deg, var(--neon-green) 30%, #a7f3d0 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 18px;
+      color: var(--text-dim);
+      max-width: 650px;
+      margin: 0 auto 40px;
+      line-height: 1.6;
+    }
+
+    .cta-group {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 60px;
+    }
+
+    .btn-primary {
+      background: var(--neon-green);
+      border: 1px solid var(--neon-green);
+      color: #040805;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 20px rgba(16, 185, 129, 0.25);
+    }
+
+    .btn-primary:hover {
+      background: #34d399;
+      box-shadow: 0 0 30px var(--neon-green);
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      transition: all 0.3s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.07);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+    }
+
+    /* Interface Mockup (Glassmorphism) */
+    .mockup {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-glow);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 40px rgba(16, 185, 129, 0.05);
+      backdrop-filter: blur(20px);
+      margin-bottom: 100px;
+      position: relative;
+    }
+
+    .mockup-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      border-bottom: 1px solid rgba(16, 185, 129, 0.1);
+      padding-bottom: 12px;
+    }
+
+    .dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .dot.green { background: var(--neon-green); }
+
+    .mockup-body {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 24px;
+      min-height: 400px;
+      text-align: left;
+    }
+
+    .sidebar {
+      border-right: 1px solid rgba(16, 185, 129, 0.1);
+      padding-right: 16px;
+      display: flex;
+      flex-content: column;
+      gap: 8px;
+    }
+
+    .sidebar-item {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .sidebar-item.active {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--neon-green);
+      border-left: 2px solid var(--neon-green);
+    }
+
+    .content-area {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .terminal-box {
+      background: #000;
+      border: 1px solid rgba(16, 185, 129, 0.1);
+      border-radius: 6px;
+      padding: 16px;
+      font-family: 'Fira Code', monospace;
+      font-size: 12px;
+      color: #a7f3d0;
+      flex-grow: 1;
+    }
+
+    /* Features Section */
+    .features {
+      padding: 80px 0;
+      border-top: 1px solid var(--border-glow);
+    }
+
+    .section-title {
+      text-align: center;
+      margin-bottom: 60px;
+    }
+
+    .section-title h2 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 38px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 16px;
+    }
+
+    .section-title p {
+      color: var(--text-dim);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .card {
+      background: rgba(6, 15, 9, 0.4);
+      border: 1px solid var(--border-glow);
+      border-radius: 12px;
+      padding: 32px;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(10px);
+    }
+
+    .card:hover {
+      border-color: var(--border-glow-hover);
+      transform: translateY(-4px);
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.05);
+    }
+
+    .card-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--neon-green);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      margin-bottom: 24px;
+    }
+
+    .card h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+
+    .card p {
+      font-size: 14px;
+      color: var(--text-dim);
+      line-height: 1.6;
+    }
+
+    /* Pricing Section */
+    .pricing {
+      padding: 80px 0;
+      border-top: 1px solid var(--border-glow);
+    }
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+
+    .plan {
+      background: rgba(6, 15, 9, 0.4);
+      border: 1px solid var(--border-glow);
+      border-radius: 12px;
+      padding: 32px 24px;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(10px);
+      transition: all 0.3s ease;
+    }
+
+    .plan.popular {
+      border-color: var(--neon-green);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+      position: relative;
+    }
+
+    .plan.popular::before {
+      content: "RECOMMENDED";
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--neon-green);
+      color: #000;
+      font-size: 9px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 12px;
+      letter-spacing: 1px;
+    }
+
+    .plan h3 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #fff;
+    }
+
+    .price {
+      font-size: 32px;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: baseline;
+    }
+
+    .price span {
+      font-size: 14px;
+      color: var(--text-dim);
+      font-weight: 400;
+    }
+
+    .features-list {
+      list-style: none;
+      margin-bottom: 32px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--text-dim);
+    }
+
+    .features-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .features-list li::before {
+      content: "✓";
+      color: var(--neon-green);
+      font-weight: bold;
+    }
+
+    .plan-btn {
+      display: block;
+      width: 100%;
+      text-align: center;
+      padding: 10px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .plan-btn.primary {
+      background: var(--neon-green);
+      color: #000;
+    }
+
+    .plan-btn.primary:hover {
+      background: #34d399;
+      box-shadow: 0 0 15px var(--neon-green);
+    }
+
+    .plan-btn.secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    .plan-btn.secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    footer {
+      border-top: 1px solid var(--border-glow);
+      padding: 60px 0 40px;
+      background: rgba(0, 0, 0, 0.2);
+      color: var(--text-dim);
+      font-size: 13px;
+    }
+
+    .footer-flex {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 40px;
+    }
+
+    .footer-col h4 {
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .footer-col ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .footer-col ul a {
+      color: var(--text-dim);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+
+    .footer-col ul a:hover {
+      color: var(--neon-green);
+    }
+
+    .copyright {
+      text-align: center;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container header-flex">
+      <a href="#" class="logo">
+        KRYLEOS <span>FORGE</span>
+      </a>
+      <nav>
+        <a href="#features">Features</a>
+        <a href="#pricing">Pricing</a>
+        <a href="https://github.com/thetimelord69/Kryleos-forge" target="_blank">Docs</a>
+      </nav>
+      <a href="#download" class="header-btn">Get Started</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <div class="badge">V1.0 Launch Edition</div>
+      <h1>The Premium Multi-Agent <span>Autopilot Companion</span></h1>
+      <p class="subtitle">
+        Accelerate your software engineering loops. Coordinate autonomous developer crews, enforce budgetary bounds with Cost Guard, and export branded documentation packs for your clients.
+      </p>
+      <div class="cta-group">
+        <a href="#download" class="btn-primary">Download Desktop App</a>
+        <a href="#pricing" class="btn-secondary">View Subscription Tiers</a>
+      </div>
+
+      <div class="mockup">
+        <div class="mockup-header">
+          <div class="dots">
+            <div class="dot green"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+          </div>
+          <div style="font-size: 11px; font-family: 'Fira Code', monospace; color: var(--text-dim);">kryleos_orchestrator --active --port 3001</div>
+          <div></div>
+        </div>
+        <div class="mockup-body">
+          <div class="sidebar">
+            <div class="sidebar-item active">Plan Workspace</div>
+            <div class="sidebar-item">Build Loop Autopilot</div>
+            <div class="sidebar-item">Docs Autopilot</div>
+            <div class="sidebar-item">Cost Guard</div>
+            <div class="sidebar-item">Founder & Agency</div>
+          </div>
+          <div class="content-area">
+            <div class="terminal-box">
+<span style="color: #6ee7b7;">$ kryleos crew spin-up --role "Architect, Lead Developer, QA"</span>
+[System] Initializing model client (Claude Sonnet 3.5)...
+[System] Loading context tree for active codebase...
+[Architect] Scoping feature implementation criteria...
+[Developer] Writing files: c:/workspace/src/backend/server.ts
+[QA] Running vitest check... 130 tests passed!
+[System] Build Loop successfully resolved. Drift level: 0%
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" class="features">
+    <div class="container">
+      <div class="section-title">
+        <h2>Engineered for High-Velocity Devs</h2>
+        <p>A native desktop agent workspace built to augment code composition and document packaging workflows.</p>
+      </div>
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-icon">🤖</div>
+          <h3>Multi-Agent Squads</h3>
+          <p>Deploy specialized squads of agents (Architects, Developers, and Reviewers) working concurrently in secure sandbox shells.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🛡️</div>
+          <h3>Cost Guard</h3>
+          <p>Real-time input and output token tracking with budget thresholds to eliminate surprise billings on cloud LLM models.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">💼</div>
+          <h3>Founder Autopilot</h3>
+          <p>Instantly generate Product Requirements Documents (PRDs), prioritized Backlogs, Release Changelogs, and investor-ready architecture briefs.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🏢</div>
+          <h3>Agency Deliverables</h3>
+          <p>Prepare client delivery assets in seconds. Export branded checklists, pitch brochures, and styled HTML docs with custom agency styles.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">📂</div>
+          <h3>Companion Pairing</h3>
+          <p>Sync workspaces seamlessly across machines with encrypted credentials stored securely inside the host OS keychain.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🔒</div>
+          <h3>Zero-Egress Mode</h3>
+          <p>Work locally with confidence. Restrict outgoing telemetry and leverage local LLMs (Ollama) when working with sensitive client databases.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing" class="pricing">
+    <div class="container">
+      <div class="section-title">
+        <h2>Curated Pricing Plans</h2>
+        <p>Select the subscription tier matching your structural scale and deliverable needs.</p>
+      </div>
+      <div class="pricing-grid">
+        <div class="plan">
+          <h3>Solo</h3>
+          <div class="price">$9<span>/mo</span></div>
+          <ul class="features-list">
+            <li>Single User License</li>
+            <li>Cost Guard Dashboard</li>
+            <li>Cloud Sync Capabilities</li>
+            <li>Git History Integration</li>
+          </ul>
+          <a href="#download" class="plan-btn secondary">Get Started</a>
+        </div>
+        <div class="plan">
+          <h3>Solo Plus</h3>
+          <div class="price">$19<span>/mo</span></div>
+          <ul class="features-list">
+            <li>All Solo Tier Features</li>
+            <li>Container Preview Sandbox</li>
+            <li>Cost Log History</li>
+            <li>OS Keychain Encryption</li>
+          </ul>
+          <a href="#download" class="plan-btn secondary">Get Started</a>
+        </div>
+        <div class="plan popular">
+          <h3>Founder</h3>
+          <div class="price">$49<span>/mo</span></div>
+          <ul class="features-list">
+            <li>All Solo Plus Features</li>
+            <li>Founder Autopilot Docs</li>
+            <li>Backlog & Roadmap Builder</li>
+            <li>Release Changelogs</li>
+            <li>Investor Brief Summaries</li>
+          </ul>
+          <a href="#download" class="plan-btn primary">Upgrade Now</a>
+        </div>
+        <div class="plan">
+          <h3>Agency</h3>
+          <div class="price">$99<span>/mo</span></div>
+          <ul class="features-list">
+            <li>All Founder Tier Features</li>
+            <li>Branded Client Collateral</li>
+            <li>Project Pitch Brochures</li>
+            <li>Custom Handoff Packages</li>
+            <li>HSL Custom Styling</li>
+          </ul>
+          <a href="#download" class="plan-btn secondary">Get Started</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="download" style="padding: 80px 0; text-align: center; border-top: 1px solid var(--border-glow); background: rgba(16, 185, 129, 0.02);">
+    <div class="container">
+      <h2 style="font-family: 'Outfit', sans-serif; font-size: 36px; font-weight: 800; color: #fff; margin-bottom: 16px;">Download Kryleos Forge Companion</h2>
+      <p style="color: var(--text-dim); max-width: 500px; margin: 0 auto 32px;">Available now for production workloads on all major desktop systems.</p>
+      <div style="display: inline-flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+        <a href="#" class="btn-primary" style="font-size: 14px; padding: 12px 24px;">📥 Windows x64 (.exe)</a>
+        <a href="#" class="btn-secondary" style="font-size: 14px; padding: 12px 24px;">🍎 macOS Silicon (.dmg)</a>
+        <a href="#" class="btn-secondary" style="font-size: 14px; padding: 12px 24px;">🐧 Linux Debian (.deb)</a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="footer-flex">
+        <div class="footer-col">
+          <a href="#" class="logo" style="font-size: 20px; margin-bottom: 16px;">KRYLEOS <span>FORGE</span></a>
+          <p style="max-width: 250px; line-height: 1.6;">The ultimate desktop control center for autonomous coding squad coordination.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Product</h4>
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#pricing">Pricing Plans</a></li>
+            <li><a href="#download">Downloads</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Resources</h4>
+          <ul>
+            <li><a href="https://github.com/thetimelord69/Kryleos-forge" target="_blank">Documentation</a></li>
+            <li><a href="mailto:support@kryleos.com">Support Center</a></li>
+            <li><a href="#">Privacy & Legal</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="copyright">
+        &copy; 2026 Kryleos Forge. All rights reserved. Built for modern software engineering scale.
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
