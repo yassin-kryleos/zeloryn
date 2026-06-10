@@ -400,18 +400,23 @@ export default function App() {
   };
 
   return (
-    <div className={`flex flex-col min-h-screen bg-black text-[#aaffbb] ${theme === 'matrix' ? 'font-mono' : 'font-sans'}`}>
+    <div className={`app-container ${theme === 'matrix' ? 'font-mono' : 'font-sans'}`}>
       {/* Navbar Header */}
-      <header className="border-b border-[#004411] bg-[#060f07] px-6 py-3 flex flex-col md:flex-row gap-3 items-center justify-between shrink-0">
+      <header className="border-b border-[#004411] bg-[#060f07] px-6 py-4 flex flex-col md:flex-row gap-3 items-center justify-between shrink-0 shadow-lg relative z-20">
         <div className="flex items-center gap-3">
-          <Terminal className="text-[#00ff66] animate-blink" size={18} />
-          <span className="text-[12px] font-bold tracking-widest text-[#00ff66]">
-            KRYLEOS FORGE // web_node_online
-          </span>
+          <Terminal className="text-[#00ff66] animate-blink" size={20} />
+          <div className="flex flex-col">
+            <span className="text-[12px] font-bold tracking-widest text-[#00ff66]">
+              KRYLEOS FORGE // companion_hub
+            </span>
+            <span className="text-[8px] text-[#00aa44] uppercase tracking-wider">
+              Secure Multi-Agent Web Companion
+            </span>
+          </div>
         </div>
         
         {/* Nav Tabs */}
-        <nav aria-label="Main navigation" className="flex flex-wrap justify-center gap-2">
+        <nav aria-label="Main navigation" role="tablist" className="flex flex-wrap justify-center gap-2">
           {APP_TABS.map(tab => (
             <button
               key={tab}
@@ -419,144 +424,151 @@ export default function App() {
               aria-label={tab === 'marketing' ? 'Overview tab' : tab === 'planning' ? 'Planning tab' : tab === 'chat' ? 'Chat tab' : 'Settings tab'}
               aria-selected={activeTab === tab}
               role="tab"
-              className={`px-3 py-1 border rounded text-[10px] uppercase font-bold cursor-pointer transition-all ${
+              className={`px-4 py-1.5 border rounded text-[10px] uppercase font-bold cursor-pointer transition-all ${
                 activeTab === tab 
-                  ? 'bg-[#002205] text-[#00ff66] border-[#00ff66] shadow-[0_0_5px_rgba(0,255,102,0.3)]' 
-                  : 'bg-transparent text-[#00aa44] border-[#004411] hover:text-[#00ff66]'
+                  ? 'bg-[#002205] text-[#00ff66] border-[#00ff66] shadow-[0_0_8px_rgba(0,255,102,0.4)]' 
+                  : 'bg-transparent text-[#00aa44] border-[#004411] hover:border-[#00ff66] hover:text-[#00ff66]'
               }`}
             >
-              {tab === 'marketing' ? '✨ Overview' : tab === 'planning' ? '📋 Planning Phase' : tab === 'chat' ? '💬 Chat Sandbox' : '⚙️ Settings'}
+              {tab === 'marketing' ? '✨ Overview' : tab === 'planning' ? '📋 Planning' : tab === 'chat' ? '💬 Chat Sandbox' : '⚙️ Settings'}
             </button>
           ))}
         </nav>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-hidden flex">
+      <main className="flex-1 overflow-hidden flex relative z-10">
         
         {/* MARKETING SITE TAB */}
         {activeTab === 'marketing' && (
           <div className="flex-1 overflow-y-auto p-8 space-y-12 max-w-5xl mx-auto">
             {/* Hero */}
-            <div className="text-center space-y-4 py-6">
+            <div className="text-center space-y-4 py-8">
               <h1 className="text-4xl font-extrabold text-white tracking-tight leading-none">
                 KRYLEOS <span className="text-[#00ff66] text-shadow-[0_0_8px_rgba(0,255,102,0.4)]">FORGE</span>
               </h1>
-              <p className="text-sm text-[#00aa44] max-w-xl mx-auto uppercase tracking-wider">
-                Multi-Agent AI developer workspace. Scopes architectures on mobile, syncs checklists, and executes commands safely.
+              <p className="text-sm text-[#00aa44] max-w-xl mx-auto uppercase tracking-wider leading-relaxed">
+                Multi-Agent AI developer workspace. Scope architectures on the fly, synchronize checklists, and execute secure sandbox tasks.
               </p>
-              <div className="flex justify-center gap-4 pt-2">
-                <button onClick={() => setActiveTab('planning')} className="matrix-btn px-4 py-2 font-bold uppercase rounded">
+              <div className="flex justify-center gap-4 pt-4">
+                <button onClick={() => setActiveTab('planning')} className="matrix-btn matrix-btn-primary px-5 py-2.5 font-bold uppercase rounded">
                   [Start Scoping Plan]
                 </button>
-                <button onClick={() => setActiveTab('settings')} className="matrix-btn px-4 py-2 font-bold uppercase rounded bg-transparent text-[#00aa44]">
-                  [View Pricing Tiers]
+                <button onClick={() => setActiveTab('settings')} className="matrix-btn px-5 py-2.5 font-bold uppercase rounded">
+                  [Configure API Keys]
                 </button>
               </div>
             </div>
 
             {/* Simulated Desktop Preview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="matrix-panel p-5 rounded border border-[#004411] flex flex-col gap-2">
-                <div className="flex items-center gap-2 text-white font-bold text-xs mb-1">
-                  <Laptop size={14} className="text-[#00ff66]" />
+              <div className="glass-panel p-6 rounded flex flex-col gap-3">
+                <div className="flex items-center gap-2.5 text-white font-bold text-sm mb-1">
+                  <Laptop size={16} className="text-[#00ff66]" />
                   <span>Desktop App</span>
                 </div>
-                <p className="text-[11px] text-[#00aa44] leading-relaxed">Runs Express server sandboxes locally. Full filesystem access, git helper tools, and script compilation checks.</p>
+                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  Executes local Express server sandboxes with secure process limits, safeStorage keychain access, and automated script testing tools.
+                </p>
               </div>
-              <div className="matrix-panel p-5 rounded border border-[#004411] flex flex-col gap-2">
-                <div className="flex items-center gap-2 text-white font-bold text-xs mb-1">
-                  <Database size={14} className="text-[#00ff66]" />
-                  <span>Web App Client</span>
+              <div className="glass-panel p-6 rounded flex flex-col gap-3">
+                <div className="flex items-center gap-2.5 text-white font-bold text-sm mb-1">
+                  <Database size={16} className="text-[#00ff66]" />
+                  <span>Web Companion</span>
                 </div>
-                <p className="text-[11px] text-[#00aa44] leading-relaxed">BYOK (Bring Your Own Key) sandbox. Sketch designs on the go, view file charts, and configure project scopes in the browser.</p>
+                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  Provides a secure BYOK prompt playground, live WebSocket telemetry trackers, and 3-way conflict merging for local plans.
+                </p>
               </div>
-              <div className="matrix-panel p-5 rounded border border-[#004411] flex flex-col gap-2">
-                <div className="flex items-center gap-2 text-white font-bold text-xs mb-1">
-                  <Smartphone size={14} className="text-[#00ff66]" />
+              <div className="glass-panel p-6 rounded flex flex-col gap-3">
+                <div className="flex items-center gap-2.5 text-white font-bold text-sm mb-1">
+                  <Smartphone size={16} className="text-[#00ff66]" />
                   <span>Mobile Companion</span>
                 </div>
-                <p className="text-[11px] text-[#00aa44] leading-relaxed">Monitor CPU usage, approve terminal commands remotely, and check task list checklists from your phone.</p>
+                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  Approve terminal commands, toggle remote execution stops, and queue offline audio notes directly from your mobile device.
+                </p>
               </div>
             </div>
 
             {/* Pricing Section */}
-            <div className="space-y-6 pt-4">
-              <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider">
+            <div className="space-y-6 pt-6">
+              <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
                 Subscription Billing Tiers <FeatureBadge status="mock" label="Mock Billing" />
               </h2>
-              <div className="matrix-panel p-3 rounded border border-[#004411] text-[9px] text-[#00aa44] flex flex-wrap items-center justify-center gap-2">
-                <span className="text-white font-bold uppercase">Feature maturity:</span>
+              <div className="glass-panel p-4 rounded text-[11px] text-[#00aa44] flex flex-wrap items-center justify-center gap-3">
+                <span className="text-white font-bold uppercase">Feature Status Guide:</span>
                 <FeatureBadge status="production" />
                 <FeatureBadge status="preview" />
                 <FeatureBadge status="simulator" />
                 <FeatureBadge status="mock" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {/* Free */}
-                <div className="matrix-panel p-4 rounded border border-[#004411] flex flex-col gap-3">
-                  <div className="border-b border-[#004411] pb-2 text-center">
-                    <span className="text-[9px] text-[#00aa44] font-bold uppercase block">Free Tier</span>
-                    <span className="text-lg font-bold text-white">$0.00</span>
+                <div className={`pricing-card pricing-card-free ${userTier === 'free' ? 'pricing-card-active' : ''}`}>
+                  <div className="border-b border-[#004411] pb-3 text-center">
+                    <span className="text-[10px] text-[#00aa44] font-bold uppercase block tracking-wider mb-1">Free Tier</span>
+                    <span className="text-2xl font-extrabold text-white">$0.00</span>
                   </div>
-                  <ul className="text-[10px] text-[#00aa44] space-y-1.5 flex-1">
+                  <ul className="text-[11px] text-[#00aa44] space-y-2 flex-1">
                     <li>[+] Local agent workspace <FeatureBadge status="production" /></li>
                     <li>[+] BYOK model access <FeatureBadge status="preview" /></li>
-                    <li>[-] Settings Cloud Sync <FeatureBadge status="preview" /></li>
-                    <li>[-] Remote container runs <FeatureBadge status="simulator" /></li>
+                    <li className="opacity-45">[-] Settings Cloud Sync</li>
+                    <li className="opacity-45">[-] Remote containers</li>
                   </ul>
-                  <button onClick={() => setUserTier('free')} className={`py-1 text-[9px] font-bold rounded ${userTier === 'free' ? 'bg-[#004411] text-white' : 'matrix-btn'}`}>
+                  <button onClick={() => setUserTier('free')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'free' ? 'matrix-btn-primary' : ''}`}>
                     {userTier === 'free' ? '[ACTIVE]' : 'SELECT FREE'}
                   </button>
                 </div>
 
                 {/* Basic */}
-                <div className="matrix-panel p-4 rounded border border-amber-800 bg-[#0c0803] flex flex-col gap-3">
-                  <div className="border-b border-amber-800 pb-2 text-center">
-                    <span className="text-[9px] text-amber-500 font-bold uppercase block">Basic Tier</span>
-                    <span className="text-lg font-bold text-white">$2.99<span className="text-[10px] font-normal text-amber-500">/mo</span></span>
+                <div className={`pricing-card pricing-card-basic ${userTier === 'basic' ? 'pricing-card-active' : ''}`}>
+                  <div className="border-b border-[#004411] pb-3 text-center">
+                    <span className="text-[10px] text-amber-500 font-bold uppercase block tracking-wider mb-1">Basic Tier</span>
+                    <span className="text-2xl font-extrabold text-white">$2.99<span className="text-[11px] font-normal text-amber-500">/mo</span></span>
                   </div>
-                  <ul className="text-[10px] text-amber-200 space-y-1.5 flex-1">
-                    <li>[+] Includes all Free features</li>
-                    <li>[+] WebSocket Cloud Sync <FeatureBadge status="preview" /></li>
-                    <li>[+] Automated Cloud Backups <FeatureBadge status="preview" /></li>
-                    <li>[-] Remote container runs <FeatureBadge status="simulator" /></li>
+                  <ul className="text-[11px] text-[#00aa44] space-y-2 flex-1">
+                    <li>[+] All Free features</li>
+                    <li>[+] Settings Cloud Sync <FeatureBadge status="preview" /></li>
+                    <li>[+] Auto Cloud Backups <FeatureBadge status="preview" /></li>
+                    <li className="opacity-45">[-] Remote containers</li>
                   </ul>
-                  <button onClick={() => setUserTier('basic')} className={`py-1 text-[9px] font-bold rounded ${userTier === 'basic' ? 'bg-amber-800 text-white' : 'matrix-btn border-amber-500 text-amber-500 hover:bg-amber-500'}`}>
+                  <button onClick={() => setUserTier('basic')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'basic' ? 'matrix-btn-primary' : ''}`}>
                     {userTier === 'basic' ? '[ACTIVE]' : 'SELECT BASIC'}
                   </button>
                 </div>
 
                 {/* Pro */}
-                <div className="matrix-panel p-4 rounded border-blue-900 bg-[#030912] flex flex-col gap-3">
-                  <div className="border-b border-blue-900 pb-2 text-center">
-                    <span className="text-[9px] text-blue-400 font-bold uppercase block">Pro Tier</span>
-                    <span className="text-lg font-bold text-white">$9.99<span className="text-[10px] font-normal text-blue-400">/mo</span></span>
+                <div className={`pricing-card pricing-card-pro ${userTier === 'pro' ? 'pricing-card-active' : ''}`}>
+                  <div className="border-b border-[#004411] pb-3 text-center">
+                    <span className="text-[10px] text-blue-400 font-bold uppercase block tracking-wider mb-1">Pro Tier</span>
+                    <span className="text-2xl font-extrabold text-white">$9.99<span className="text-[11px] font-normal text-blue-400">/mo</span></span>
                   </div>
-                  <ul className="text-[10px] text-blue-200 space-y-1.5 flex-1">
-                    <li>[+] Includes all Basic features</li>
-                    <li>[+] Remote Container <FeatureBadge status="simulator" /></li>
+                  <ul className="text-[11px] text-[#00aa44] space-y-2 flex-1">
+                    <li>[+] All Basic features</li>
+                    <li>[+] Remote Containers <FeatureBadge status="simulator" /></li>
                     <li>[+] Cloud Sandbox <FeatureBadge status="simulator" /></li>
-                    <li>[-] Organization RBAC <FeatureBadge status="simulator" /></li>
+                    <li className="opacity-45">[-] Organization RBAC</li>
                   </ul>
-                  <button onClick={() => setUserTier('pro')} className={`py-1 text-[9px] font-bold rounded ${userTier === 'pro' ? 'bg-blue-800 text-white' : 'matrix-btn border-blue-500 text-blue-400 hover:bg-blue-500'}`}>
+                  <button onClick={() => setUserTier('pro')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'pro' ? 'matrix-btn-primary' : ''}`}>
                     {userTier === 'pro' ? '[ACTIVE]' : 'SELECT PRO'}
                   </button>
                 </div>
 
                 {/* Enterprise */}
-                <div className="matrix-panel p-4 rounded border-[#00ff66] bg-[#020d04] flex flex-col gap-3">
-                  <div className="border-b border-[#00ff66] pb-2 text-center">
-                    <span className="text-[9px] text-[#00ff66] font-bold uppercase block">Enterprise</span>
-                    <span className="text-lg font-bold text-white">$25.00<span className="text-[10px] font-normal text-[#00ff66]">/mo</span></span>
+                <div className={`pricing-card pricing-card-enterprise ${userTier === 'enterprise' ? 'pricing-card-active' : ''}`}>
+                  <div className="border-b border-[#004411] pb-3 text-center">
+                    <span className="text-[10px] text-[#00ff66] font-bold uppercase block tracking-wider mb-1">Enterprise</span>
+                    <span className="text-2xl font-extrabold text-white">$25.00<span className="text-[11px] font-normal text-[#00ff66]">/mo</span></span>
                   </div>
-                  <ul className="text-[10px] text-[#aaffbb] space-y-1.5 flex-1 font-bold">
-                    <li>[+] Includes all Pro features</li>
-                    <li>[+] Shared Organization workspaces <FeatureBadge status="preview" /></li>
+                  <ul className="text-[11px] text-[#aaffbb] space-y-2 flex-1 font-semibold">
+                    <li>[+] All Pro features</li>
+                    <li>[+] Org Team Workspaces <FeatureBadge status="preview" /></li>
                     <li>[+] Audit log & RBAC <FeatureBadge status="simulator" /></li>
-                    <li>[+] Real-time collaboration <FeatureBadge status="preview" /></li>
+                    <li>[+] Co-coding rooms <FeatureBadge status="preview" /></li>
                   </ul>
-                  <button onClick={() => setUserTier('enterprise')} className={`py-1 text-[9px] font-bold rounded ${userTier === 'enterprise' ? 'bg-[#00ff66] text-black font-extrabold' : 'matrix-btn border-[#00ff66] text-[#00ff66] hover:bg-[#00ff66]'}`}>
+                  <button onClick={() => setUserTier('enterprise')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'enterprise' ? 'matrix-btn-primary' : ''}`}>
                     {userTier === 'enterprise' ? '[ACTIVE]' : 'SELECT ENTERPRISE'}
                   </button>
                 </div>
@@ -571,26 +583,29 @@ export default function App() {
             {/* Planning Chat */}
             <div className="flex-1 flex flex-col border-b md:border-b-0 md:border-r border-[#004411] bg-black bg-opacity-40 min-w-[320px]">
               <div className="p-3 border-b border-[#004411] bg-[#060f07] flex justify-between items-center text-[10px]">
-                <span className="font-bold text-white uppercase flex items-center gap-1">
-                  <Sparkles size={11} className="text-[#00ff66]" />
+                <span className="font-bold text-white uppercase flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-[#00ff66]" />
                   <span>Planning Architect (Draft Room)</span>
                 </span>
-                <span className="text-[#00aa44]">Status: Scoping Spec</span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`pulse-indicator ${backendStatus === 'online' ? 'pulse-indicator-online' : 'pulse-indicator-offline'}`} />
+                  <span className="text-[#00aa44] uppercase text-[9px]">{backendStatus.toUpperCase()}</span>
+                </div>
               </div>
               
               <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col justify-end">
                 <div className="space-y-3 overflow-y-auto max-h-full pr-1">
                   {planMessages.map((msg, idx) => (
-                    <div key={idx} className={`p-2.5 rounded border text-[11px] max-w-[85%] ${
-                      msg.role === 'user' ? 'bg-[#031104] border-[#004411] text-[#aaffbb] ml-auto' : 'bg-[#0a0512] border-purple-900 text-purple-200'
-                    }`}>
-                      <span className="text-[8px] text-[#00aa44] font-bold block uppercase mb-1">{msg.role === 'user' ? '👤 YOU' : '🤖 ARCHITECT'}</span>
+                    <div key={idx} className={`chat-bubble ${
+                      msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-architect'
+                    } mb-1`}>
+                      <span className="text-[8px] text-white opacity-60 font-bold block uppercase mb-1">{msg.role === 'user' ? '👤 CLIENT' : '🤖 ARCHITECT'}</span>
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     </div>
                   ))}
                   {isStreaming && (
-                    <div className="p-2.5 rounded border border-[#004411] bg-black text-[11px] animate-pulse max-w-[85%]">
-                      Thinking...
+                    <div className="chat-bubble chat-bubble-architect animate-pulse">
+                      Synthesizing architecture spec...
                     </div>
                   )}
                 </div>
@@ -603,38 +618,38 @@ export default function App() {
                   onChange={e => setPlanInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSendPlan()}
                   placeholder="Outline feature scopes, task lists, or folder structures..."
-                  className="matrix-input flex-1 text-[11px] text-[#00ff66]"
+                  className="matrix-input flex-1 text-[12px] text-[#00ff66]"
                 />
                 {planVoice.isSupported && (
                   <button
                     type="button"
                     onClick={() => planVoice.isListening ? planVoice.stopListening() : planVoice.startListening()}
-                    className={`border rounded px-2.5 ${planVoice.isListening ? 'border-[#ff3333] text-[#ff3333]' : 'border-[#004411] text-[#00ff66]'}`}
+                    className={`border rounded px-3 transition-all ${planVoice.isListening ? 'border-[#ff3333] text-[#ff3333] bg-[#220002]' : 'border-[#004411] text-[#00ff66] hover:border-[#00ff66]'}`}
                     title={planVoice.isListening ? 'Stop voice input' : 'Start voice input'}
                     aria-label={planVoice.isListening ? 'Stop voice input' : 'Start voice input'}
                   >
-                    {planVoice.isListening ? <MicOff size={13} /> : <Mic size={13} />}
+                    {planVoice.isListening ? <MicOff size={14} /> : <Mic size={14} />}
                   </button>
                 )}
-                <button onClick={handleSendPlan} className="matrix-btn px-3.5 font-bold">SEND</button>
+                <button onClick={handleSendPlan} className="matrix-btn matrix-btn-primary px-4 font-bold">SEND</button>
               </div>
-              {planVoice.error && <div className="px-3 text-[9px] text-[#ff3333]">{planVoice.error}</div>}
+              {planVoice.error && <div className="px-3 pb-2 text-[9px] text-[#ff3333]">{planVoice.error}</div>}
             </div>
 
             {/* Planning Draft Document */}
             <div className="w-full md:w-[48%] flex flex-col bg-[#050a06] min-w-[320px]">
               <div className="p-3 border-b border-[#004411] flex items-center justify-between">
                 <span className="text-[10px] text-white font-bold flex items-center gap-1.5">
-                  <FileText size={11} className="text-[#00ff66]" />
+                  <FileText size={12} className="text-[#00ff66]" />
                   <span>implementation_plan.md</span>
                 </span>
                 <div className="flex gap-2">
-                  <button onClick={() => setIsPlanEditing(!isPlanEditing)} className="text-[9px] border border-[#004411] px-2 py-0.5 rounded text-white hover:bg-black">
+                  <button onClick={() => setIsPlanEditing(!isPlanEditing)} className="text-[9px] border border-[#00aa44] text-[#00aa44] px-3 py-1 rounded font-bold hover:border-[#00ff66] hover:text-[#00ff66] transition-all">
                     {isPlanEditing ? 'VIEW' : 'EDIT'}
                   </button>
-                  <button onClick={() => handleImportRequest()} className="text-[9px] bg-[#00ff66] text-black px-2.5 py-0.5 rounded font-bold hover:bg-white flex items-center gap-1">
-                    <Download size={10} />
-                    <span>IMPORT TO WORKSPACE</span>
+                  <button onClick={() => handleImportRequest()} className="matrix-btn matrix-btn-primary text-[9px] px-3 py-1 rounded font-bold flex items-center gap-1.5">
+                    <Download size={11} />
+                    <span>IMPORT PLAN</span>
                   </button>
                 </div>
               </div>
@@ -649,17 +664,17 @@ export default function App() {
                         setSyncConflict(false);
                       }
                     }}
-                    className="w-full flex-1 bg-black border border-[#004411] text-[11px] text-[#00ff66] p-3 outline-none resize-none font-mono"
+                    className="w-full flex-1 bg-black border border-[#004411] text-[12px] text-[#00ff66] p-4 outline-none resize-none font-mono rounded"
                   />
                 ) : (
-                  <div className="flex-1 bg-black bg-opacity-30 border border-[#004411] text-[11px] text-[#aaffbb] p-3 overflow-auto whitespace-pre-wrap select-text leading-relaxed">
+                  <div className="flex-1 bg-black bg-opacity-35 border border-[#004411] text-[12px] text-[#aaffbb] p-4 overflow-auto whitespace-pre-wrap select-text leading-relaxed rounded font-mono">
                     {planDraft}
                   </div>
                 )}
               </div>
 
               {syncConflict && (
-                <div className="p-2 bg-[#2b1b02] text-amber-500 text-[10px] uppercase font-bold text-center border-t border-amber-500 animate-pulse font-mono">
+                <div className="p-3 bg-[#2b1b02] text-amber-500 text-[10px] uppercase font-bold text-center border-t border-amber-500 animate-pulse font-mono">
                   ⚠️ SYNC CONFLICT DETECTED! Merge conflict markers have been injected. Please resolve them in EDIT mode.
                 </div>
               )}
@@ -672,27 +687,27 @@ export default function App() {
           <div className="flex-1 flex overflow-hidden">
             <div className="flex-1 flex flex-col bg-[#020502]">
               <div className="p-3 border-b border-[#004411] bg-[#060f07] flex items-center justify-between text-[10px]">
-                <span className="font-bold text-white flex items-center gap-1">
-                  <Terminal size={11} className="text-[#00ff66]" />
-                  <span>Web Agent Sandbox ({backendStatus === 'online' ? 'Backend Linked' : 'Fallback Simulator'})</span>
+                <span className="font-bold text-white flex items-center gap-1.5">
+                  <Terminal size={12} className="text-[#00ff66]" />
+                  <span>Web Agent Sandbox ({backendStatus === 'online' ? 'Backend Linked' : 'Simulator Mode'})</span>
                   <FeatureBadge status={backendStatus === 'online' ? 'preview' : 'simulator'} />
                 </span>
-                <span className="text-[#00aa44]">BYOK Mode</span>
+                <span className="text-[#00aa44] font-bold">BYOK Mode</span>
               </div>
 
               <div className="flex-1 p-4 overflow-y-auto space-y-3 flex flex-col justify-end">
                 <div className="space-y-3 overflow-y-auto max-h-full pr-1">
                   {chatMessages.map((msg, idx) => (
-                    <div key={idx} className={`p-2.5 rounded border text-[11px] max-w-[85%] ${
-                      msg.role === 'user' ? 'bg-[#031104] border-[#004411] text-[#aaffbb] ml-auto' : 'bg-black border-[#004411] text-[#00ff66]'
-                    }`}>
-                      <span className="text-[8px] text-[#00aa44] font-bold block uppercase mb-1">{msg.role === 'user' ? '👤 YOU' : '🤖 FORGE-AGENT'}</span>
+                    <div key={idx} className={`chat-bubble ${
+                      msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'
+                    } mb-1`}>
+                      <span className="text-[8px] text-white opacity-60 font-bold block uppercase mb-1">{msg.role === 'user' ? '👤 YOU' : '🤖 FORGE-AGENT'}</span>
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     </div>
                   ))}
                   {isStreaming && (
-                    <div className="p-2.5 rounded border border-[#004411] bg-black text-[11px] animate-pulse max-w-[85%]">
-                      Executing simulator loops...
+                    <div className="chat-bubble chat-bubble-assistant animate-pulse">
+                      Executing sandbox loops...
                     </div>
                   )}
                 </div>
@@ -705,50 +720,54 @@ export default function App() {
                   onChange={e => setChatInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSendChat()}
                   placeholder="Ask agent to run commands, edit files, or search paths..."
-                  className="matrix-input flex-1 text-[11px] text-[#00ff66]"
+                  className="matrix-input flex-1 text-[12px] text-[#00ff66]"
                 />
                 {chatVoice.isSupported && (
                   <button
                     type="button"
                     onClick={() => chatVoice.isListening ? chatVoice.stopListening() : chatVoice.startListening()}
-                    className={`border rounded px-2.5 ${chatVoice.isListening ? 'border-[#ff3333] text-[#ff3333]' : 'border-[#004411] text-[#00ff66]'}`}
+                    className={`border rounded px-3 transition-all ${chatVoice.isListening ? 'border-[#ff3333] text-[#ff3333] bg-[#220002]' : 'border-[#004411] text-[#00ff66] hover:border-[#00ff66]'}`}
                     title={chatVoice.isListening ? 'Stop voice input' : 'Start voice input'}
                     aria-label={chatVoice.isListening ? 'Stop voice input' : 'Start voice input'}
                   >
-                    {chatVoice.isListening ? <MicOff size={13} /> : <Mic size={13} />}
+                    {chatVoice.isListening ? <MicOff size={14} /> : <Mic size={14} />}
                   </button>
                 )}
-                <button onClick={handleSendChat} className="matrix-btn px-3.5 font-bold">RUN</button>
+                <button onClick={handleSendChat} className="matrix-btn matrix-btn-primary px-4 font-bold">RUN</button>
               </div>
               {chatVoice.error && <div className="px-3 pb-2 text-[9px] text-[#ff3333]">{chatVoice.error}</div>}
             </div>
 
             {companionStatus === 'connected' && (
-              <div className="w-[48%] border-l border-[#004411] bg-[#030a04] flex flex-col">
-                <div className="p-3 border-b border-[#004411] bg-[#060f07] flex items-center justify-between text-[10px]">
+              <div className="w-[48%] border-l border-[#004411] bg-[#030a04] flex flex-col scanlines relative">
+                <div className="p-3 border-b border-[#004411] bg-[#060f07] flex items-center justify-between text-[10px] relative z-20">
                   <span className="font-bold text-[#00ff66] flex items-center gap-1.5">
-                    <Terminal size={11} className="animate-pulse" />
+                    <Terminal size={12} className="animate-pulse" />
                     <span>DESKTOP COMMAND LOG TRACES</span>
                   </span>
                   <button 
                     onClick={() => setDesktopLogs([])} 
-                    className="text-[8px] border border-[#00aa44] text-[#00aa44] px-1.5 py-0.5 rounded hover:border-[#00ff66] hover:text-[#00ff66]"
+                    className="text-[8px] border border-[#00aa44] text-[#00aa44] px-2 py-0.5 rounded font-bold hover:border-[#00ff66] hover:text-[#00ff66]"
                   >
                     CLEAR
                   </button>
                 </div>
-                <div className="flex-1 p-3 overflow-y-auto font-mono text-[10px] space-y-1.5 scrollbar-thin select-text">
+                
+                {/* Glowing Radar Background Overlay */}
+                <div className="absolute inset-0 bg-[#001103] bg-opacity-20 z-0 pointer-events-none" />
+
+                <div className="flex-1 p-3 overflow-y-auto font-mono text-[11px] space-y-2.5 relative z-10 select-text">
                   {desktopLogs.length === 0 ? (
-                    <div className="text-gray-500 italic text-center pt-8">No command execution logs received yet.</div>
+                    <div className="text-gray-600 italic text-center pt-12">No command execution logs received yet.</div>
                   ) : (
                     desktopLogs.map((log, i) => (
-                      <div key={i} className={`p-1.5 rounded border ${
+                      <div key={i} className={`p-2 rounded border ${
                         log.type === 'error' ? 'bg-[#220002] border-[#ff3333] text-[#ffaaaa]' :
                         log.type === 'action' ? 'bg-[#002205] border-[#00ff66] text-[#00ff66] font-bold' :
                         log.type === 'result' ? 'bg-[#001103] border-[#00aa44] text-[#aaffbb]' :
                         'bg-black border-transparent text-[#00ff66]'
-                      }`}>
-                        <span className="text-[7px] text-gray-500 block">[{log.timestamp}] {log.sender} &rarr; {log.recipient}</span>
+                      } shadow-md`}>
+                        <span className="text-[8px] text-gray-500 block mb-1">[{log.timestamp}] {log.sender} &rarr; {log.recipient}</span>
                         <div className="whitespace-pre-wrap">{log.message}</div>
                       </div>
                     ))
@@ -766,15 +785,15 @@ export default function App() {
               Local Web Configuration Settings
             </h2>
 
-            <form onSubmit={handleSaveSettings} className="space-y-4">
-              <div className="text-[9px] text-[#00aa44] uppercase font-bold flex items-center justify-between border-b border-[#004411] pb-1.5 mb-2">
+            <form onSubmit={handleSaveSettings} className="space-y-6">
+              <div className="text-[10px] text-[#00ff66] uppercase font-extrabold flex items-center justify-between border-b border-[#004411] pb-2 mb-2 tracking-wider">
                 <span>Configure model parameters</span>
                 <FeatureBadge status="mock" label="Mock keychain" />
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] uppercase text-[#00aa44] font-bold flex items-center gap-1.5">
-                  <Key size={11} />
+                  <Key size={12} />
                   <span>DeepSeek API Key</span>
                 </label>
                 <input
@@ -786,9 +805,9 @@ export default function App() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] uppercase text-[#00aa44] font-bold flex items-center gap-1.5">
-                  <Key size={11} />
+                  <Key size={12} />
                   <span>Google Gemini API Key</span>
                 </label>
                 <input
@@ -800,9 +819,9 @@ export default function App() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] uppercase text-[#00aa44] font-bold flex items-center gap-1.5">
-                  <Key size={11} />
+                  <Key size={12} />
                   <span>OpenAI API Key</span>
                 </label>
                 <input
@@ -815,9 +834,12 @@ export default function App() {
               </div>
 
               {/* PII Compliance Gating */}
-              <div className="border border-[#004411] bg-black bg-opacity-30 p-2.5 rounded flex flex-col gap-1.5 font-mono">
-                <span className="text-[10px] uppercase font-bold text-white flex items-center justify-between">
-                  <span>PII Compliance Filter</span>
+              <div className="border border-[#004411] bg-black bg-opacity-35 p-3 rounded flex flex-col gap-2 font-mono">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase font-bold text-white flex items-center gap-2">
+                    <ShieldCheck size={13} className="text-[#00ff66]" />
+                    <span>PII Compliance Filter</span>
+                  </span>
                   <input
                     type="checkbox"
                     checked={piiFilterEnabled}
@@ -825,33 +847,37 @@ export default function App() {
                       setPiiFilterEnabled(e.target.checked);
                       localStorage.setItem('web_pii_filter_enabled', String(e.target.checked));
                     }}
-                    className="accent-matrix-neon cursor-pointer h-3.5 w-3.5 border border-[#004411] rounded"
+                    className="accent-matrix-neon cursor-pointer h-4 w-4 border border-[#004411] rounded"
                   />
+                </div>
+                <span className="text-[#00aa44] text-[10px] leading-relaxed">
+                  Redact sensitive API keys, email addresses, and phone numbers automatically before sending payloads.
                 </span>
-                <span className="text-[#00aa44] text-[9px]">Redact sensitive API keys, emails, and phone numbers before querying model nodes.</span>
               </div>
 
               {/* Realtime Socket Telemetry (Compression / Bandwidth) */}
-              <div className="border border-[#00ff66] border-opacity-30 bg-[#001103] p-2.5 rounded flex flex-col gap-1.5 font-mono text-[9px] mb-1">
-                <span className="text-[#00ff66] font-bold uppercase text-[9.5px] flex items-center justify-between border-b border-[#00ff66] border-opacity-30 pb-1">
+              <div className="border border-[#00ff66] border-opacity-35 bg-[#001103] p-3 rounded flex flex-col gap-2 font-mono text-[10px] shadow-lg">
+                <span className="text-[#00ff66] font-bold uppercase text-[10px] flex items-center justify-between border-b border-[#00ff66] border-opacity-30 pb-2">
                   <span>⚡ WebSocket Telemetry</span>
                   <FeatureBadge status="preview" label="Preview telemetry" />
                 </span>
-                <div className="flex justify-between">
-                  <span className="text-[#00aa44]">Bytes Transmitted:</span>
-                  <span className="text-white font-bold">{(telemetry.bytesSent / 1024).toFixed(2)} KB</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[#00aa44]">Bytes Received:</span>
-                  <span className="text-white font-bold">{(telemetry.bytesReceived / 1024).toFixed(2)} KB</span>
-                </div>
-                <div className="flex justify-between border-t border-[#004411] pt-1 mt-0.5">
-                  <span className="text-[#00aa44]">Compression Savings:</span>
-                  <span className="text-[#00ff66] font-bold">{(telemetry.compressionSavingsRatio * 100).toFixed(0)}% (zlib deflate)</span>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-[#00aa44]">Bytes Transmitted:</span>
+                    <span className="text-white font-bold">{(telemetry.bytesSent / 1024).toFixed(2)} KB</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#00aa44]">Bytes Received:</span>
+                    <span className="text-white font-bold">{(telemetry.bytesReceived / 1024).toFixed(2)} KB</span>
+                  </div>
+                  <div className="flex justify-between border-t border-[#004411] pt-2 mt-1">
+                    <span className="text-[#00aa44]">Compression Savings:</span>
+                    <span className="text-[#00ff66] font-bold">{(telemetry.compressionSavingsRatio * 100).toFixed(0)}% (zlib deflate)</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1.5 pt-2">
+              <div className="flex flex-col gap-2 pt-2">
                 <span className="text-[10px] uppercase text-[#00aa44] font-bold">Console Styling Theme</span>
                 <div className="flex gap-2">
                   {['forge', 'matrix', 'light'].map(t => (
@@ -859,10 +885,10 @@ export default function App() {
                       key={t}
                       type="button"
                       onClick={() => setTheme(t)}
-                      className={`flex-1 py-1.5 text-[9px] uppercase font-bold rounded border cursor-pointer ${
+                      className={`flex-1 py-2 text-[10px] uppercase font-bold rounded border cursor-pointer transition-all ${
                         theme === t 
-                          ? 'bg-matrix-dark border-matrix-neon text-white shadow-[0_0_5px_var(--matrix-neon)]' 
-                          : 'bg-transparent border-matrix-dark text-matrix-dim hover:text-matrix-neon'
+                          ? 'bg-[#002205] border-[#00ff66] text-[#00ff66] shadow-[0_0_8px_rgba(0,255,102,0.4)]' 
+                          : 'bg-transparent border-[#004411] text-[#00aa44] hover:border-[#00ff66] hover:text-[#00ff66]'
                       }`}
                     >
                       {t === 'forge' ? 'Forge Dark' : t === 'matrix' ? 'Terminal Style' : 'Light Mode'}
@@ -871,7 +897,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] uppercase text-[#00aa44] font-bold">Desktop Backend URL</label>
                 <input
                   type="text"
@@ -880,12 +906,12 @@ export default function App() {
                   placeholder="http://localhost:3001"
                   className="matrix-input"
                 />
-                <span className={`text-[9px] ${backendStatus === 'online' ? 'text-[#00ff66]' : 'text-[#ff3333]'}`}>
+                <span className={`text-[10px] uppercase font-bold ${backendStatus === 'online' ? 'text-[#00ff66]' : 'text-[#ff3333]'}`}>
                   Backend status: {backendStatus.toUpperCase()}
                 </span>
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] uppercase text-[#00aa44] font-bold">Companion Pairing Code</label>
                 <div className="flex gap-2">
                   <input
@@ -898,21 +924,21 @@ export default function App() {
                   <button
                     type="button"
                     onClick={toggleCompanionConnection}
-                    className={`matrix-btn px-4 font-bold border ${
+                    className={`matrix-btn px-5 font-bold border transition-all ${
                       companionStatus === 'connected' ? 'border-[#ff3333] text-[#ff3333] hover:bg-[#220002]' : 'border-[#00ff66] text-[#00ff66] hover:bg-[#002205]'
                     }`}
                   >
                     {companionStatus === 'connected' ? 'UNPAIR' : companionStatus === 'connecting' ? 'PAIRING...' : 'PAIR'}
                   </button>
                 </div>
-                <span className={`text-[9px] uppercase font-bold ${
+                <span className={`text-[10px] uppercase font-bold ${
                   companionStatus === 'connected' ? 'text-[#00ff66]' : companionStatus === 'error' ? 'text-[#ff3333]' : 'text-[#00aa44]'
                 }`}>
                   Companion status: {companionStatus.toUpperCase()}
                 </span>
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] uppercase text-[#00aa44] font-bold">Custom System Instructions</label>
                 <textarea
                   value={customInstructions}
@@ -923,7 +949,7 @@ export default function App() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-2">
                 <label className="text-[10px] uppercase text-[#00aa44] font-bold">Response Mode</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {([
@@ -936,8 +962,8 @@ export default function App() {
                       key={mode}
                       type="button"
                       onClick={() => setResponseMode(mode)}
-                      className={`border rounded py-1 text-[9px] font-bold ${
-                        responseMode === mode ? 'border-[#00ff66] bg-[#003311] text-white' : 'border-[#004411] text-[#00aa44]'
+                      className={`border rounded py-1.5 text-[10px] font-bold transition-all ${
+                        responseMode === mode ? 'border-[#00ff66] bg-[#002205] text-white shadow-[0_0_5px_rgba(0,255,102,0.3)]' : 'border-[#004411] text-[#00aa44] hover:border-[#00ff66] hover:text-[#00ff66]'
                       }`}
                     >
                       {label}
@@ -947,7 +973,7 @@ export default function App() {
               </div>
 
               {/* Gated Cloud Sync */}
-              <div className="border border-[#004411] bg-[#020502] p-3 rounded space-y-2 relative">
+              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -960,27 +986,27 @@ export default function App() {
                     <RefreshCw size={11} className="text-[#00ff66]" />
                     <span>Enable Settings Cloud Sync</span>
                   </label>
-                  <span className="text-[8px] bg-[#004411] text-[#00ff66] border border-[#00ff66] px-1 rounded font-normal shrink-0">BASIC+</span>
+                  <span className="text-[8px] bg-[#004411] text-[#00ff66] border border-[#00ff66] px-1.5 rounded font-bold shrink-0">BASIC+</span>
                   <FeatureBadge status="preview" />
                 </div>
-                <p className="text-[9px] text-[#00aa44]">Syncs model settings and active project checklists across devices.</p>
+                <p className="text-[10px] text-[#00aa44] leading-relaxed">Syncs model settings and active project checklists across devices.</p>
 
                 {showSyncOverlay && (
-                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-3 border border-[#ff3333] rounded">
-                    <div className="flex items-center gap-1.5 text-[#ff3333] text-[9.5px] font-bold">
-                      <ShieldAlert size={12} />
+                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-4 border border-[#ff3333] rounded z-30">
+                    <div className="flex items-center gap-2 text-[#ff3333] text-[10px] font-bold">
+                      <ShieldAlert size={14} />
                       <span>Sync locked: Upgrade to Basic Plan ($2.99/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('basic'); setShowSyncOverlay(false); setIsSyncEnabled(true); }} className="text-[8px] bg-amber-800 text-white px-2 py-0.5 rounded font-bold">UPGRADE</button>
-                      <button type="button" onClick={() => setShowSyncOverlay(false)} className="text-[8px] border border-gray-600 text-gray-400 px-2 py-0.5 rounded">CANCEL</button>
+                      <button type="button" onClick={() => { setUserTier('basic'); setShowSyncOverlay(false); setIsSyncEnabled(true); }} className="text-[9px] bg-amber-800 text-white px-3 py-1 rounded font-bold hover:bg-amber-900 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => setShowSyncOverlay(false)} className="text-[9px] border border-gray-600 text-gray-400 px-3 py-1 rounded hover:text-white transition-all">CANCEL</button>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* WebRTC Collaboration Gated Sync */}
-              <div className="border border-[#004411] bg-[#020502] p-3 rounded space-y-2 relative">
+              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -999,39 +1025,39 @@ export default function App() {
                     <Laptop size={11} className="text-[#00ff66]" />
                     <span>WebRTC Collaboration Room</span>
                   </label>
-                  <span className="text-[8px] bg-[#00ff66] text-black border border-[#00ff66] px-1 rounded font-extrabold shrink-0">ENTERPRISE</span>
+                  <span className="text-[8px] bg-[#00ff66] text-black border border-[#00ff66] px-1.5 rounded font-extrabold shrink-0">ENTERPRISE</span>
                   <FeatureBadge status="preview" />
                 </div>
-                <p className="text-[9px] text-[#00aa44]">Preview real-time co-coding indicators, terminal stream status, and active agent pairing sessions.</p>
+                <p className="text-[10px] text-[#00aa44] leading-relaxed">Preview real-time co-coding indicators, terminal stream status, and active agent pairing sessions.</p>
                 {collabActive && (
-                  <div className="text-[9px] bg-[#001102] border border-[#00ff66] p-1.5 rounded text-[#00ff66] animate-pulse">
+                  <div className="text-[10px] bg-[#001102] border border-[#00ff66] p-2 rounded text-[#00ff66] animate-pulse font-mono">
                     📡 COLLAB SESSION ACTIVE: Connected to signaling channel token room.
                   </div>
                 )}
 
                 {showCollabOverlay && (
-                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-3 border border-[#ff3333] rounded">
-                    <div className="flex items-center gap-1.5 text-[#ff3333] text-[9.5px] font-bold">
-                      <ShieldAlert size={12} />
+                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-4 border border-[#ff3333] rounded z-30">
+                    <div className="flex items-center gap-2 text-[#ff3333] text-[10px] font-bold">
+                      <ShieldAlert size={14} />
                       <span>Collab locked: Upgrade to Enterprise ($25/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('enterprise'); setShowCollabOverlay(false); setCollabActive(true); }} className="text-[8px] bg-green-950 border border-green-500 text-green-200 px-2 py-0.5 rounded font-bold">UPGRADE</button>
-                      <button type="button" onClick={() => setShowCollabOverlay(false)} className="text-[8px] border border-gray-600 text-gray-400 px-2 py-0.5 rounded">CANCEL</button>
+                      <button type="button" onClick={() => { setUserTier('enterprise'); setShowCollabOverlay(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => setShowCollabOverlay(false)} className="text-[9px] border border-gray-600 text-gray-400 px-3 py-1 rounded hover:text-white transition-all">CANCEL</button>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Semantic Cache Query Panel */}
-              <div className="border border-[#004411] bg-[#020502] p-3 rounded space-y-2 relative">
+              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
                   <Database size={11} className="text-[#00ff66]" />
                   <span className="text-[10px] uppercase font-bold text-white">Semantic Cache Query</span>
-                  <span className="text-[8px] bg-blue-900 text-blue-200 border border-blue-500 px-1 rounded font-bold shrink-0">PRO+</span>
+                  <span className="text-[8px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">PRO+</span>
                   <FeatureBadge status="preview" />
                 </div>
-                <p className="text-[9px] text-[#00aa44]">Index and query workspace symbols, functions, and type definitions from a local semantic cache.</p>
+                <p className="text-[10px] text-[#00aa44] leading-relaxed">Index and query workspace symbols, functions, and type definitions from a local semantic cache.</p>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1043,7 +1069,7 @@ export default function App() {
                         setShowSemanticLock(true);
                         return;
                       }
-                      if (q.trim() && semanticResults.length > 0) {
+                      if (q.trim()) {
                         const mockAll = [
                           { symbol: 'handleSendChat', file: 'src/App.tsx', type: 'function' },
                           { symbol: 'Message', file: 'src/App.tsx', type: 'interface' },
@@ -1052,10 +1078,12 @@ export default function App() {
                           { symbol: 'UserTier', file: 'src/types.ts', type: 'type' },
                         ];
                         setSemanticResults(mockAll.filter(r => r.symbol.toLowerCase().includes(q.toLowerCase())));
+                      } else {
+                        setSemanticResults([]);
                       }
                     }}
                     placeholder="Search cached symbols..."
-                    className="matrix-input flex-1 text-[11px] text-[#00ff66]"
+                    className="matrix-input flex-1 text-[12px] text-[#00ff66]"
                   />
                   <button
                     type="button"
@@ -1077,18 +1105,18 @@ export default function App() {
                         setIsBuildingIndex(false);
                       }, 1500);
                     }}
-                    className="matrix-btn px-3 font-bold text-[9px]"
+                    className="matrix-btn matrix-btn-primary px-4 font-bold text-[10px]"
                   >
                     {isBuildingIndex ? 'INDEXING...' : 'BUILD INDEX'}
                   </button>
                 </div>
                 {semanticIndexCount !== null && (
-                  <div className="text-[9px] text-[#00ff66] font-bold">✓ {semanticIndexCount} symbols indexed</div>
+                  <div className="text-[10px] text-[#00ff66] font-bold">✓ {semanticIndexCount} symbols indexed</div>
                 )}
                 {semanticResults.length > 0 && (
-                  <div className="border border-[#004411] bg-black bg-opacity-40 rounded p-2 space-y-1 max-h-28 overflow-y-auto">
+                  <div className="border border-[#004411] bg-black bg-opacity-40 rounded p-3 space-y-1.5 max-h-32 overflow-y-auto font-mono">
                     {semanticResults.map((r, i) => (
-                      <div key={i} className="flex items-center justify-between text-[9px]">
+                      <div key={i} className="flex items-center justify-between text-[10px]">
                         <span className="text-white font-bold">{r.symbol}</span>
                         <span className="text-[#00aa44]">{r.file} · <span className="text-[8px] uppercase border border-[#004411] px-1 rounded">{r.type}</span></span>
                       </div>
@@ -1097,35 +1125,35 @@ export default function App() {
                 )}
 
                 {showSemanticLock && (
-                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-3 border border-[#ff3333] rounded">
-                    <div className="flex items-center gap-1.5 text-[#ff3333] text-[9.5px] font-bold">
-                      <ShieldAlert size={12} />
+                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-4 border border-[#ff3333] rounded z-30">
+                    <div className="flex items-center gap-2 text-[#ff3333] text-[10px] font-bold">
+                      <ShieldAlert size={14} />
                       <span>Semantic Cache locked: Upgrade to Pro ($9.99/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('pro'); setShowSemanticLock(false); }} className="text-[8px] bg-blue-900 border border-blue-500 text-blue-200 px-2 py-0.5 rounded font-bold">UPGRADE</button>
-                      <button type="button" onClick={() => setShowSemanticLock(false)} className="text-[8px] border border-gray-600 text-gray-400 px-2 py-0.5 rounded">CANCEL</button>
+                      <button type="button" onClick={() => { setUserTier('pro'); setShowSemanticLock(false); }} className="text-[9px] bg-blue-900 border border-blue-500 text-blue-200 px-3 py-1 rounded font-bold hover:bg-blue-905 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => setShowSemanticLock(false)} className="text-[9px] border border-gray-600 text-gray-400 px-3 py-1 rounded hover:text-white transition-all">CANCEL</button>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Self-Healing Rollback Monitor */}
-              <div className="border border-[#004411] bg-[#020502] p-3 rounded space-y-2 relative">
+              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
                   <RefreshCw size={11} className="text-[#00ff66]" />
                   <span className="text-[10px] uppercase font-bold text-white">Self-Healing Rollback Monitor</span>
-                  <span className="text-[8px] bg-blue-900 text-blue-200 border border-blue-500 px-1 rounded font-bold shrink-0">PRO+</span>
+                  <span className="text-[8px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">PRO+</span>
                   <FeatureBadge status="preview" />
                 </div>
-                <p className="text-[9px] text-[#00aa44]">Automatically reverts destructive file operations and monitors workspace integrity in real-time.</p>
+                <p className="text-[10px] text-[#00aa44] leading-relaxed">Automatically reverts destructive file operations and monitors workspace integrity in real-time.</p>
                 {(userTier === 'pro' || userTier === 'enterprise') ? (
                   <>
-                    <div className="text-[9px] bg-[#001102] border border-[#00ff66] p-1.5 rounded text-[#00ff66] animate-pulse flex items-center gap-1.5">
-                      <ShieldCheck size={10} />
+                    <div className="text-[10px] bg-[#001102] border border-[#00ff66] p-2 rounded text-[#00ff66] animate-pulse flex items-center gap-2">
+                      <ShieldCheck size={11} />
                       <span>MONITORING ACTIVE</span>
                     </div>
-                    <div className="border border-[#004411] bg-black bg-opacity-40 rounded p-2 space-y-1.5 max-h-28 overflow-y-auto text-[9px]">
+                    <div className="border border-[#004411] bg-black bg-opacity-40 rounded p-3 space-y-2 max-h-32 overflow-y-auto text-[10px] font-mono">
                       <div className="flex items-center justify-between">
                         <span className="text-amber-400 font-bold">↩ REVERT</span>
                         <span className="text-[#00aa44]">rm -rf ./dist — auto-rolled back 2m ago</span>
@@ -1141,29 +1169,29 @@ export default function App() {
                     </div>
                   </>
                 ) : (
-                  <div className="text-[9px] text-gray-500 border border-[#004411] bg-black bg-opacity-30 p-2 rounded">
+                  <div className="text-[10px] text-gray-500 border border-[#004411] bg-black bg-opacity-30 p-2.5 rounded">
                     🔒 Upgrade to Pro or Enterprise to enable self-healing rollback monitoring.
                   </div>
                 )}
               </div>
 
               {/* RBAC Command Policies */}
-              <div className="border border-[#004411] bg-[#020502] p-3 rounded space-y-2 relative">
+              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={11} className="text-[#00ff66]" />
                   <span className="text-[10px] uppercase font-bold text-white">RBAC Command Policy Simulator</span>
-                  <span className="text-[8px] bg-[#00ff66] text-black border border-[#00ff66] px-1 rounded font-extrabold shrink-0">ENTERPRISE</span>
+                  <span className="text-[8px] bg-[#00ff66] text-black border border-[#00ff66] px-1.5 rounded font-extrabold shrink-0">ENTERPRISE</span>
                   <FeatureBadge status="simulator" />
                 </div>
-                <p className="text-[9px] text-[#00aa44]">Define role-based access controls and blocked command prefixes for organization workspaces.</p>
+                <p className="text-[10px] text-[#00aa44] leading-relaxed">Define role-based access controls and blocked command prefixes for organization workspaces.</p>
                 {userTier === 'enterprise' ? (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] uppercase text-[#00aa44] font-bold">Active Role</label>
                       <select
                         value={rbacRole}
                         onChange={e => setRbacRole(e.target.value as 'admin' | 'developer')}
-                        className="matrix-input text-[11px] text-[#00ff66] bg-black"
+                        className="matrix-input text-[12px] text-[#00ff66] bg-black"
                       >
                         <option value="admin">Admin</option>
                         <option value="developer">Developer</option>
@@ -1176,32 +1204,32 @@ export default function App() {
                         value={rbacBlockedPrefixes}
                         onChange={e => setRbacBlockedPrefixes(e.target.value)}
                         placeholder="Comma-separated blocked prefixes..."
-                        className="matrix-input text-[11px] text-[#00ff66]"
+                        className="matrix-input text-[12px] text-[#00ff66]"
                       />
-                      <span className="text-[8px] text-[#00aa44]">Current role: <span className="text-white font-bold uppercase">{rbacRole}</span> — {rbacRole === 'admin' ? 'Full access, blocked prefixes ignored' : `${rbacBlockedPrefixes.split(',').filter(Boolean).length} prefix(es) enforced`}</span>
+                      <span className="text-[9px] text-[#00aa44]">Current role: <span className="text-white font-bold uppercase">{rbacRole}</span> — {rbacRole === 'admin' ? 'Full access, blocked prefixes ignored' : `${rbacBlockedPrefixes.split(',').filter(Boolean).length} prefix(es) enforced`}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-[9px] text-gray-500 border border-[#004411] bg-black bg-opacity-30 p-2 rounded cursor-pointer" onClick={() => setShowRbacLock(true)}>
+                  <div className="text-[10px] text-gray-500 border border-[#004411] bg-black bg-opacity-35 p-2.5 rounded cursor-pointer" onClick={() => setShowRbacLock(true)}>
                     RBAC simulator policies require Enterprise tier. Click to upgrade.
                   </div>
                 )}
 
                 {showRbacLock && (
-                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-3 border border-[#ff3333] rounded">
-                    <div className="flex items-center gap-1.5 text-[#ff3333] text-[9.5px] font-bold">
-                      <ShieldAlert size={12} />
+                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-4 border border-[#ff3333] rounded z-30">
+                    <div className="flex items-center gap-2 text-[#ff3333] text-[10px] font-bold">
+                      <ShieldAlert size={14} />
                       <span>RBAC simulator locked: Upgrade to Enterprise ($25/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('enterprise'); setShowRbacLock(false); }} className="text-[8px] bg-green-950 border border-green-500 text-green-200 px-2 py-0.5 rounded font-bold">UPGRADE</button>
-                      <button type="button" onClick={() => setShowRbacLock(false)} className="text-[8px] border border-gray-600 text-gray-400 px-2 py-0.5 rounded">CANCEL</button>
+                      <button type="button" onClick={() => { setUserTier('enterprise'); setShowRbacLock(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => setShowRbacLock(false)} className="text-[9px] border border-gray-600 text-gray-400 px-3 py-1 rounded hover:text-white transition-all">CANCEL</button>
                     </div>
                   </div>
                 )}
               </div>
 
-              <button type="submit" className="matrix-btn w-full py-2 font-bold uppercase rounded mt-4">
+              <button type="submit" className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase rounded mt-4">
                 [SAVE WEB CONFIGURATION]
               </button>
             </form>
@@ -1212,11 +1240,11 @@ export default function App() {
       {/* Cloud Sync Lock modal dialog */}
       {showSyncLockModal && (
         <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 backdrop-blur-sm z-50">
-          <div className="matrix-panel w-full max-w-sm p-5 border border-amber-600 bg-[#0e0804] flex flex-col gap-4 text-center rounded">
-            <ShieldAlert className="text-amber-500 mx-auto" size={32} />
-            <div className="space-y-1">
+          <div className="matrix-panel w-full max-w-sm p-6 border border-amber-600 bg-[#0e0804] flex flex-col gap-4 text-center rounded shadow-2xl">
+            <ShieldAlert className="text-amber-500 mx-auto" size={36} />
+            <div className="space-y-1.5">
               <h3 className="text-white font-bold text-sm uppercase">Cloud Sync Required</h3>
-              <p className="text-[10px] text-amber-200 leading-relaxed">
+              <p className="text-[11px] text-amber-200 leading-relaxed">
                 To sync your mobile planning session draft directly to your desktop workspace, you must enable **Cloud Sync** (Basic Tier or higher).
               </p>
             </div>
@@ -1227,7 +1255,7 @@ export default function App() {
                   setShowSyncLockModal(false);
                   alert('Upgraded status to Basic Tier successfully!');
                 }}
-                className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold py-1.5 rounded uppercase"
+                className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold py-2 rounded uppercase transition-all"
               >
                 Upgrade to Basic ($2.99/mo)
               </button>
@@ -1237,13 +1265,13 @@ export default function App() {
                   alert('Copied implementation draft to clipboard!');
                   navigator.clipboard.writeText(planDraft);
                 }}
-                className="border border-amber-600 text-amber-500 hover:bg-[#000] text-[10px] py-1.5 rounded uppercase"
+                className="border border-amber-600 text-amber-500 hover:bg-black text-[11px] py-2 rounded uppercase transition-all"
               >
                 Copy Markdown manually
               </button>
               <button
                 onClick={() => setShowSyncLockModal(false)}
-                className="text-[9px] text-gray-500 hover:text-white uppercase font-bold"
+                className="text-[10px] text-gray-500 hover:text-white uppercase font-bold"
               >
                 Cancel
               </button>
@@ -1254,3 +1282,4 @@ export default function App() {
     </div>
   );
 }
+
