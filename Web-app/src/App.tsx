@@ -15,6 +15,8 @@ type FeatureStatus = 'production' | 'preview' | 'simulator' | 'mock' | 'planned'
 type UserTier = 'free' | 'basic' | 'pro' | 'enterprise';
 type ActiveTab = 'marketing' | 'planning' | 'chat' | 'downloads' | 'settings';
 type BackendLog = { sender?: string; message?: string };
+type ToastKind = 'success' | 'error' | 'info';
+type Toast = { id: number; kind: ToastKind; message: string };
 
 const FEATURE_STATUS_LABELS: Record<FeatureStatus, string> = {
   production: 'Production',
@@ -262,7 +264,22 @@ const getForgeCommands = (type: 'auth' | 'cache' | 'api' | 'custom', customInput
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('marketing');
-  
+
+  // Non-blocking toast notifications (replace native alert/confirm dialogs)
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastIdRef = React.useRef(0);
+  const pushToast = React.useCallback((message: string, kind: ToastKind = 'info') => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, kind, message }]);
+    window.setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4200);
+  }, []);
+  const dismissToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
+
+  // Plan import options modal (replaces native window.confirm)
+  const [showImportModal, setShowImportModal] = useState(false);
+
   // Settings state (Stored locally in localStorage)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('web_api_key') || '');
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('web_gemini_api_key') || '');
@@ -411,7 +428,7 @@ export default function App() {
           setCpuHistory(prev => [...prev.slice(1), data.cpuLoad]);
           setMemoryHistory(prev => [...prev.slice(1), data.memoryUsage]);
         } else if (data.type === 'error') {
-          alert(`Companion error: ${data.message}`);
+          pushToast(`Companion error: ${data.message}`, 'error');
           setCompanionStatus('error');
         }
       } catch (err) {
@@ -427,7 +444,7 @@ export default function App() {
     ws.onerror = () => {
       setCompanionStatus('error');
     };
-  }, []);
+  }, [pushToast]);
 
   const disconnectCompanion = () => {
     if (companionWsRef.current) {
@@ -461,6 +478,21 @@ export default function App() {
     localStorage.setItem('web_user_tier', userTier);
   }, [userTier]);
 
+  // Close any open modal/overlay on Escape (a11y)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setShowImportModal(false);
+      setShowSyncLockModal(false);
+      setShowSyncOverlay(false);
+      setShowCollabOverlay(false);
+      setShowSemanticLock(false);
+      setShowRbacLock(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   useEffect(() => {
     document.body.className = `theme-${theme}`;
     localStorage.setItem('web_theme', theme);
@@ -475,7 +507,7 @@ export default function App() {
     localStorage.setItem('web_custom_instructions', customInstructions);
     localStorage.setItem('web_response_mode', responseMode);
     localStorage.setItem('web_backend_url', backendUrl);
-    alert('Settings saved locally in browser storage!');
+    pushToast('Settings saved locally in browser storage.', 'success');
   };
 
   const getWsUrl = () => backendUrl.replace(/^http/i, 'ws');
@@ -666,16 +698,21 @@ export default function App() {
     if (userTier === 'free') {
       setShowSyncLockModal(true);
     } else {
-      const simulateConflict = window.confirm("Would you like to simulate a Sync Conflict for this plan import (3-way merge)?");
-      if (simulateConflict) {
-        setSyncConflict(true);
-        const conflictedText = planDraft + "\n\n<<<<<<< CLIENT (OURS)\n- [ ] Added: User's remote mobile scope change\n=======\n- [ ] Added: Conflicting desktop update\n>>>>>>> SERVER (THEIRS)";
-        setPlanDraft(conflictedText);
-      } else {
-        setSyncConflict(false);
-        alert('Plan imported successfully! Synced implementation_plan.md to desktop workspace.');
-      }
+      setShowImportModal(true);
     }
+  };
+
+  const handleImportClean = () => {
+    setShowImportModal(false);
+    setSyncConflict(false);
+    pushToast('Plan imported — synced implementation_plan.md to desktop workspace.', 'success');
+  };
+
+  const handleImportSimulateConflict = () => {
+    setShowImportModal(false);
+    setSyncConflict(true);
+    const conflictedText = planDraft + "\n\n<<<<<<< CLIENT (OURS)\n- [ ] Added: User's remote mobile scope change\n=======\n- [ ] Added: Conflicting desktop update\n>>>>>>> SERVER (THEIRS)";
+    setPlanDraft(conflictedText);
   };
 
   const handleToggleSync = (checked: boolean) => {
@@ -1658,14 +1695,14 @@ export default function App() {
                   </ul>
                 </div>
                 <div className="flex flex-col gap-2 pt-2">
-                  <button onClick={() => alert('Downloading NSIS installer for Windows (x64)...')} className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase">
+                  <button onClick={() => pushToast('Preparing NSIS installer for Windows (x64)…', 'info')} className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase">
                     [DOWNLOAD FOR WINDOWS (x64)]
                   </button>
                   <div className="flex gap-2">
-                    <button onClick={() => alert('Downloading macOS DMG package...')} className="matrix-btn w-[48%] py-2 font-bold uppercase">
+                    <button onClick={() => pushToast('Preparing macOS DMG package…', 'info')} className="matrix-btn w-[48%] py-2 font-bold uppercase">
                       [MACOS (ARM/INTEL)]
                     </button>
-                    <button onClick={() => alert('Downloading Linux DEB package...')} className="matrix-btn w-[48%] py-2 font-bold uppercase">
+                    <button onClick={() => pushToast('Preparing Linux DEB package…', 'info')} className="matrix-btn w-[48%] py-2 font-bold uppercase">
                       [LINUX (DEB/RPM)]
                     </button>
                   </div>
@@ -1690,10 +1727,10 @@ export default function App() {
                   </ul>
                 </div>
                 <div className="flex flex-col gap-2 pt-2">
-                  <button onClick={() => alert('Redirecting to Apple App Store...')} className="matrix-btn w-full py-2.5 font-bold uppercase">
+                  <button onClick={() => pushToast('Redirecting to the Apple App Store…', 'info')} className="matrix-btn w-full py-2.5 font-bold uppercase">
                     [GET ON APPLE APP STORE]
                   </button>
-                  <button onClick={() => alert('Redirecting to Google Play Store...')} className="matrix-btn w-full py-2.5 font-bold uppercase">
+                  <button onClick={() => pushToast('Redirecting to the Google Play Store…', 'info')} className="matrix-btn w-full py-2.5 font-bold uppercase">
                     [GET ON GOOGLE PLAY STORE]
                   </button>
                 </div>
@@ -2178,7 +2215,7 @@ export default function App() {
                 onClick={() => {
                   setUserTier('basic');
                   setShowSyncLockModal(false);
-                  alert('Upgraded status to Basic Tier successfully!');
+                  pushToast('Upgraded to Basic tier successfully.', 'success');
                 }}
                 className="bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold py-2 rounded uppercase transition-all"
               >
@@ -2187,8 +2224,9 @@ export default function App() {
               <button
                 onClick={() => {
                   setShowSyncLockModal(false);
-                  alert('Copied implementation draft to clipboard!');
-                  navigator.clipboard.writeText(planDraft);
+                  navigator.clipboard.writeText(planDraft)
+                    .then(() => pushToast('Implementation draft copied to clipboard.', 'success'))
+                    .catch(() => pushToast('Could not access clipboard. Copy the draft manually.', 'error'));
                 }}
                 className="border border-amber-600 text-[var(--warn)] hover:bg-[var(--surface-terminal)] text-[11px] py-2 rounded uppercase transition-all"
               >
@@ -2204,6 +2242,70 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Plan import options dialog (replaces native confirm) */}
+      {showImportModal && (
+        <div
+          className="fixed inset-0 bg-[var(--backdrop)] flex items-center justify-center p-4 backdrop-blur-sm z-50"
+          onClick={() => setShowImportModal(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="import-modal-title"
+            className="matrix-panel w-full max-w-sm p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 text-[var(--accent)]">
+              <Download size={18} />
+              <h3 id="import-modal-title" className="text-[var(--text-strong)] font-bold text-sm uppercase tracking-wider">Import Plan to Desktop</h3>
+            </div>
+            <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">
+              Sync <span className="text-[var(--text-strong)] font-mono">implementation_plan.md</span> to your paired desktop workspace. You can run a clean import, or simulate a 3-way merge conflict to preview conflict resolution.
+            </p>
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                onClick={handleImportClean}
+                className="matrix-btn matrix-btn-primary w-full py-2 font-bold uppercase rounded"
+              >
+                Import cleanly
+              </button>
+              <button
+                onClick={handleImportSimulateConflict}
+                className="matrix-btn w-full py-2 font-bold uppercase rounded"
+              >
+                Simulate merge conflict
+              </button>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-strong)] uppercase font-bold pt-1"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notifications */}
+      <div className="toast-stack" aria-live="polite" aria-atomic="false">
+        {toasts.map(t => (
+          <div key={t.id} role="status" className={`toast toast-${t.kind}`}>
+            <span className="toast-icon" aria-hidden="true">
+              {t.kind === 'success' ? '✓' : t.kind === 'error' ? '✕' : 'ℹ'}
+            </span>
+            <span className="toast-msg">{t.message}</span>
+            <button
+              type="button"
+              onClick={() => dismissToast(t.id)}
+              className="toast-close"
+              aria-label="Dismiss notification"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -26,4 +26,36 @@ test.describe('Web companion — smoke', () => {
     // After switching, the planning UI (voice input control) is shown.
     await expect(page.getByRole('button', { name: /voice input/i }).first()).toBeVisible();
   });
+
+  test('actions surface an in-app toast, not a native dialog', async ({ page }) => {
+    await page.goto('/');
+    // Fail loudly if any code path still falls back to window.alert/confirm.
+    let nativeDialogFired = false;
+    page.on('dialog', async d => { nativeDialogFired = true; await d.dismiss(); });
+
+    await page.getByRole('tab', { name: 'Downloads tab' }).click();
+    await page.getByRole('button', { name: /download for windows/i }).click();
+
+    const toast = page.getByRole('status').filter({ hasText: /windows/i });
+    await expect(toast).toBeVisible();
+    expect(nativeDialogFired).toBe(false);
+
+    // Toast is dismissible via its close control.
+    await toast.getByRole('button', { name: /dismiss notification/i }).click();
+    await expect(toast).toHaveCount(0);
+  });
+
+  test('Import Plan opens a themed dialog and Escape closes it', async ({ page }) => {
+    // Paid tier so Import opens the options dialog (free tier shows the upsell).
+    await page.addInitScript(() => localStorage.setItem('web_user_tier', 'pro'));
+    await page.goto('/');
+    await page.getByRole('tab', { name: 'Planning tab' }).click();
+    await page.getByRole('button', { name: /import plan/i }).click();
+
+    const dialog = page.getByRole('dialog', { name: /import plan to desktop/i });
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+  });
 });

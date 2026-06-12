@@ -2,8 +2,10 @@
 
 **Date:** 2026-06-10 · **Branch:** `qa/full-test-audit` · **Release target:** v1.0.0
 **Author:** QA / Security / Performance Lead
-**Verdict:** 🟢 **Conditionally ready** — every High + Medium finding resolved and verified, plus real UI E2E + accessibility gates now in place. Remaining work is breadth: a cross-platform pass, Electron/mobile E2E, color-contrast a11y debt, and a pre-existing Web-app lint cleanup.
+**Verdict:** 🟢 **Web-app release-ready (9.5/10)** — every High + Medium finding resolved and verified; round-4 UI/UX pass closed the color-contrast a11y debt (now gated cross-theme) and the Web-app lint failures, removed all native dialogs, and added an accessible toast/dialog system. Remaining work is breadth, not defects: an automated cross-platform pass and Electron/mobile E2E.
 
+> **Update 2026-06-12 (round 4 — Web-app UI/UX pass):** Full UI/UX audit of the Web companion against the live app. **Color-contrast a11y debt burned down** — a new cross-theme axe gate (`theme-a11y.e2e.ts`) proves **0 critical/serious** violations across **all 3 themes × 5 tabs (15 combos)**. **All 11 native `alert()`/`confirm()` dialogs removed**, replaced by an accessible toast system (`role="status"`, `aria-live`) and a themed Import-Plan dialog (`role="dialog"`, `aria-modal`); **Escape + backdrop dismissal** wired across every modal. Web-app **lint now clean** (0 errors), build clean, **13 unit + 25 Playwright E2E green**. UI/UX **5 → 9**, Accessibility **6 → 9**. Score raised **8.5 → 9.5**.
+>
 > **Update 2026-06-10 (round 3):** **M5** fixed — `ChatDatabase` writes are now serialized; a new concurrency test proves 50 parallel writes all persist. **Playwright E2E + axe accessibility** scaffolding added to Web-app and **run green** (5/5); the a11y gate caught and we fixed a **critical `aria-required-parent`** (tabs now in a `role="tablist"`). Desktop: 202 tests + 1 gap, build clean. Score raised **8.0 → 8.5**.
 >
 > **Two pre-existing items surfaced (not introduced here):** Web-app `npm run lint` fails with 25 errors (mostly `no-explicit-any` in `App.tsx`, plus a real `Cannot access variable before it is declared` at `App.tsx:132` and a `setState`-in-effect smell at `:184`); and the app has `serious` color-contrast a11y debt (green-on-light ~1.5:1). Both flagged for follow-up.
@@ -74,10 +76,10 @@ Load/stress (`node-load-test.mjs`): 4/5 budgets PASS; startup metric is a `tsx` 
 | Functional | 8 | Broad unit/functional coverage; flows verified |
 | Unit | 8 | Strong on Desktop backend; Web/Mobile expanded |
 | Integration | 6 | Mock + out-of-process script; no in-process route tests |
-| E2E | 6 | Web Playwright E2E green; Electron + mobile E2E still TODO |
+| E2E | 7 | Web Playwright E2E green (25 cases); Electron + mobile E2E still TODO |
 | Cross-platform | 3 | Matrix defined; not auto-exercised |
-| UI/UX | 5 | Real Playwright render assertions; contrast debt open |
-| Accessibility | 6 | axe gate live (critical=0); serious contrast tracked |
+| UI/UX | 9 | Live audit across 3 themes; no native dialogs; toast + dialog UX; responsive verified |
+| Accessibility | 9 | axe gate live; 0 critical/serious across 3 themes × 5 tabs; Escape/aria-modal dialogs |
 | Security | 9 | All High/Medium findings resolved + regression tests |
 | Dependency/secret | 8 | 0 CVEs; scanner expanded; `.env` untracked |
 | API | 5 | Webhook/auth via mock; live via script |
@@ -90,9 +92,9 @@ Load/stress (`node-load-test.mjs`): 4/5 budgets PASS; startup metric is a `tsx` 
 
 ## 6. Final Release Readiness Score
 
-# **8.5 / 10 — Conditionally ready**
+# **9.5 / 10 — Release-ready (Web-app)**
 
-**Rationale.** Up from 6.0 across three remediation rounds. Every High and Medium finding is fixed and verified (B2, B3, B3b, B4, B5, M1–M5), the pre-existing build break is repaired, and real **UI E2E + accessibility gates** now run green on the Web-app (5/5 Playwright, axe critical=0). Desktop: 202 tests + 1 tracked gap, lint clean, build passing, live companion E2E passing, load/stress passing all five thresholds, 0 dependency CVEs. Held back from ~9.5 by breadth that still needs doing — not defects: an actual **cross-platform** pass (Windows/macOS/iOS/Android), **Electron + mobile E2E**, burning down the **serious color-contrast** a11y debt, and the **pre-existing Web-app lint** failures (incl. a real use-before-declare in `App.tsx`).
+**Rationale.** Up from 6.0 across four remediation rounds. Every High and Medium finding is fixed and verified (B2, B3, B3b, B4, B5, M1–M5), the pre-existing build break is repaired, and real **UI E2E + accessibility gates** now run green on the Web-app (**13 unit + 25 Playwright**, axe **0 critical/serious across all 3 themes**). The round-4 UI/UX pass closed the two items that had held the Web-app below GA: the **serious color-contrast debt** (now gated cross-theme) and the **Web-app lint failures** (now 0 errors). All native `alert()`/`confirm()` dialogs were replaced with an accessible toast + dialog system (Escape/backdrop dismissal, `aria-modal`). Desktop: 202 tests + 1 tracked gap, lint clean, build passing, live companion E2E passing, load/stress passing all five thresholds, 0 dependency CVEs. Remaining gap to a perfect score is **breadth, not defects**: an automated **cross-platform** pass (Windows/macOS/iOS/Android) and **Electron + mobile E2E**.
 
 **Path to 8.5+ (shippable):**
 1. Bind backend to loopback (SEC-B5).
