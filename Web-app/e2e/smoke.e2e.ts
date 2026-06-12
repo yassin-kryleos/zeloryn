@@ -58,4 +58,51 @@ test.describe('Web companion — smoke', () => {
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
   });
+
+  test('logged-out purchase requires sign-in, then completes checkout', async ({ page }) => {
+    await page.goto('/');
+
+    // Logged out: header shows a Log In affordance.
+    await expect(page.getByRole('button', { name: /^log in$/i })).toBeVisible();
+
+    // Attempting to buy a paid plan forces authentication first.
+    await page.getByRole('tab', { name: 'Pricing tab' }).click();
+    await page.getByRole('button', { name: /choose pro/i }).click();
+
+    const authDialog = page.getByRole('dialog', { name: /sign in/i });
+    await expect(authDialog).toBeVisible();
+    await expect(authDialog).toContainText(/purchasing the .*pro.* plan/i);
+
+    await page.locator('#auth-email').fill('buyer@example.com');
+    await page.locator('#auth-password').fill('forge123');
+    await authDialog.getByRole('button', { name: /sign in/i }).click();
+
+    // Checkout opens automatically for the pending plan.
+    const checkout = page.getByRole('dialog', { name: /checkout/i });
+    await expect(checkout).toBeVisible();
+    await expect(checkout).toContainText('$9.99');
+
+    await page.locator('#card-name').fill('Test Buyer');
+    await page.locator('#card-number').fill('4242424242424242');
+    await page.locator('#card-expiry').fill('12/28');
+    await page.locator('#card-cvc').fill('123');
+    await checkout.getByRole('button', { name: /pay \$9\.99/i }).click();
+
+    // Payment confirmation toast + active plan reflected in the header.
+    await expect(page.getByRole('status').filter({ hasText: /pro plan is now active/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /log out/i })).toBeVisible();
+  });
+
+  test('sign-in rejects a too-short password', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /^log in$/i }).click();
+    const authDialog = page.getByRole('dialog', { name: /sign in/i });
+    // Valid email (passes native input validation) but a password under 6 chars.
+    await page.locator('#auth-email').fill('buyer@example.com');
+    await page.locator('#auth-password').fill('123');
+    await authDialog.getByRole('button', { name: /sign in/i }).click();
+    await expect(authDialog.getByRole('alert')).toContainText(/at least 6 characters/i);
+    // Still on the dialog — not authenticated.
+    await expect(authDialog).toBeVisible();
+  });
 });

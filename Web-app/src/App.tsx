@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
   Terminal, Sparkles, Key, FileText, Database, ShieldAlert, ShieldCheck,
   Download, Laptop, RefreshCw, Smartphone, Mic, MicOff,
-  Gem, Check, X, Zap, Building2, Users
+  Gem, Check, X, Zap, Building2, Users,
+  LogIn, LogOut, User, CreditCard, Lock
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
 
@@ -18,6 +19,8 @@ type ActiveTab = 'marketing' | 'pricing' | 'planning' | 'chat' | 'downloads' | '
 type BackendLog = { sender?: string; message?: string };
 type ToastKind = 'success' | 'error' | 'info';
 type Toast = { id: number; kind: ToastKind; message: string };
+type AuthUser = { name: string; email: string };
+type AuthMode = 'login' | 'signup';
 
 const FEATURE_STATUS_LABELS: Record<FeatureStatus, string> = {
   production: 'Production',
@@ -36,6 +39,19 @@ function FeatureBadge({ status, label }: { status: FeatureStatus; label?: string
 }
 
 const USER_TIERS: UserTier[] = ['free', 'basic', 'pro', 'enterprise'];
+const TIER_LABELS: Record<UserTier, string> = { free: 'Free', basic: 'Basic', pro: 'Pro', enterprise: 'Enterprise' };
+const TIER_PRICES: Record<UserTier, number> = { free: 0, basic: 2.99, pro: 9.99, enterprise: 25 };
+
+function readStoredUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem('web_auth_user');
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed.email === 'string' ? parsed as AuthUser : null;
+  } catch {
+    return null;
+  }
+}
 const APP_TABS: ActiveTab[] = ['marketing', 'pricing', 'planning', 'chat', 'downloads', 'settings'];
 
 interface PricingRow {
@@ -316,6 +332,26 @@ export default function App() {
   // Plan import options modal (replaces native window.confirm)
   const [showImportModal, setShowImportModal] = useState(false);
 
+  // Authentication (mock, local-only demo account)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(readStoredUser);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [authName, setAuthName] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Checkout (mock payment) flow
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [checkoutTier, setCheckoutTier] = useState<UserTier>('pro');
+  const [pendingTier, setPendingTier] = useState<UserTier | null>(null);
+  const [cardName, setCardName] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvc, setCardCvc] = useState('');
+  const [checkoutError, setCheckoutError] = useState('');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
   // Settings state (Stored locally in localStorage)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('web_api_key') || '');
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('web_gemini_api_key') || '');
@@ -514,6 +550,11 @@ export default function App() {
     localStorage.setItem('web_user_tier', userTier);
   }, [userTier]);
 
+  useEffect(() => {
+    if (authUser) localStorage.setItem('web_auth_user', JSON.stringify(authUser));
+    else localStorage.removeItem('web_auth_user');
+  }, [authUser]);
+
   // Close any open modal/overlay on Escape (a11y)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -524,6 +565,8 @@ export default function App() {
       setShowCollabOverlay(false);
       setShowSemanticLock(false);
       setShowRbacLock(false);
+      setShowAuthModal(false);
+      setShowCheckoutModal(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -751,6 +794,111 @@ export default function App() {
     setPlanDraft(conflictedText);
   };
 
+  // --- Authentication (mock) ---
+  const openAuth = (mode: AuthMode) => {
+    setAuthMode(mode);
+    setAuthError('');
+    setShowAuthModal(true);
+  };
+
+  const openCheckout = (tier: UserTier) => {
+    setCheckoutTier(tier);
+    setCheckoutError('');
+    setShowCheckoutModal(true);
+  };
+
+  const handleAuthSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = authEmail.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      setAuthError('Enter a valid email address.');
+      return;
+    }
+    if (authPassword.length < 6) {
+      setAuthError('Password must be at least 6 characters.');
+      return;
+    }
+    if (authMode === 'signup' && !authName.trim()) {
+      setAuthError('Enter your name.');
+      return;
+    }
+    const name = authMode === 'signup' ? authName.trim() : email.split('@')[0];
+    setAuthUser({ name, email });
+    setShowAuthModal(false);
+    setAuthError('');
+    setAuthPassword('');
+    setAuthName('');
+    pushToast(`${authMode === 'signup' ? 'Account created' : 'Signed in'} — welcome, ${name}.`, 'success');
+    if (pendingTier) {
+      const tier = pendingTier;
+      setPendingTier(null);
+      openCheckout(tier);
+    }
+  };
+
+  const handleLogout = () => {
+    setAuthUser(null);
+    pushToast('Signed out.', 'info');
+  };
+
+  // --- Plan selection / purchase ---
+  const requestPlan = (tier: UserTier) => {
+    if (tier === userTier) return;
+    if (tier === 'free') {
+      setUserTier('free');
+      pushToast('Switched to the Free plan.', 'success');
+      return;
+    }
+    if (!authUser) {
+      setPendingTier(tier);
+      pushToast('Sign in to purchase a plan.', 'info');
+      openAuth('login');
+      return;
+    }
+    openCheckout(tier);
+  };
+
+  const formatCardNumber = (value: string) =>
+    value.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+
+  const formatExpiry = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 4);
+    return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+  };
+
+  const handlePay = (e: React.FormEvent) => {
+    e.preventDefault();
+    const digits = cardNumber.replace(/\s/g, '');
+    if (!cardName.trim()) {
+      setCheckoutError('Enter the cardholder name.');
+      return;
+    }
+    if (digits.length < 15) {
+      setCheckoutError('Enter a valid card number.');
+      return;
+    }
+    if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) {
+      setCheckoutError('Expiry must be in MM/YY format.');
+      return;
+    }
+    if (cardCvc.replace(/\D/g, '').length < 3) {
+      setCheckoutError('Enter a valid 3-4 digit CVC.');
+      return;
+    }
+    setCheckoutError('');
+    setIsProcessingPayment(true);
+    window.setTimeout(() => {
+      setIsProcessingPayment(false);
+      setUserTier(checkoutTier);
+      localStorage.setItem('web_purchased_tier', checkoutTier);
+      setShowCheckoutModal(false);
+      setCardNumber('');
+      setCardExpiry('');
+      setCardCvc('');
+      pushToast(`Payment successful — ${TIER_LABELS[checkoutTier]} plan is now active.`, 'success');
+    }, 1400);
+  };
+
   const handleToggleSync = (checked: boolean) => {
     if (userTier === 'free') {
       setShowSyncOverlay(true);
@@ -814,6 +962,42 @@ export default function App() {
             </button>
           ))}
         </nav>
+
+        {/* Auth control */}
+        <div className="flex items-center gap-2">
+          {authUser ? (
+            <>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className="flex items-center gap-2 px-3 py-1.5 border border-[var(--line)] rounded text-[10px] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all max-w-[180px]"
+                title={`Signed in as ${authUser.email} · ${TIER_LABELS[userTier]} plan`}
+              >
+                <span className="w-5 h-5 rounded-full bg-[var(--surface-active)] border border-[var(--accent)] flex items-center justify-center shrink-0">
+                  <User size={11} className="text-[var(--accent)]" />
+                </span>
+                <span className="flex flex-col items-start leading-tight min-w-0">
+                  <span className="text-[var(--text-strong)] font-bold truncate max-w-[110px]">{authUser.name}</span>
+                  <span className="text-[8px] uppercase tracking-wider text-[var(--accent)]">{TIER_LABELS[userTier]} plan</span>
+                </span>
+              </button>
+              <button
+                onClick={handleLogout}
+                aria-label="Log out"
+                title="Log out"
+                className="p-1.5 border border-[var(--line)] rounded text-[var(--accent-dim)] hover:border-[var(--danger)] hover:text-[var(--danger)] transition-all"
+              >
+                <LogOut size={14} />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => openAuth('login')}
+              className="matrix-btn matrix-btn-primary px-4 py-1.5 text-[10px] font-bold rounded flex items-center gap-1.5"
+            >
+              <LogIn size={13} /> Log In
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Main Content Area */}
@@ -1344,8 +1528,8 @@ export default function App() {
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Settings cloud sync</li>
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
                 </ul>
-                <button onClick={() => { setUserTier('free'); pushToast('Switched to the Free tier.', 'success'); }} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'free' ? 'matrix-btn-primary' : ''}`}>
-                  {userTier === 'free' ? '✓ Current Plan' : 'Select Free'}
+                <button onClick={() => requestPlan('free')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'free' ? 'matrix-btn-primary' : ''}`}>
+                  {userTier === 'free' ? '✓ Current Plan' : 'Get Started Free'}
                 </button>
               </div>
 
@@ -1366,8 +1550,8 @@ export default function App() {
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
                 </ul>
-                <button onClick={() => { setUserTier('basic'); pushToast('Switched to the Basic tier.', 'success'); }} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'basic' ? 'matrix-btn-primary' : ''}`}>
-                  {userTier === 'basic' ? '✓ Current Plan' : 'Select Basic'}
+                <button onClick={() => requestPlan('basic')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'basic' ? 'matrix-btn-primary' : ''}`}>
+                  {userTier === 'basic' ? '✓ Current Plan' : 'Choose Basic'}
                 </button>
               </div>
 
@@ -1389,8 +1573,8 @@ export default function App() {
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Up to 10 paired devices · Priority support</li>
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
                 </ul>
-                <button onClick={() => { setUserTier('pro'); pushToast('Switched to the Pro tier.', 'success'); }} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'pro' ? 'matrix-btn-primary' : ''}`}>
-                  {userTier === 'pro' ? '✓ Current Plan' : 'Select Pro'}
+                <button onClick={() => requestPlan('pro')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'pro' ? 'matrix-btn-primary' : ''}`}>
+                  {userTier === 'pro' ? '✓ Current Plan' : 'Choose Pro'}
                 </button>
               </div>
 
@@ -1410,8 +1594,8 @@ export default function App() {
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> SSO / SAML <FeatureBadge status="planned" /></li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Unlimited devices · Dedicated support + SLA</li>
                 </ul>
-                <button onClick={() => { setUserTier('enterprise'); pushToast('Switched to the Enterprise tier.', 'success'); }} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'enterprise' ? 'matrix-btn-primary' : ''}`}>
-                  {userTier === 'enterprise' ? '✓ Current Plan' : 'Select Enterprise'}
+                <button onClick={() => requestPlan('enterprise')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'enterprise' ? 'matrix-btn-primary' : ''}`}>
+                  {userTier === 'enterprise' ? '✓ Current Plan' : 'Choose Enterprise'}
                 </button>
               </div>
             </div>
@@ -2434,6 +2618,144 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Authentication dialog (mock, local-only) */}
+      {showAuthModal && (
+        <div
+          className="fixed inset-0 bg-[var(--backdrop)] flex items-center justify-center p-4 backdrop-blur-sm z-50"
+          onClick={() => setShowAuthModal(false)}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-modal-title"
+            onSubmit={handleAuthSubmit}
+            className="matrix-panel w-full max-w-sm p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 text-[var(--accent)] border-b border-[var(--line)] pb-3">
+              <Lock size={18} />
+              <h3 id="auth-modal-title" className="text-[var(--text-strong)] font-bold text-sm uppercase tracking-wider">
+                {authMode === 'login' ? 'Sign In' : 'Create Account'}
+              </h3>
+            </div>
+
+            {pendingTier && (
+              <div className="text-[10px] text-[var(--info)] bg-[var(--surface-accent)] border border-[var(--line)] rounded p-2 flex items-center gap-1.5">
+                <CreditCard size={12} /> Sign in to continue purchasing the <span className="font-bold uppercase">{TIER_LABELS[pendingTier]}</span> plan.
+              </div>
+            )}
+
+            {authMode === 'signup' && (
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="auth-name" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Full Name</label>
+                <input id="auth-name" type="text" value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Ada Lovelace" className="matrix-input" autoComplete="name" />
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="auth-email" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Email</label>
+              <input id="auth-email" type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@example.com" className="matrix-input" autoComplete="email" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="auth-password" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Password</label>
+              <input id="auth-password" type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="At least 6 characters" className="matrix-input" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} />
+            </div>
+
+            {authError && <div role="alert" className="text-[10px] text-[var(--danger)] font-bold">{authError}</div>}
+
+            <button type="submit" className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2">
+              <LogIn size={14} /> {authMode === 'login' ? 'Sign In' : 'Create Account'}
+            </button>
+
+            <div className="text-[10px] text-[var(--accent-dim)] text-center">
+              {authMode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
+              <button
+                type="button"
+                onClick={() => { setAuthMode(authMode === 'login' ? 'signup' : 'login'); setAuthError(''); }}
+                className="text-[var(--accent)] font-bold uppercase hover:underline"
+              >
+                {authMode === 'login' ? 'Sign up' : 'Sign in'}
+              </button>
+            </div>
+
+            <p className="text-[9px] text-[var(--text-muted)] text-center border-t border-[var(--line)] pt-3 leading-relaxed">
+              Demo account — credentials are stored locally in your browser only. No server authentication is performed.
+            </p>
+          </form>
+        </div>
+      )}
+
+      {/* Checkout dialog (mock payment) */}
+      {showCheckoutModal && (
+        <div
+          className="fixed inset-0 bg-[var(--backdrop)] flex items-center justify-center p-4 backdrop-blur-sm z-50"
+          onClick={() => !isProcessingPayment && setShowCheckoutModal(false)}
+        >
+          <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="checkout-modal-title"
+            onSubmit={handlePay}
+            className="matrix-panel w-full max-w-md p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 text-[var(--accent)] border-b border-[var(--line)] pb-3">
+              <CreditCard size={18} />
+              <h3 id="checkout-modal-title" className="text-[var(--text-strong)] font-bold text-sm uppercase tracking-wider">Checkout</h3>
+            </div>
+
+            {/* Order summary */}
+            <div className="flex items-center justify-between bg-[var(--surface-accent)] border border-[var(--line)] rounded p-3">
+              <div className="flex flex-col">
+                <span className="text-[10px] uppercase text-[var(--accent-dim)] font-bold tracking-wider">{TIER_LABELS[checkoutTier]} Plan</span>
+                <span className="text-[9px] text-[var(--text-muted)]">{checkoutTier === 'enterprise' ? 'Billed annually, per seat' : 'Billed monthly · cancel anytime'}</span>
+              </div>
+              <span className="text-xl font-extrabold text-[var(--text-strong)]">${TIER_PRICES[checkoutTier].toFixed(2)}<span className="text-[10px] font-normal text-[var(--accent-dim)]">{checkoutTier === 'enterprise' ? '/seat/mo' : '/mo'}</span></span>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="card-name" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Cardholder Name</label>
+              <input id="card-name" type="text" value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Name on card" className="matrix-input" autoComplete="cc-name" />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="card-number" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Card Number</label>
+              <input id="card-number" type="text" inputMode="numeric" value={cardNumber} onChange={e => setCardNumber(formatCardNumber(e.target.value))} placeholder="4242 4242 4242 4242" className="matrix-input" autoComplete="cc-number" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="card-expiry" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Expiry</label>
+                <input id="card-expiry" type="text" inputMode="numeric" value={cardExpiry} onChange={e => setCardExpiry(formatExpiry(e.target.value))} placeholder="MM/YY" className="matrix-input" autoComplete="cc-exp" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="card-cvc" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">CVC</label>
+                <input id="card-cvc" type="text" inputMode="numeric" value={cardCvc} onChange={e => setCardCvc(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="123" className="matrix-input" autoComplete="cc-csc" />
+              </div>
+            </div>
+
+            {checkoutError && <div role="alert" className="text-[10px] text-[var(--danger)] font-bold">{checkoutError}</div>}
+
+            <button type="submit" disabled={isProcessingPayment} className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+              {isProcessingPayment
+                ? <><RefreshCw size={14} className="animate-spin" /> Processing…</>
+                : <><Lock size={13} /> Pay ${TIER_PRICES[checkoutTier].toFixed(2)}</>}
+            </button>
+
+            {!isProcessingPayment && (
+              <button type="button" onClick={() => setShowCheckoutModal(false)} className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-strong)] uppercase font-bold">
+                Cancel
+              </button>
+            )}
+
+            <p className="text-[9px] text-[var(--text-muted)] text-center border-t border-[var(--line)] pt-3 leading-relaxed flex items-center justify-center gap-1.5">
+              <ShieldCheck size={11} className="text-[var(--accent)]" /> Mock checkout — no real payment is processed. Use any test card (e.g. 4242 4242 4242 4242).
+            </p>
+          </form>
         </div>
       )}
 
