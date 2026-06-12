@@ -3,7 +3,7 @@ import {
   Terminal, Sparkles, Key, FileText, Database, ShieldAlert, ShieldCheck,
   Download, Laptop, RefreshCw, Smartphone, Mic, MicOff,
   Gem, Check, X, Zap, Building2, Users,
-  LogIn, LogOut, User, CreditCard, Lock
+  LogIn, LogOut, User, CreditCard, Lock, ExternalLink
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
 
@@ -2610,6 +2610,23 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Global footer — Kryleos group callout */}
+      <footer className="border-t border-[var(--line)] bg-[var(--surface-header)] px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 relative z-20">
+        <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider">
+          © Kryleos Group · Kryleos Forge Companion
+        </span>
+        <a
+          href="https://www.kryleos.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="group flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-wider text-[var(--accent-dim)] hover:text-[var(--accent)] transition-all"
+        >
+          <Gem size={12} className="text-[var(--accent)]" />
+          <span>Explore more apps &amp; services at kryleos.com</span>
+          <ExternalLink size={11} className="transition-transform group-hover:translate-x-0.5" />
+        </a>
+      </footer>
 
       {/* Cloud Sync Lock modal dialog */}
       {showSyncLockModal && (
