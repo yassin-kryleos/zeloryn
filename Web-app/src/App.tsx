@@ -338,7 +338,7 @@ export default function App() {
 
   const [pairingCode, setPairingCode] = useState(() => localStorage.getItem('web_pairing_code') || '');
   const [companionStatus, setCompanionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
-  const [desktopLogs, setDesktopLogs] = useState<any[]>([]);
+  const [desktopLogs, setDesktopLogs] = useState<BackendLog[]>([]);
   const [cpuHistory, setCpuHistory] = useState<number[]>(Array(15).fill(12));
   const [memoryHistory, setMemoryHistory] = useState<number[]>(Array(15).fill(210));
   const companionWsRef = React.useRef<WebSocket | null>(null);
@@ -379,7 +379,12 @@ export default function App() {
     return () => clearInterval(timer);
   }, [simRunning]);
 
-  const connectCompanion = (code: string) => {
+  const backendUrlRef = React.useRef(backendUrl);
+  useEffect(() => {
+    backendUrlRef.current = backendUrl;
+  }, [backendUrl]);
+
+  const connectCompanion = React.useCallback((code: string) => {
     if (!code) return;
     if (companionWsRef.current) {
       companionWsRef.current.close();
@@ -387,9 +392,9 @@ export default function App() {
     setCompanionStatus('connecting');
     localStorage.setItem('web_pairing_code', code);
 
-    const wsUrl = getWsUrl() + `/api/companion/ws?code=${code}`;
+    const wsUrl = backendUrlRef.current.replace(/^http/i, 'ws') + `/api/companion/ws?code=${code}`;
     const ws = new WebSocket(wsUrl);
-    companionWsRef.current = (ws as any);
+    companionWsRef.current = ws;
 
     ws.onopen = () => {
       setCompanionStatus('connected');
@@ -422,7 +427,7 @@ export default function App() {
     ws.onerror = () => {
       setCompanionStatus('error');
     };
-  };
+  }, []);
 
   const disconnectCompanion = () => {
     if (companionWsRef.current) {
@@ -441,15 +446,16 @@ export default function App() {
 
   useEffect(() => {
     const savedCode = localStorage.getItem('web_pairing_code');
-    if (savedCode) {
-      connectCompanion(savedCode);
-    }
+    const reconnectTimer = savedCode
+      ? window.setTimeout(() => connectCompanion(savedCode), 0)
+      : undefined;
     return () => {
+      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
       if (companionWsRef.current) {
         companionWsRef.current.close();
       }
     };
-  }, []);
+  }, [connectCompanion]);
 
   useEffect(() => {
     localStorage.setItem('web_user_tier', userTier);
@@ -689,14 +695,14 @@ export default function App() {
   return (
     <div className={`app-container ${theme === 'matrix' ? 'font-mono' : 'font-sans'}`}>
       {/* Navbar Header */}
-      <header className="border-b border-[#004411] bg-[#060f07] px-6 py-4 flex flex-col md:flex-row gap-3 items-center justify-between shrink-0 shadow-lg relative z-20">
+      <header className="border-b border-[var(--line)] bg-[var(--surface-header)] px-6 py-4 flex flex-col md:flex-row gap-3 items-center justify-between shrink-0 shadow-lg relative z-20">
         <div className="flex items-center gap-3">
-          <Terminal className="text-[#00ff66] animate-blink" size={20} />
+          <Terminal className="text-[var(--accent)] animate-blink" size={20} />
           <div className="flex flex-col">
-            <span className="text-[12px] font-bold tracking-widest text-[#00ff66]">
+            <span className="text-[12px] font-bold tracking-widest text-[var(--accent)]">
               KRYLEOS FORGE // companion_hub
             </span>
-            <span className="text-[8px] text-[#00aa44] uppercase tracking-wider">
+            <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider">
               Secure Multi-Agent Web Companion
             </span>
           </div>
@@ -719,8 +725,8 @@ export default function App() {
               role="tab"
               className={`px-4 py-1.5 border rounded text-[10px] uppercase font-bold cursor-pointer transition-all ${
                 activeTab === tab 
-                  ? 'bg-[#002205] text-[#00ff66] border-[#00ff66] shadow-[0_0_8px_rgba(0,255,102,0.4)]' 
-                  : 'bg-transparent text-[#00aa44] border-[#004411] hover:border-[#00ff66] hover:text-[#00ff66]'
+                  ? 'bg-[var(--surface-active)] text-[var(--accent)] border-[var(--accent)] shadow-[var(--glow-md)]' 
+                  : 'bg-transparent text-[var(--accent-dim)] border-[var(--line)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
               }`}
             >
               {
@@ -743,13 +749,13 @@ export default function App() {
           <div className="flex-1 overflow-y-auto p-8 space-y-12 max-w-5xl mx-auto">
             {/* Hero */}
             <div className="text-center space-y-4 py-8 animate-fadeIn">
-              <h1 className="text-4xl font-extrabold text-white tracking-tight leading-none uppercase">
-                KRYLEOS <span className="text-[#00ff66] text-shadow-[0_0_8px_rgba(0,255,102,0.4)]">FORGE</span>
+              <h1 className="text-4xl font-extrabold text-[var(--text-strong)] tracking-tight leading-none uppercase">
+                KRYLEOS <span className="text-[var(--accent)] text-shadow-[var(--glow-md)]">FORGE</span>
               </h1>
-              <div className="inline-block px-3 py-1 bg-[#001f05] border border-[#00ff66] rounded text-[10px] text-[#00ff66] font-mono font-extrabold tracking-widest uppercase mb-2">
+              <div className="inline-block px-3 py-1 bg-[var(--surface-accent)] border border-[var(--accent)] rounded text-[10px] text-[var(--accent)] font-mono font-extrabold tracking-widest uppercase mb-2">
                 // AUTONOMOUS DEVELOPER PLANNER
               </div>
-              <p className="text-sm text-[#00aa44] max-w-2xl mx-auto uppercase tracking-wider leading-relaxed">
+              <p className="text-sm text-[var(--accent-dim)] max-w-2xl mx-auto uppercase tracking-wider leading-relaxed">
                 Kryleos Forge is a next-generation developer workbench designed to orchestrate local and remote multi-agent AI teams. It functions as both a public landing companion and an interactive scoper, letting you plan, audit, and execute tasks across devices.
               </p>
               <div className="flex justify-center gap-4 pt-4">
@@ -763,18 +769,18 @@ export default function App() {
             </div>
 
             {/* CONCEPT CLARITY: Chat Assistant vs Developer Planner */}
-            <div className="glass-panel p-6 rounded space-y-4 border border-[#00ff66] border-opacity-20 bg-[#020904] animate-fadeIn">
-              <h2 className="text-md font-bold text-white uppercase tracking-wider text-center border-b border-[#004411] pb-2">
+            <div className="glass-panel p-6 rounded space-y-4 border border-[var(--accent-line)] bg-[var(--surface-deep)] animate-fadeIn">
+              <h2 className="text-md font-bold text-[var(--text-strong)] uppercase tracking-wider text-center border-b border-[var(--line)] pb-2">
                 Why Kryleos Forge is Actually a Planner (Not a Chatbot)
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                 {/* Legacy Chatbots */}
-                <div className="border border-[#331111] bg-[#0c0505] p-5 rounded space-y-3">
-                  <div className="text-[#ff5555] font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+                <div className="border border-[var(--line-danger)] bg-[var(--surface-danger)] p-5 rounded space-y-3">
+                  <div className="text-[var(--danger)] font-bold text-xs uppercase tracking-wider flex items-center gap-2">
                     <ShieldAlert size={14} />
                     <span>Legacy Chat Assistants (Outdated)</span>
                   </div>
-                  <ul className="text-[11px] text-gray-500 space-y-2 list-disc pl-4 font-sans font-medium">
+                  <ul className="text-[11px] text-[var(--text-muted)] space-y-2 list-disc pl-4 font-sans font-medium">
                     <li>Vague conversations with zero structured tracking</li>
                     <li>Code is dumped into chat windows, leaving compilation to you</li>
                     <li>No concept of task lifecycle: you copy-paste files manually</li>
@@ -782,12 +788,12 @@ export default function App() {
                   </ul>
                 </div>
                 {/* Kryleos Planner */}
-                <div className="border border-[#004411] bg-[#001103] p-5 rounded space-y-3">
-                  <div className="text-[#00ff66] font-bold text-xs uppercase tracking-wider flex items-center gap-2">
+                <div className="border border-[var(--line)] bg-[var(--surface-accent)] p-5 rounded space-y-3">
+                  <div className="text-[var(--accent)] font-bold text-xs uppercase tracking-wider flex items-center gap-2">
                     <ShieldCheck size={14} />
                     <span>Kryleos Developer Planner (10/10)</span>
                   </div>
-                  <ul className="text-[11px] text-[#aaffbb] space-y-2 list-disc pl-4 font-sans font-medium">
+                  <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 list-disc pl-4 font-sans font-medium">
                     <li>**Checklist-First approach**: Prompts are immediately structured into granular planning files</li>
                     <li>**Multi-Agent Crew**: Specialized bots take tasks from the checklist to work in parallel</li>
                     <li>**Synchronized Status Board**: Track tasks moving across visual Kanban board columns</li>
@@ -799,22 +805,22 @@ export default function App() {
 
             {/* Interactive Task Flow Simulator Section */}
             <div className="space-y-6 pt-6 animate-fadeIn">
-              <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
-                <Terminal size={20} className="text-[#00ff66]" /> Visual Task Lifecycle Simulator
+              <h2 className="text-xl text-center font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
+                <Terminal size={20} className="text-[var(--accent)]" /> Visual Task Lifecycle Simulator
               </h2>
-              <p className="text-[13px] text-[#00aa44] text-center max-w-2xl mx-auto leading-relaxed">
+              <p className="text-[13px] text-[var(--accent-dim)] text-center max-w-2xl mx-auto leading-relaxed">
                 Observe the lifecycle flow of tasks along the planning-execution pipeline. Run the simulator to trace any task from initial scoping to sandbox compilation:
               </p>
 
               {/* The Simulator Widget */}
-              <div className="glass-panel p-6 rounded space-y-6 relative border border-[#00ff66] border-opacity-30">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#004411] pb-4">
+              <div className="glass-panel p-6 rounded space-y-6 relative border border-[var(--accent-line)]">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--line)] pb-4">
                   <div className="space-y-1">
-                    <h3 className="text-lg font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <Sparkles className="text-[#00ff66]" size={18} />
+                    <h3 className="text-lg font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center gap-2">
+                      <Sparkles className="text-[var(--accent)]" size={18} />
                       Interactive Task Flow Simulator
                     </h3>
-                    <p className="text-[11px] text-[#00aa44]">
+                    <p className="text-[11px] text-[var(--accent-dim)]">
                       Select or type a feature request and trace how Kryleos Forge plans, delegates, monitors, and compiles it.
                     </p>
                   </div>
@@ -833,8 +839,8 @@ export default function App() {
                         }}
                         className={`px-3 py-1 border rounded text-[10px] uppercase font-bold transition-all cursor-pointer ${
                           simTaskType === type
-                            ? 'bg-[#002205] text-[#00ff66] border-[#00ff66] shadow-[0_0_8px_rgba(0,255,102,0.3)]'
-                            : 'bg-transparent text-[#00aa44] border-[#004411] hover:border-[#00ff66] hover:text-[#00ff66]'
+                            ? 'bg-[var(--surface-active)] text-[var(--accent)] border-[var(--accent)] shadow-[var(--glow-sm)]'
+                            : 'bg-transparent text-[var(--accent-dim)] border-[var(--line)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
                         }`}
                       >
                         {type === 'auth' ? '🔒 Auth Flow' : type === 'cache' ? '⚡ DB Caching' : type === 'api' ? '🔌 GitHub API' : '✏️ Custom Task'}
@@ -845,24 +851,24 @@ export default function App() {
 
                 {/* Custom Input Box if Custom Task is selected */}
                 {simTaskType === 'custom' && (
-                  <div className="flex flex-col gap-2 p-4 bg-black bg-opacity-40 border border-[#004411] rounded animate-fadeIn">
-                    <label className="text-[10px] uppercase text-[#00aa44] font-bold">Configure Custom Scoped Prompt</label>
+                  <div className="flex flex-col gap-2 p-4 bg-[var(--surface-overlay)] border border-[var(--line)] rounded animate-fadeIn">
+                    <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Configure Custom Scoped Prompt</label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={simCustomInput}
                         onChange={e => setSimCustomInput(e.target.value)}
                         placeholder="e.g., Integrate email confirmation using Nodemailer..."
-                        className="matrix-input flex-1 text-[12px] text-[#00ff66]"
+                        className="matrix-input flex-1 text-[12px] text-[var(--accent)]"
                       />
                     </div>
                     <div className="flex flex-wrap gap-2 mt-1">
-                      <span className="text-[9px] text-[#00aa44] font-bold uppercase self-center">Suggestions:</span>
+                      <span className="text-[9px] text-[var(--accent-dim)] font-bold uppercase self-center">Suggestions:</span>
                       {['Add Stripe webhooks', 'Refactor routing', 'Dockerize backend'].map(s => (
                         <button
                           key={s}
                           onClick={() => setSimCustomInput(s)}
-                          className="text-[9px] border border-[#004411] text-[#00aa44] hover:border-[#00ff66] hover:text-[#00ff66] px-2 py-0.5 rounded uppercase font-semibold cursor-pointer"
+                          className="text-[9px] border border-[var(--line)] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)] px-2 py-0.5 rounded uppercase font-semibold cursor-pointer"
                         >
                           {s}
                         </button>
@@ -873,7 +879,7 @@ export default function App() {
 
                 {/* Simulator Controls & Progress Header */}
                 <div className="flex flex-col gap-4">
-                  <div className="flex justify-between items-center bg-[#060f07] border border-[#004411] p-3 rounded">
+                  <div className="flex justify-between items-center bg-[var(--surface-header)] border border-[var(--line)] p-3 rounded">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => {
@@ -891,20 +897,20 @@ export default function App() {
                         <span>{simRunning ? 'RUNNING...' : 'RUN LIFE-CYCLE SIMULATION'}</span>
                       </button>
                       {simRunning && (
-                        <span className="text-[10px] text-[#00ff66] font-mono animate-pulse uppercase">
+                        <span className="text-[10px] text-[var(--accent)] font-mono animate-pulse uppercase">
                           Executing Phase {simStep + 1}/4: {simStep === 0 ? 'PLAN' : simStep === 1 ? 'CREW' : simStep === 2 ? 'FLOW' : 'FORGE'} ({simProgress}%)
                         </span>
                       )}
                     </div>
-                    <span className="text-[9px] text-[#00aa44] font-bold uppercase">
+                    <span className="text-[9px] text-[var(--accent-dim)] font-bold uppercase">
                       Active: {simTaskType === 'custom' ? `✏️ Custom: ${simCustomInput || 'User Scoped Task'}` : simTaskType === 'auth' ? '🔒 JWT Auth' : simTaskType === 'cache' ? '⚡ SQLite Caching' : '🔌 GitHub Sync'}
                     </span>
                   </div>
 
                   {/* Timeline Progress Bar */}
-                  <div className="relative w-full h-1.5 bg-[#001103] border border-[#003311] rounded overflow-hidden">
+                  <div className="relative w-full h-1.5 bg-[var(--surface-accent)] border border-[var(--line-faint)] rounded overflow-hidden">
                     <div
-                      className="absolute top-0 left-0 h-full bg-[#00ff66] transition-all duration-100 ease-out shadow-[0_0_8px_#00ff66]"
+                      className="absolute top-0 left-0 h-full bg-[var(--accent)] transition-all duration-100 ease-out shadow-[var(--glow-md)]"
                       style={{ width: `${simRunning ? (simStep * 25 + simProgress / 4) : 100}%` }}
                     />
                   </div>
@@ -924,14 +930,14 @@ export default function App() {
                           }}
                           className={`py-2 border rounded transition-all cursor-pointer ${
                             isActive
-                              ? 'bg-[#002205] border-[#00ff66] text-[#00ff66] shadow-[0_0_8px_rgba(0,255,102,0.25)] font-extrabold'
+                              ? 'bg-[var(--surface-active)] border-[var(--accent)] text-[var(--accent)] shadow-[var(--glow-sm)] font-extrabold'
                               : isCompleted
-                              ? 'border-[#008833] text-[#00dd55] font-semibold bg-[#000a02]'
-                              : 'border-[#003311] text-[#007722] hover:border-[#005522] hover:text-[#00aa44]'
+                              ? 'border-[var(--line-strong)] text-[var(--accent)] font-semibold bg-[var(--surface-accent)]'
+                              : 'border-[var(--line-faint)] text-[var(--accent-faint)] hover:border-[var(--line-strong)] hover:text-[var(--accent-dim)]'
                           }`}
                         >
                           <div className="text-[11px] uppercase tracking-wider">{idx + 1}. {phase}</div>
-                          <div className="text-[8px] opacity-70">
+                          <div className="text-[10px] opacity-70">
                             {idx === 0 ? 'Scoper' : idx === 1 ? 'Squad' : idx === 2 ? 'Board' : 'Sandbox'}
                           </div>
                         </button>
@@ -941,33 +947,33 @@ export default function App() {
                 </div>
 
                 {/* Simulation Active Pane */}
-                <div className="min-h-[260px] bg-black bg-opacity-50 border border-[#004411] rounded p-6 flex flex-col justify-between relative overflow-hidden">
+                <div className="min-h-[260px] bg-[var(--surface-overlay)] border border-[var(--line)] rounded p-6 flex flex-col justify-between relative overflow-hidden">
                   {/* Scanline Sweep Overlay */}
-                  <div className="absolute inset-0 pointer-events-none opacity-5 bg-gradient-to-b from-transparent via-[#00ff66] to-transparent bg-[length:100%_4px]" />
+                  <div className="absolute inset-0 pointer-events-none opacity-5 bg-gradient-to-b from-transparent via-[var(--accent)] to-transparent bg-[length:100%_4px]" />
 
                   {/* PLAN (Step 0) Display */}
                   {simStep === 0 && (
                     <div className="space-y-4 animate-fadeIn">
-                      <div className="flex justify-between items-center border-b border-[#004411] pb-2">
-                        <span className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
-                          <FileText size={13} className="text-[#00ff66]" />
+                      <div className="flex justify-between items-center border-b border-[var(--line)] pb-2">
+                        <span className="text-[var(--text-strong)] font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <FileText size={13} className="text-[var(--accent)]" />
                           <span>01 // PLAN phase: Structured Scoper & Checklist Architect</span>
                         </span>
-                        <span className="text-[9px] bg-[#00ff66] text-black px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Checklists Ready</span>
+                        <span className="text-[9px] bg-[var(--accent)] text-[var(--on-accent)] px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Checklists Ready</span>
                       </div>
-                      <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                      <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                         Kryleos Forge parses the prompt to generate granular checklists mapping strict acceptance criteria. It generates the implementation plan structure offline.
                       </p>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
                         {/* Checklist card */}
-                        <div className="border border-[#004411] bg-[#001103] p-4 rounded space-y-2">
-                          <div className="text-[9px] text-[#00ff66] font-bold uppercase tracking-wider border-b border-[#003311] pb-1">Generated Checklists</div>
-                          <ul className="text-[11px] text-[#aaffbb] space-y-1.5 font-mono">
+                        <div className="border border-[var(--line)] bg-[var(--surface-accent)] p-4 rounded space-y-2">
+                          <div className="text-[9px] text-[var(--accent)] font-bold uppercase tracking-wider border-b border-[var(--line-faint)] pb-1">Generated Checklists</div>
+                          <ul className="text-[11px] text-[var(--accent-soft)] space-y-1.5 font-mono">
                             {getPlanChecklist(simTaskType, simCustomInput).map((item, index) => {
                               const isVisible = !simRunning || simProgress > (index * 25);
                               return (
                                 <li key={index} className={`flex items-start gap-1.5 transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0 translate-x-2'}`}>
-                                  <span className="text-[#00ff66] font-bold">{isVisible ? '[✓]' : '[ ]'}</span>
+                                  <span className="text-[var(--accent)] font-bold">{isVisible ? '[✓]' : '[ ]'}</span>
                                   <span>{item}</span>
                                 </li>
                               );
@@ -975,15 +981,15 @@ export default function App() {
                           </ul>
                         </div>
                         {/* Target files card */}
-                        <div className="border border-[#004411] bg-[#001103] p-4 rounded space-y-2">
-                          <div className="text-[9px] text-cyan-400 font-bold uppercase tracking-wider border-b border-[#003311] pb-1">Targeted Files & Components</div>
-                          <div className="text-[11px] text-[#aaffbb] space-y-2 font-mono">
+                        <div className="border border-[var(--line)] bg-[var(--surface-accent)] p-4 rounded space-y-2">
+                          <div className="text-[9px] text-[var(--info)] font-bold uppercase tracking-wider border-b border-[var(--line-faint)] pb-1">Targeted Files & Components</div>
+                          <div className="text-[11px] text-[var(--accent-soft)] space-y-2 font-mono">
                             {getPlanFiles(simTaskType).map((file, index) => {
                               const isVisible = !simRunning || simProgress > (index * 30 + 10);
                               return (
                                 <div key={index} className={`flex items-center justify-between transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-                                  <span className="text-white text-xs">{file.path}</span>
-                                  <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold ${file.action === 'NEW' ? 'bg-cyan-950 border border-cyan-500 text-cyan-200' : 'bg-amber-950 border border-amber-500 text-amber-200'}`}>
+                                  <span className="text-[var(--text-strong)] text-xs">{file.path}</span>
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${file.action === 'NEW' ? 'bg-cyan-950 border border-cyan-500 text-cyan-200' : 'bg-amber-950 border border-amber-500 text-amber-200'}`}>
                                     {file.action}
                                   </span>
                                 </div>
@@ -998,14 +1004,14 @@ export default function App() {
                   {/* CREW (Step 1) Display */}
                   {simStep === 1 && (
                     <div className="space-y-4 animate-fadeIn">
-                      <div className="flex justify-between items-center border-b border-[#004411] pb-2">
-                        <span className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
-                          <Laptop size={13} className="text-[#00ff66]" />
+                      <div className="flex justify-between items-center border-b border-[var(--line)] pb-2">
+                        <span className="text-[var(--text-strong)] font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <Laptop size={13} className="text-[var(--accent)]" />
                           <span>02 // CREW phase: Autonomous Multi-Agent Squad</span>
                         </span>
-                        <span className="text-[9px] bg-cyan-500 text-black px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Squad Engaged</span>
+                        <span className="text-[9px] bg-cyan-600 text-white px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Squad Engaged</span>
                       </div>
-                      <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                      <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                         The planner constructs an agent crew (Architect, Developer, Auditor) to coordinate on the plan and divide task assignments.
                       </p>
                       
@@ -1023,14 +1029,14 @@ export default function App() {
                               key={role}
                               className={`p-3 rounded border text-center transition-all duration-300 ${
                                 isRunningRole
-                                  ? 'border-cyan-400 bg-cyan-950 bg-opacity-20 shadow-[0_0_8px_rgba(34,211,238,0.25)] scale-105'
+                                  ? 'border-[var(--info)] bg-cyan-950/20 shadow-[0_0_8px_rgba(34,211,238,0.25)] scale-105'
                                   : isPastRole
-                                  ? 'border-[#005522] bg-[#001103] bg-opacity-50'
-                                  : 'border-[#002205] opacity-40'
+                                  ? 'border-[var(--line-strong)] bg-[var(--surface-accent)]'
+                                  : 'border-[var(--surface-active)] opacity-40'
                               }`}
                             >
-                              <div className="text-xs font-bold text-white uppercase">{role}</div>
-                              <div className={`text-[8px] font-mono mt-1 ${isRunningRole ? 'text-cyan-400 font-extrabold animate-pulse' : 'text-gray-500'}`}>
+                              <div className="text-xs font-bold text-[var(--text-strong)] uppercase">{role}</div>
+                              <div className={`text-[10px] font-mono mt-1 ${isRunningRole ? 'text-[var(--info)] font-extrabold animate-pulse' : 'text-[var(--text-muted)]'}`}>
                                 {isRunningRole ? '// COMPUTING...' : isPastRole ? '// IDLE' : '// READY'}
                               </div>
                             </div>
@@ -1039,13 +1045,13 @@ export default function App() {
                       </div>
 
                       {/* Dialog bubble logs */}
-                      <div className="border border-[#004411] bg-black bg-opacity-40 p-3 rounded space-y-2 h-24 overflow-y-auto font-mono text-[10px]">
+                      <div className="border border-[var(--line)] bg-[var(--surface-overlay)] p-3 rounded space-y-2 h-24 overflow-y-auto font-mono text-[10px]">
                         {getCrewMessages(simTaskType, simCustomInput).map((msg, index) => {
                           const isVisible = !simRunning || simProgress > (index * 35 + 10);
                           return (
                             <div key={index} className={`flex gap-2 transition-all duration-300 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-                              <span className="text-cyan-400 font-bold uppercase w-16">{msg.agent}:</span>
-                              <span className="text-[#aaffbb]">{msg.msg}</span>
+                              <span className="text-[var(--info)] font-bold uppercase w-16">{msg.agent}:</span>
+                              <span className="text-[var(--accent-soft)]">{msg.msg}</span>
                             </div>
                           );
                         })}
@@ -1056,14 +1062,14 @@ export default function App() {
                   {/* FLOW (Step 2) Display */}
                   {simStep === 2 && (
                     <div className="space-y-4 animate-fadeIn">
-                      <div className="flex justify-between items-center border-b border-[#004411] pb-2">
-                        <span className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
-                          <Database size={13} className="text-[#00ff66]" />
+                      <div className="flex justify-between items-center border-b border-[var(--line)] pb-2">
+                        <span className="text-[var(--text-strong)] font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <Database size={13} className="text-[var(--accent)]" />
                           <span>03 // FLOW phase: Realtime Kanban Status Board</span>
                         </span>
-                        <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Sync Status</span>
+                        <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Sync Status</span>
                       </div>
-                      <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                      <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                         Visual status board syncs planning checklists across Electron, web overlays, and mobile pair devices in real-time.
                       </p>
 
@@ -1079,12 +1085,12 @@ export default function App() {
                                 (simProgress > 75 && idx === 3)
                               );
                           return (
-                            <div key={col} className="border border-[#003311] bg-black bg-opacity-30 p-2 rounded h-28 flex flex-col justify-start relative">
-                              <span className="text-[#00aa44] font-bold block text-center border-b border-[#003311] pb-1 uppercase">{col}</span>
+                            <div key={col} className="border border-[var(--line-faint)] bg-[var(--surface-overlay)] p-2 rounded h-28 flex flex-col justify-start relative">
+                              <span className="text-[var(--accent-dim)] font-bold block text-center border-b border-[var(--line-faint)] pb-1 uppercase">{col}</span>
                               {cardInCol && (
-                                <div className="mt-2 p-2 bg-[#001f05] border border-[#00ff66] text-[#00ff66] text-[8px] rounded shadow-[0_0_8px_rgba(0,255,102,0.3)] animate-pulse transition-all duration-300">
+                                <div className="mt-2 p-2 bg-[var(--surface-accent)] border border-[var(--accent)] text-[var(--accent)] text-[10px] rounded shadow-[var(--glow-sm)] animate-pulse transition-all duration-300">
                                   <div className="font-bold uppercase leading-tight">{getFlowCardName(simTaskType, simCustomInput)}</div>
-                                  <div className="text-[6px] text-gray-500 uppercase mt-1">ID: #9948</div>
+                                  <div className="text-[9px] text-[var(--text-muted)] uppercase mt-1">ID: #9948</div>
                                 </div>
                               )}
                             </div>
@@ -1097,20 +1103,20 @@ export default function App() {
                   {/* FORGE (Step 3) Display */}
                   {simStep === 3 && (
                     <div className="space-y-4 animate-fadeIn">
-                      <div className="flex justify-between items-center border-b border-[#004411] pb-2">
-                        <span className="text-white font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
-                          <Terminal size={13} className="text-[#00ff66]" />
+                      <div className="flex justify-between items-center border-b border-[var(--line)] pb-2">
+                        <span className="text-[var(--text-strong)] font-bold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                          <Terminal size={13} className="text-[var(--accent)]" />
                           <span>04 // FORGE phase: Safe Compilation Sandbox Terminal</span>
                         </span>
-                        <span className="text-[9px] bg-purple-500 text-white px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Compiled</span>
+                        <span className="text-[9px] bg-purple-600 text-white px-1.5 py-0.5 rounded font-extrabold uppercase font-mono">Compiled</span>
                       </div>
-                      <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                      <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                         Safe Express containers build source folders, run tests, and secure structural changes with offline git commit locks.
                       </p>
 
                       {/* Terminal display */}
-                      <div className="border border-[#00ff66] border-opacity-35 bg-black p-3 rounded h-28 overflow-y-auto font-mono text-[9px] text-[#00ff66] relative shadow-inner">
-                        <div className="absolute top-1 right-2 text-[7px] text-[#00aa44] font-bold uppercase animate-pulse">TERMINAL CONSOLE</div>
+                      <div className="border border-[var(--accent-line)] bg-[var(--surface-terminal)] p-3 rounded h-28 overflow-y-auto font-mono text-[9px] text-[var(--accent)] relative shadow-inner">
+                        <div className="absolute top-1 right-2 text-[9px] text-[var(--accent-dim)] font-bold uppercase animate-pulse">TERMINAL CONSOLE</div>
                         <div className="space-y-1">
                           {getForgeCommands(simTaskType, simCustomInput).map((cmd, index) => {
                             const isVisible = !simRunning || simProgress > (index * 15 + 5);
@@ -1119,9 +1125,9 @@ export default function App() {
                             return (
                               <div key={index} className="transition-all duration-200">
                                 {isOutput ? (
-                                  <span className="text-[#aaffbb]">{cmd}</span>
+                                  <span className="text-[var(--accent-soft)]">{cmd}</span>
                                 ) : (
-                                  <span><span className="text-gray-600 font-bold">$</span> {cmd}</span>
+                                  <span><span className="text-[var(--text-faint)] font-bold">$</span> {cmd}</span>
                                 )}
                               </div>
                             );
@@ -1137,29 +1143,29 @@ export default function App() {
             {/* Simulated Desktop Preview Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 animate-fadeIn">
               <div className="glass-panel p-6 rounded flex flex-col gap-3">
-                <div className="flex items-center gap-2.5 text-white font-bold text-sm mb-1">
-                  <Laptop size={16} className="text-[#00ff66]" />
+                <div className="flex items-center gap-2.5 text-[var(--text-strong)] font-bold text-sm mb-1">
+                  <Laptop size={16} className="text-[var(--accent)]" />
                   <span>Desktop App</span>
                 </div>
-                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                   Executes local Express server sandboxes with secure process limits, safeStorage keychain access, and automated script testing tools.
                 </p>
               </div>
               <div className="glass-panel p-6 rounded flex flex-col gap-3">
-                <div className="flex items-center gap-2.5 text-white font-bold text-sm mb-1">
-                  <Database size={16} className="text-[#00ff66]" />
+                <div className="flex items-center gap-2.5 text-[var(--text-strong)] font-bold text-sm mb-1">
+                  <Database size={16} className="text-[var(--accent)]" />
                   <span>Web Companion</span>
                 </div>
-                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                   Provides a secure BYOK prompt playground, live WebSocket telemetry trackers, and 3-way conflict merging for local plans.
                 </p>
               </div>
               <div className="glass-panel p-6 rounded flex flex-col gap-3">
-                <div className="flex items-center gap-2.5 text-white font-bold text-sm mb-1">
-                  <Smartphone size={16} className="text-[#00ff66]" />
+                <div className="flex items-center gap-2.5 text-[var(--text-strong)] font-bold text-sm mb-1">
+                  <Smartphone size={16} className="text-[var(--accent)]" />
                   <span>Mobile Companion</span>
                 </div>
-                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                   Approve terminal commands, toggle remote execution stops, and queue offline audio notes directly from your mobile device.
                 </p>
               </div>
@@ -1167,34 +1173,34 @@ export default function App() {
 
             {/* App Overview & Core Principles */}
             <div className="space-y-6 pt-6 animate-fadeIn">
-              <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
-                <Sparkles size={20} className="text-[#00ff66]" /> App Overview & Core Principles
+              <h2 className="text-xl text-center font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
+                <Sparkles size={20} className="text-[var(--accent)]" /> App Overview & Core Principles
               </h2>
-              <p className="text-[13px] text-[#00aa44] text-center max-w-2xl mx-auto leading-relaxed">
+              <p className="text-[13px] text-[var(--accent-dim)] text-center max-w-2xl mx-auto leading-relaxed">
                 Kryleos Forge is a next-generation developer workbench designed to orchestrate local and remote multi-agent AI teams. It functions as both a public landing companion and an interactive scoper, letting you plan, audit, and execute tasks across devices.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                 <div className="glass-panel p-6 rounded flex flex-col gap-3">
-                  <div className="text-[#00ff66] font-bold text-[12px] uppercase tracking-wider">
+                  <div className="text-[var(--accent)] font-bold text-[12px] uppercase tracking-wider">
                     01 // Zero-Egress Privacy
                   </div>
-                  <p className="text-[11px] text-[#00aa44] leading-relaxed">
+                  <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">
                     Source code and system instructions never leave your local environment. Run offline LLMs using native Ollama nodes with strict sandbox boundaries and execution filters.
                   </p>
                 </div>
                 <div className="glass-panel p-6 rounded flex flex-col gap-3">
-                  <div className="text-[#00ff66] font-bold text-[12px] uppercase tracking-wider">
+                  <div className="text-[var(--accent)] font-bold text-[12px] uppercase tracking-wider">
                     02 // Multi-Device Sync
                   </div>
-                  <p className="text-[11px] text-[#00aa44] leading-relaxed">
+                  <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">
                     Bridge desktop terminals, web interfaces, and mobile watch/phone attachments using secure pairing codes over persistent, real-time WebSockets.
                   </p>
                 </div>
                 <div className="glass-panel p-6 rounded flex flex-col gap-3">
-                  <div className="text-[#00ff66] font-bold text-[12px] uppercase tracking-wider">
+                  <div className="text-[var(--accent)] font-bold text-[12px] uppercase tracking-wider">
                     03 // Prompt Cost Guard
                   </div>
-                  <p className="text-[11px] text-[#00aa44] leading-relaxed">
+                  <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">
                     Track input and output tokens. Predict api costs, compress context loads, and configure BYOK token limits to optimize resource usage.
                   </p>
                 </div>
@@ -1203,11 +1209,11 @@ export default function App() {
 
             {/* Pricing Section */}
             <div className="space-y-6 pt-6 animate-fadeIn">
-              <h2 className="text-xl text-center font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">
+              <h2 className="text-xl text-center font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
                 Subscription Billing Tiers <FeatureBadge status="mock" label="Mock Billing" />
               </h2>
-              <div className="glass-panel p-4 rounded text-[11px] text-[#00aa44] flex flex-wrap items-center justify-center gap-3">
-                <span className="text-white font-bold uppercase">Feature Status Guide:</span>
+              <div className="glass-panel p-4 rounded text-[11px] text-[var(--accent-dim)] flex flex-wrap items-center justify-center gap-3">
+                <span className="text-[var(--text-strong)] font-bold uppercase">Feature Status Guide:</span>
                 <FeatureBadge status="production" />
                 <FeatureBadge status="preview" />
                 <FeatureBadge status="simulator" />
@@ -1217,11 +1223,11 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {/* Free */}
                 <div className={`pricing-card pricing-card-free ${userTier === 'free' ? 'pricing-card-active' : ''}`}>
-                  <div className="border-b border-[#004411] pb-3 text-center">
-                    <span className="text-[10px] text-[#00aa44] font-bold uppercase block tracking-wider mb-1">Free Tier</span>
-                    <span className="text-2xl font-extrabold text-white">$0.00</span>
+                  <div className="border-b border-[var(--line)] pb-3 text-center">
+                    <span className="text-[10px] text-[var(--accent-dim)] font-bold uppercase block tracking-wider mb-1">Free Tier</span>
+                    <span className="text-2xl font-extrabold text-[var(--text-strong)]">$0.00</span>
                   </div>
-                  <ul className="text-[11px] text-[#00aa44] space-y-2 flex-1">
+                  <ul className="text-[11px] text-[var(--accent-dim)] space-y-2 flex-1">
                     <li>[+] Local agent workspace <FeatureBadge status="production" /></li>
                     <li>[+] BYOK model access <FeatureBadge status="preview" /></li>
                     <li className="opacity-45">[-] Settings Cloud Sync</li>
@@ -1234,11 +1240,11 @@ export default function App() {
 
                 {/* Basic */}
                 <div className={`pricing-card pricing-card-basic ${userTier === 'basic' ? 'pricing-card-active' : ''}`}>
-                  <div className="border-b border-[#004411] pb-3 text-center">
-                    <span className="text-[10px] text-amber-500 font-bold uppercase block tracking-wider mb-1">Basic Tier</span>
-                    <span className="text-2xl font-extrabold text-white">$2.99<span className="text-[11px] font-normal text-amber-500">/mo</span></span>
+                  <div className="border-b border-[var(--line)] pb-3 text-center">
+                    <span className="text-[10px] text-[var(--warn)] font-bold uppercase block tracking-wider mb-1">Basic Tier</span>
+                    <span className="text-2xl font-extrabold text-[var(--text-strong)]">$2.99<span className="text-[11px] font-normal text-[var(--warn)]">/mo</span></span>
                   </div>
-                  <ul className="text-[11px] text-[#00aa44] space-y-2 flex-1">
+                  <ul className="text-[11px] text-[var(--accent-dim)] space-y-2 flex-1">
                     <li>[+] All Free features</li>
                     <li>[+] Settings Cloud Sync <FeatureBadge status="preview" /></li>
                     <li>[+] Auto Cloud Backups <FeatureBadge status="preview" /></li>
@@ -1251,11 +1257,11 @@ export default function App() {
 
                 {/* Pro */}
                 <div className={`pricing-card pricing-card-pro ${userTier === 'pro' ? 'pricing-card-active' : ''}`}>
-                  <div className="border-b border-[#004411] pb-3 text-center">
-                    <span className="text-[10px] text-blue-400 font-bold uppercase block tracking-wider mb-1">Pro Tier</span>
-                    <span className="text-2xl font-extrabold text-white">$9.99<span className="text-[11px] font-normal text-blue-400">/mo</span></span>
+                  <div className="border-b border-[var(--line)] pb-3 text-center">
+                    <span className="text-[10px] text-[var(--info)] font-bold uppercase block tracking-wider mb-1">Pro Tier</span>
+                    <span className="text-2xl font-extrabold text-[var(--text-strong)]">$9.99<span className="text-[11px] font-normal text-[var(--info)]">/mo</span></span>
                   </div>
-                  <ul className="text-[11px] text-[#00aa44] space-y-2 flex-1">
+                  <ul className="text-[11px] text-[var(--accent-dim)] space-y-2 flex-1">
                     <li>[+] All Basic features</li>
                     <li>[+] Remote Containers <FeatureBadge status="simulator" /></li>
                     <li>[+] Cloud Sandbox <FeatureBadge status="simulator" /></li>
@@ -1268,11 +1274,11 @@ export default function App() {
 
                 {/* Enterprise */}
                 <div className={`pricing-card pricing-card-enterprise ${userTier === 'enterprise' ? 'pricing-card-active' : ''}`}>
-                  <div className="border-b border-[#004411] pb-3 text-center">
-                    <span className="text-[10px] text-[#00ff66] font-bold uppercase block tracking-wider mb-1">Enterprise</span>
-                    <span className="text-2xl font-extrabold text-white">$25.00<span className="text-[11px] font-normal text-[#00ff66]">/mo</span></span>
+                  <div className="border-b border-[var(--line)] pb-3 text-center">
+                    <span className="text-[10px] text-[var(--accent)] font-bold uppercase block tracking-wider mb-1">Enterprise</span>
+                    <span className="text-2xl font-extrabold text-[var(--text-strong)]">$25.00<span className="text-[11px] font-normal text-[var(--accent)]">/mo</span></span>
                   </div>
-                  <ul className="text-[11px] text-[#aaffbb] space-y-2 flex-1 font-semibold">
+                  <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1 font-semibold">
                     <li>[+] All Pro features</li>
                     <li>[+] Org Team Workspaces <FeatureBadge status="preview" /></li>
                     <li>[+] Audit log & RBAC <FeatureBadge status="simulator" /></li>
@@ -1291,15 +1297,15 @@ export default function App() {
         {activeTab === 'planning' && (
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
             {/* Planning Chat */}
-            <div className="flex-1 flex flex-col border-b md:border-b-0 md:border-r border-[#004411] bg-black bg-opacity-40 min-w-[320px]">
-              <div className="p-3 border-b border-[#004411] bg-[#060f07] flex justify-between items-center text-[10px]">
-                <span className="font-bold text-white uppercase flex items-center gap-1.5">
-                  <Sparkles size={12} className="text-[#00ff66]" />
+            <div className="flex-1 flex flex-col border-b md:border-b-0 md:border-r border-[var(--line)] bg-[var(--surface-overlay)] min-w-[320px]">
+              <div className="p-3 border-b border-[var(--line)] bg-[var(--surface-header)] flex justify-between items-center text-[10px]">
+                <span className="font-bold text-[var(--text-strong)] uppercase flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-[var(--accent)]" />
                   <span>Planning Architect (Draft Room)</span>
                 </span>
                 <div className="flex items-center gap-1.5">
                   <span className={`pulse-indicator ${backendStatus === 'online' ? 'pulse-indicator-online' : 'pulse-indicator-offline'}`} />
-                  <span className="text-[#00aa44] uppercase text-[9px]">{backendStatus.toUpperCase()}</span>
+                  <span className="text-[var(--accent-dim)] uppercase text-[9px]">{backendStatus.toUpperCase()}</span>
                 </div>
               </div>
               
@@ -1309,7 +1315,7 @@ export default function App() {
                     <div key={idx} className={`chat-bubble ${
                       msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-architect'
                     } mb-1`}>
-                      <span className="text-[8px] text-white opacity-60 font-bold block uppercase mb-1">{msg.role === 'user' ? '👤 CLIENT' : '🤖 ARCHITECT'}</span>
+                      <span className="text-[10px] text-[var(--text-strong)] opacity-60 font-bold block uppercase mb-1">{msg.role === 'user' ? '👤 CLIENT' : '🤖 ARCHITECT'}</span>
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     </div>
                   ))}
@@ -1321,20 +1327,20 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-3 border-t border-[#004411] bg-[#060f07] flex gap-2">
+              <div className="p-3 border-t border-[var(--line)] bg-[var(--surface-header)] flex gap-2">
                 <input
                   type="text"
                   value={planInput}
                   onChange={e => setPlanInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSendPlan()}
                   placeholder="Outline feature scopes, task lists, or folder structures..."
-                  className="matrix-input flex-1 text-[12px] text-[#00ff66]"
+                  className="matrix-input flex-1 text-[12px] text-[var(--accent)]"
                 />
                 {planVoice.isSupported && (
                   <button
                     type="button"
                     onClick={() => planVoice.isListening ? planVoice.stopListening() : planVoice.startListening()}
-                    className={`border rounded px-3 transition-all ${planVoice.isListening ? 'border-[#ff3333] text-[#ff3333] bg-[#220002]' : 'border-[#004411] text-[#00ff66] hover:border-[#00ff66]'}`}
+                    className={`border rounded px-3 transition-all ${planVoice.isListening ? 'border-[var(--danger)] text-[var(--danger)] bg-[var(--surface-danger)]' : 'border-[var(--line)] text-[var(--accent)] hover:border-[var(--accent)]'}`}
                     title={planVoice.isListening ? 'Stop voice input' : 'Start voice input'}
                     aria-label={planVoice.isListening ? 'Stop voice input' : 'Start voice input'}
                   >
@@ -1343,18 +1349,18 @@ export default function App() {
                 )}
                 <button onClick={handleSendPlan} className="matrix-btn matrix-btn-primary px-4 font-bold">SEND</button>
               </div>
-              {planVoice.error && <div className="px-3 pb-2 text-[9px] text-[#ff3333]">{planVoice.error}</div>}
+              {planVoice.error && <div className="px-3 pb-2 text-[9px] text-[var(--danger)]">{planVoice.error}</div>}
             </div>
 
             {/* Planning Draft Document */}
-            <div className="w-full md:w-[48%] flex flex-col bg-[#050a06] min-w-[320px]">
-              <div className="p-3 border-b border-[#004411] flex items-center justify-between">
-                <span className="text-[10px] text-white font-bold flex items-center gap-1.5">
-                  <FileText size={12} className="text-[#00ff66]" />
+            <div className="w-full md:w-[48%] flex flex-col bg-[var(--surface-deep)] min-w-[320px]">
+              <div className="p-3 border-b border-[var(--line)] flex items-center justify-between">
+                <span className="text-[10px] text-[var(--text-strong)] font-bold flex items-center gap-1.5">
+                  <FileText size={12} className="text-[var(--accent)]" />
                   <span>implementation_plan.md</span>
                 </span>
                 <div className="flex gap-2">
-                  <button onClick={() => setIsPlanEditing(!isPlanEditing)} className="text-[9px] border border-[#00aa44] text-[#00aa44] px-3 py-1 rounded font-bold hover:border-[#00ff66] hover:text-[#00ff66] transition-all">
+                  <button onClick={() => setIsPlanEditing(!isPlanEditing)} className="text-[9px] border border-[var(--accent-dim)] text-[var(--accent-dim)] px-3 py-1 rounded font-bold hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all">
                     {isPlanEditing ? 'VIEW' : 'EDIT'}
                   </button>
                   <button onClick={() => handleImportRequest()} className="matrix-btn matrix-btn-primary text-[9px] px-3 py-1 rounded font-bold flex items-center gap-1.5">
@@ -1374,17 +1380,17 @@ export default function App() {
                         setSyncConflict(false);
                       }
                     }}
-                    className="w-full flex-1 bg-black border border-[#004411] text-[12px] text-[#00ff66] p-4 outline-none resize-none font-mono rounded"
+                    className="w-full flex-1 bg-[var(--surface-terminal)] border border-[var(--line)] text-[12px] text-[var(--accent)] p-4 outline-none resize-none font-mono rounded"
                   />
                 ) : (
-                  <div className="flex-1 bg-black bg-opacity-35 border border-[#004411] text-[12px] text-[#aaffbb] p-4 overflow-auto whitespace-pre-wrap select-text leading-relaxed rounded font-mono">
+                  <div className="flex-1 bg-[var(--surface-overlay)] border border-[var(--line)] text-[12px] text-[var(--accent-soft)] p-4 overflow-auto whitespace-pre-wrap select-text leading-relaxed rounded font-mono">
                     {planDraft}
                   </div>
                 )}
               </div>
 
               {syncConflict && (
-                <div className="p-3 bg-[#2b1b02] text-amber-500 text-[10px] uppercase font-bold text-center border-t border-amber-500 animate-pulse font-mono">
+                <div className="p-3 bg-[var(--surface-warn)] text-[var(--warn)] text-[10px] uppercase font-bold text-center border-t border-amber-500 animate-pulse font-mono">
                   ⚠️ SYNC CONFLICT DETECTED! Merge conflict markers have been injected. Please resolve them in EDIT mode.
                 </div>
               )}
@@ -1396,10 +1402,10 @@ export default function App() {
         {activeTab === 'chat' && (
           <div className="flex-1 overflow-y-auto p-8 space-y-12 max-w-5xl mx-auto">
             <div className="text-center space-y-4 py-4">
-              <h1 className="text-3xl font-extrabold text-white tracking-tight uppercase">
+              <h1 className="text-3xl font-extrabold text-[var(--text-strong)] tracking-tight uppercase">
                 App Tutorial & Guide
               </h1>
-              <p className="text-xs text-[#00aa44] max-w-xl mx-auto uppercase tracking-wider leading-relaxed">
+              <p className="text-xs text-[var(--accent-dim)] max-w-xl mx-auto uppercase tracking-wider leading-relaxed">
                 Learn how to pair devices, scope checklists, and run secure agent tasks in your local environment.
               </p>
             </div>
@@ -1408,13 +1414,13 @@ export default function App() {
               {/* Step 1 */}
               <div className="glass-panel p-6 rounded flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl font-extrabold text-[#00ff66] bg-[#002205] border border-[#00ff66] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">1</span>
+                  <span className="text-2xl font-extrabold text-[var(--accent)] bg-[var(--surface-active)] border border-[var(--accent)] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">1</span>
                   <div>
-                    <h3 className="text-white font-bold text-sm uppercase">Initialize & Configure</h3>
-                    <span className="text-[9px] text-gray-500 uppercase font-semibold">Step 01 // Configuration</span>
+                    <h3 className="text-[var(--text-strong)] font-bold text-sm uppercase">Initialize & Configure</h3>
+                    <span className="text-[9px] text-[var(--text-muted)] uppercase font-semibold">Step 01 // Configuration</span>
                   </div>
                 </div>
-                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                   Start by launching the desktop application. Navigate to the **Settings** tab to input your API credentials (or enable **Zero-Egress Mode** to route queries exclusively via local Ollama models). Test each connection using the health-check ping controls.
                 </p>
               </div>
@@ -1422,13 +1428,13 @@ export default function App() {
               {/* Step 2 */}
               <div className="glass-panel p-6 rounded flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl font-extrabold text-[#00ff66] bg-[#002205] border border-[#00ff66] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">2</span>
+                  <span className="text-2xl font-extrabold text-[var(--accent)] bg-[var(--surface-active)] border border-[var(--accent)] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">2</span>
                   <div>
-                    <h3 className="text-white font-bold text-sm uppercase">Verbal Scoping & Planning</h3>
-                    <span className="text-[9px] text-gray-500 uppercase font-semibold">Step 02 // Checklists scoping</span>
+                    <h3 className="text-[var(--text-strong)] font-bold text-sm uppercase">Verbal Scoping & Planning</h3>
+                    <span className="text-[9px] text-[var(--text-muted)] uppercase font-semibold">Step 02 // Checklists scoping</span>
                   </div>
                 </div>
-                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                   Use the **Planning** tab to organize your next coding roadmap. Press the **Voice Input** microphone button to speak features naturally. The assistant will parse your voice notes, output structured Markdown, and expand tasks into actionable checklists.
                 </p>
               </div>
@@ -1436,13 +1442,13 @@ export default function App() {
               {/* Step 3 */}
               <div className="glass-panel p-6 rounded flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl font-extrabold text-[#00ff66] bg-[#002205] border border-[#00ff66] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">3</span>
+                  <span className="text-2xl font-extrabold text-[var(--accent)] bg-[var(--surface-active)] border border-[var(--accent)] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">3</span>
                   <div>
-                    <h3 className="text-white font-bold text-sm uppercase">WebSocket Pairing</h3>
-                    <span className="text-[9px] text-gray-500 uppercase font-semibold">Step 03 // Device Linking</span>
+                    <h3 className="text-[var(--text-strong)] font-bold text-sm uppercase">WebSocket Pairing</h3>
+                    <span className="text-[9px] text-[var(--text-muted)] uppercase font-semibold">Step 03 // Device Linking</span>
                   </div>
                 </div>
-                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                   Bridge your workspace across devices. Copy the active pairing code generated by the desktop server, input it in the web companion header, and click **Connect**. Once paired, WebSocket streams will broadcast telemetry data and logs dynamically.
                 </p>
               </div>
@@ -1450,13 +1456,13 @@ export default function App() {
               {/* Step 4 */}
               <div className="glass-panel p-6 rounded flex flex-col gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl font-extrabold text-[#00ff66] bg-[#002205] border border-[#00ff66] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">4</span>
+                  <span className="text-2xl font-extrabold text-[var(--accent)] bg-[var(--surface-active)] border border-[var(--accent)] w-10 h-10 rounded-full flex items-center justify-center shadow-lg">4</span>
                   <div>
-                    <h3 className="text-white font-bold text-sm uppercase">Sandbox Verification</h3>
-                    <span className="text-[9px] text-gray-500 uppercase font-semibold">Step 04 // Command Approvals</span>
+                    <h3 className="text-[var(--text-strong)] font-bold text-sm uppercase">Sandbox Verification</h3>
+                    <span className="text-[9px] text-[var(--text-muted)] uppercase font-semibold">Step 04 // Command Approvals</span>
                   </div>
                 </div>
-                <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                   Run planning tasks within the local shell container. When an agent attempts destructive file writes or executes command lines, review and authorize them directly on your dashboard (or dismiss them from the mobile companion app).
                 </p>
               </div>
@@ -1464,13 +1470,13 @@ export default function App() {
 
             {/* Live System Telemetry Monitor Section */}
             <div className="space-y-6 pt-6">
-              <div className="flex items-center justify-between border-b border-[#004411] pb-2">
-                <h2 className="text-xl font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <Terminal size={20} className="text-[#00ff66]" /> Live System Telemetry Monitor
+              <div className="flex items-center justify-between border-b border-[var(--line)] pb-2">
+                <h2 className="text-xl font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center gap-2">
+                  <Terminal size={20} className="text-[var(--accent)]" /> Live System Telemetry Monitor
                 </h2>
                 <div className="flex items-center gap-2 text-[10px]">
                   <span className={`pulse-indicator ${companionStatus === 'connected' ? 'pulse-indicator-online' : 'pulse-indicator-offline'}`} />
-                  <span className="text-[#00aa44] uppercase font-bold">
+                  <span className="text-[var(--accent-dim)] uppercase font-bold">
                     {companionStatus === 'connected' ? 'WS STREAM ACTIVE' : 'LOCAL SIMULATOR ACTIVE'}
                   </span>
                 </div>
@@ -1479,15 +1485,15 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* CPU Monitor */}
                 <div className="glass-panel p-6 rounded flex flex-col gap-4">
-                  <div className="flex justify-between items-center text-white font-bold text-sm">
+                  <div className="flex justify-between items-center text-[var(--text-strong)] font-bold text-sm">
                     <span className="uppercase tracking-wider">01 // CPU Load Monitor</span>
-                    <span className="font-mono text-[#00ff66] text-base">
+                    <span className="font-mono text-[var(--accent)] text-base">
                       {cpuHistory[cpuHistory.length - 1]}%
                     </span>
                   </div>
                   
                   {/* SVG Chart */}
-                  <div className="relative h-32 bg-black bg-opacity-45 border border-[#003311] rounded overflow-hidden">
+                  <div className="relative h-32 bg-[var(--surface-overlay)] border border-[var(--line-faint)] rounded overflow-hidden">
                     {/* Grid Lines */}
                     <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
                       <line x1="0" y1="20" x2="300" y2="20" stroke="rgba(16, 185, 129, 0.05)" strokeWidth="1" />
@@ -1534,22 +1540,22 @@ export default function App() {
                       </defs>
                     </svg>
                   </div>
-                  <span className="text-[10px] text-[#00aa44] uppercase tracking-wider font-semibold">
+                  <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider font-semibold">
                     Simulated multi-agent thread operations load bounds
                   </span>
                 </div>
 
                 {/* Memory Monitor */}
                 <div className="glass-panel p-6 rounded flex flex-col gap-4">
-                  <div className="flex justify-between items-center text-white font-bold text-sm">
+                  <div className="flex justify-between items-center text-[var(--text-strong)] font-bold text-sm">
                     <span className="uppercase tracking-wider">02 // Memory Allocation</span>
-                    <span className="font-mono text-[#bb66ff] text-base">
+                    <span className="font-mono text-[var(--matrix-purple)] text-base">
                       {memoryHistory[memoryHistory.length - 1]} MB
                     </span>
                   </div>
                   
                   {/* SVG Chart */}
-                  <div className="relative h-32 bg-black bg-opacity-45 border border-[#003311] rounded overflow-hidden">
+                  <div className="relative h-32 bg-[var(--surface-overlay)] border border-[var(--line-faint)] rounded overflow-hidden">
                     {/* Grid Lines */}
                     <svg className="absolute inset-0 w-full h-full pointer-events-none" xmlns="http://www.w3.org/2000/svg">
                       <line x1="0" y1="20" x2="300" y2="20" stroke="rgba(187, 102, 255, 0.05)" strokeWidth="1" />
@@ -1596,7 +1602,7 @@ export default function App() {
                       </defs>
                     </svg>
                   </div>
-                  <span className="text-[10px] text-[#00aa44] uppercase tracking-wider font-semibold">
+                  <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider font-semibold">
                     Dynamic process heap telemetry limits (Cap: 512 MB)
                   </span>
                 </div>
@@ -1604,13 +1610,13 @@ export default function App() {
             </div>
 
             {/* Breathing / Stress Coach Note */}
-            <div className="glass-panel p-6 rounded bg-[#010602] border-amber-600 border-opacity-40 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="glass-panel p-6 rounded bg-[var(--surface-deep)] border-[var(--warn-line)] flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="space-y-1">
-                <h4 className="text-white font-bold text-xs uppercase flex items-center gap-1.5">
-                  <Sparkles size={12} className="text-[#00ff66] animate-pulse" />
+                <h4 className="text-[var(--text-strong)] font-bold text-xs uppercase flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-[var(--accent)] animate-pulse" />
                   Developer Stress Pacing System
                 </h4>
-                <p className="text-[11px] text-[#00aa44] leading-relaxed">
+                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">
                   Stressed during execution loops? Use our structured box breathing guide inside the mobile companion (4s inhale, 4s hold, 4s exhale, 4s hold) to stay coherent and maintain focus.
                 </p>
               </div>
@@ -1625,10 +1631,10 @@ export default function App() {
         {activeTab === 'downloads' && (
           <div className="flex-1 overflow-y-auto p-8 space-y-12 max-w-5xl mx-auto">
             <div className="text-center space-y-4 py-4">
-              <h1 className="text-3xl font-extrabold text-white tracking-tight uppercase">
+              <h1 className="text-3xl font-extrabold text-[var(--text-strong)] tracking-tight uppercase">
                 Download Client Apps
               </h1>
-              <p className="text-xs text-[#00aa44] max-w-xl mx-auto uppercase tracking-wider leading-relaxed">
+              <p className="text-xs text-[var(--accent-dim)] max-w-xl mx-auto uppercase tracking-wider leading-relaxed">
                 Install Kryleos Forge on your local devices to enable sandboxed terminal execution, remote haptics, and planning sync.
               </p>
             </div>
@@ -1637,15 +1643,15 @@ export default function App() {
               {/* Desktop App */}
               <div className="glass-panel p-8 rounded flex flex-col justify-between gap-6">
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 text-white font-bold text-base">
-                    <Laptop size={22} className="text-[#00ff66]" />
+                  <div className="flex items-center gap-3 text-[var(--text-strong)] font-bold text-base">
+                    <Laptop size={22} className="text-[var(--accent)]" />
                     <span>Desktop App Client</span>
                     <span className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-2 py-0.5 rounded font-extrabold shrink-0">v1.2.0</span>
                   </div>
-                  <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                     The primary engine for local development. Houses the Express backend, safeStorage keychain integration, parametric execution limits, and the Founder/Agency dashboard generators.
                   </p>
-                  <ul className="text-[11px] text-[#00aa44] space-y-2 list-disc pl-4 font-sans font-medium">
+                  <ul className="text-[11px] text-[var(--accent-dim)] space-y-2 list-disc pl-4 font-sans font-medium">
                     <li>Zero-Egress local execution via Ollama and shell sandboxing</li>
                     <li>Secure AES-256 local database for chat history caching</li>
                     <li>Automated test runner and release QA checklist reporting tools</li>
@@ -1669,15 +1675,15 @@ export default function App() {
               {/* Mobile Companion */}
               <div className="glass-panel p-8 rounded flex flex-col justify-between gap-6">
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 text-white font-bold text-base">
-                    <Smartphone size={22} className="text-[#00ff66]" />
+                  <div className="flex items-center gap-3 text-[var(--text-strong)] font-bold text-base">
+                    <Smartphone size={22} className="text-[var(--accent)]" />
                     <span>Mobile Companion Client</span>
                     <span className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-2 py-0.5 rounded font-extrabold shrink-0">v1.0.4</span>
                   </div>
-                  <p className="text-[12px] text-[#00aa44] leading-relaxed">
+                  <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
                     Take your plans on the go. Approve terminal tasks using secure haptics, view WebSocket telemetry streams, record offline speech notes, and track your today score metrics.
                   </p>
-                  <ul className="text-[11px] text-[#00aa44] space-y-2 list-disc pl-4 font-sans font-medium">
+                  <ul className="text-[11px] text-[var(--accent-dim)] space-y-2 list-disc pl-4 font-sans font-medium">
                     <li>Command review haptic feedback triggers</li>
                     <li>Live WebSocket telemetry logs tracking CPU/memory delta</li>
                     <li>Coherent box breathing guidelines for stress tracking</li>
@@ -1699,18 +1705,18 @@ export default function App() {
         {/* SETTINGS TAB */}
         {activeTab === 'settings' && (
           <div className="flex-1 overflow-y-auto p-8 max-w-2xl mx-auto space-y-6">
-            <h2 className="text-lg font-bold text-white border-b border-[#004411] pb-2 uppercase tracking-wider">
+            <h2 className="text-lg font-bold text-[var(--text-strong)] border-b border-[var(--line)] pb-2 uppercase tracking-wider">
               Local Web Configuration Settings
             </h2>
 
             <form onSubmit={handleSaveSettings} className="space-y-6">
-              <div className="text-[10px] text-[#00ff66] uppercase font-extrabold flex items-center justify-between border-b border-[#004411] pb-2 mb-2 tracking-wider">
+              <div className="text-[10px] text-[var(--accent)] uppercase font-extrabold flex items-center justify-between border-b border-[var(--line)] pb-2 mb-2 tracking-wider">
                 <span>Configure model parameters</span>
                 <FeatureBadge status="mock" label="Mock keychain" />
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase text-[#00aa44] font-bold flex items-center gap-1.5">
+                <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold flex items-center gap-1.5">
                   <Key size={12} />
                   <span>DeepSeek API Key</span>
                 </label>
@@ -1724,7 +1730,7 @@ export default function App() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase text-[#00aa44] font-bold flex items-center gap-1.5">
+                <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold flex items-center gap-1.5">
                   <Key size={12} />
                   <span>Google Gemini API Key</span>
                 </label>
@@ -1738,7 +1744,7 @@ export default function App() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase text-[#00aa44] font-bold flex items-center gap-1.5">
+                <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold flex items-center gap-1.5">
                   <Key size={12} />
                   <span>OpenAI API Key</span>
                 </label>
@@ -1752,51 +1758,52 @@ export default function App() {
               </div>
 
               {/* PII Compliance Gating */}
-              <div className="border border-[#004411] bg-black bg-opacity-35 p-3 rounded flex flex-col gap-2 font-mono">
+              <div className="border border-[var(--line)] bg-[var(--surface-overlay)] p-3 rounded flex flex-col gap-2 font-mono">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] uppercase font-bold text-white flex items-center gap-2">
-                    <ShieldCheck size={13} className="text-[#00ff66]" />
+                  <span className="text-[11px] uppercase font-bold text-[var(--text-strong)] flex items-center gap-2">
+                    <ShieldCheck size={13} className="text-[var(--accent)]" />
                     <span>PII Compliance Filter</span>
                   </span>
                   <input
                     type="checkbox"
+                    aria-label="Enable PII compliance filter"
                     checked={piiFilterEnabled}
                     onChange={(e) => {
                       setPiiFilterEnabled(e.target.checked);
                       localStorage.setItem('web_pii_filter_enabled', String(e.target.checked));
                     }}
-                    className="accent-matrix-neon cursor-pointer h-4 w-4 border border-[#004411] rounded"
+                    className="accent-[var(--accent)] cursor-pointer h-4 w-4 border border-[var(--line)] rounded"
                   />
                 </div>
-                <span className="text-[#00aa44] text-[10px] leading-relaxed">
+                <span className="text-[var(--accent-dim)] text-[10px] leading-relaxed">
                   Redact sensitive API keys, email addresses, and phone numbers automatically before sending payloads.
                 </span>
               </div>
 
               {/* Realtime Socket Telemetry (Compression / Bandwidth) */}
-              <div className="border border-[#00ff66] border-opacity-35 bg-[#001103] p-3 rounded flex flex-col gap-2 font-mono text-[10px] shadow-lg">
-                <span className="text-[#00ff66] font-bold uppercase text-[10px] flex items-center justify-between border-b border-[#00ff66] border-opacity-30 pb-2">
+              <div className="border border-[var(--accent-line)] bg-[var(--surface-accent)] p-3 rounded flex flex-col gap-2 font-mono text-[10px] shadow-lg">
+                <span className="text-[var(--accent)] font-bold uppercase text-[10px] flex items-center justify-between border-b border-[var(--accent-line)] pb-2">
                   <span>⚡ WebSocket Telemetry</span>
                   <FeatureBadge status="preview" label="Preview telemetry" />
                 </span>
                 <div className="space-y-1.5">
                   <div className="flex justify-between">
-                    <span className="text-[#00aa44]">Bytes Transmitted:</span>
-                    <span className="text-white font-bold">{(telemetry.bytesSent / 1024).toFixed(2)} KB</span>
+                    <span className="text-[var(--accent-dim)]">Bytes Transmitted:</span>
+                    <span className="text-[var(--text-strong)] font-bold">{(telemetry.bytesSent / 1024).toFixed(2)} KB</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-[#00aa44]">Bytes Received:</span>
-                    <span className="text-white font-bold">{(telemetry.bytesReceived / 1024).toFixed(2)} KB</span>
+                    <span className="text-[var(--accent-dim)]">Bytes Received:</span>
+                    <span className="text-[var(--text-strong)] font-bold">{(telemetry.bytesReceived / 1024).toFixed(2)} KB</span>
                   </div>
-                  <div className="flex justify-between border-t border-[#004411] pt-2 mt-1">
-                    <span className="text-[#00aa44]">Compression Savings:</span>
-                    <span className="text-[#00ff66] font-bold">{(telemetry.compressionSavingsRatio * 100).toFixed(0)}% (zlib deflate)</span>
+                  <div className="flex justify-between border-t border-[var(--line)] pt-2 mt-1">
+                    <span className="text-[var(--accent-dim)]">Compression Savings:</span>
+                    <span className="text-[var(--accent)] font-bold">{(telemetry.compressionSavingsRatio * 100).toFixed(0)}% (zlib deflate)</span>
                   </div>
                 </div>
               </div>
 
               <div className="flex flex-col gap-2 pt-2">
-                <span className="text-[10px] uppercase text-[#00aa44] font-bold">Console Styling Theme</span>
+                <span className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Console Styling Theme</span>
                 <div className="flex gap-2">
                   {['forge', 'matrix', 'light'].map(t => (
                     <button
@@ -1805,8 +1812,8 @@ export default function App() {
                       onClick={() => setTheme(t)}
                       className={`flex-1 py-2 text-[10px] uppercase font-bold rounded border cursor-pointer transition-all ${
                         theme === t 
-                          ? 'bg-[#002205] border-[#00ff66] text-[#00ff66] shadow-[0_0_8px_rgba(0,255,102,0.4)]' 
-                          : 'bg-transparent border-[#004411] text-[#00aa44] hover:border-[#00ff66] hover:text-[#00ff66]'
+                          ? 'bg-[var(--surface-active)] border-[var(--accent)] text-[var(--accent)] shadow-[var(--glow-md)]' 
+                          : 'bg-transparent border-[var(--line)] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
                       }`}
                     >
                       {t === 'forge' ? 'Forge Dark' : t === 'matrix' ? 'Terminal Style' : 'Light Mode'}
@@ -1816,7 +1823,7 @@ export default function App() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase text-[#00aa44] font-bold">Desktop Backend URL</label>
+                <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Desktop Backend URL</label>
                 <input
                   type="text"
                   value={backendUrl}
@@ -1824,13 +1831,13 @@ export default function App() {
                   placeholder="http://localhost:3001"
                   className="matrix-input"
                 />
-                <span className={`text-[10px] uppercase font-bold ${backendStatus === 'online' ? 'text-[#00ff66]' : 'text-[#ff3333]'}`}>
+                <span className={`text-[10px] uppercase font-bold ${backendStatus === 'online' ? 'text-[var(--accent)]' : 'text-[var(--danger)]'}`}>
                   Backend status: {backendStatus.toUpperCase()}
                 </span>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase text-[#00aa44] font-bold">Companion Pairing Code</label>
+                <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Companion Pairing Code</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -1843,21 +1850,21 @@ export default function App() {
                     type="button"
                     onClick={toggleCompanionConnection}
                     className={`matrix-btn px-5 font-bold border transition-all ${
-                      companionStatus === 'connected' ? 'border-[#ff3333] text-[#ff3333] hover:bg-[#220002]' : 'border-[#00ff66] text-[#00ff66] hover:bg-[#002205]'
+                      companionStatus === 'connected' ? 'border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--surface-danger)]' : 'border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--surface-active)]'
                     }`}
                   >
                     {companionStatus === 'connected' ? 'UNPAIR' : companionStatus === 'connecting' ? 'PAIRING...' : 'PAIR'}
                   </button>
                 </div>
                 <span className={`text-[10px] uppercase font-bold ${
-                  companionStatus === 'connected' ? 'text-[#00ff66]' : companionStatus === 'error' ? 'text-[#ff3333]' : 'text-[#00aa44]'
+                  companionStatus === 'connected' ? 'text-[var(--accent)]' : companionStatus === 'error' ? 'text-[var(--danger)]' : 'text-[var(--accent-dim)]'
                 }`}>
                   Companion status: {companionStatus.toUpperCase()}
                 </span>
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] uppercase text-[#00aa44] font-bold">Custom System Instructions</label>
+                <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Custom System Instructions</label>
                 <textarea
                   value={customInstructions}
                   onChange={e => setCustomInstructions(e.target.value)}
@@ -1868,7 +1875,7 @@ export default function App() {
               </div>
 
               <div className="flex flex-col gap-2">
-                <label className="text-[10px] uppercase text-[#00aa44] font-bold">Response Mode</label>
+                <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Response Mode</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {([
                     ['balanced', 'Balanced'],
@@ -1881,7 +1888,7 @@ export default function App() {
                       type="button"
                       onClick={() => setResponseMode(mode)}
                       className={`border rounded py-1.5 text-[10px] font-bold transition-all ${
-                        responseMode === mode ? 'border-[#00ff66] bg-[#002205] text-white shadow-[0_0_5px_rgba(0,255,102,0.3)]' : 'border-[#004411] text-[#00aa44] hover:border-[#00ff66] hover:text-[#00ff66]'
+                        responseMode === mode ? 'border-[var(--accent)] bg-[var(--surface-active)] text-[var(--text-strong)] shadow-[var(--glow-sm)]' : 'border-[var(--line)] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
                       }`}
                     >
                       {label}
@@ -1891,7 +1898,7 @@ export default function App() {
               </div>
 
               {/* Gated Cloud Sync */}
-              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
+              <div className="border border-[var(--line)] bg-[var(--surface-deep)] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -1900,31 +1907,31 @@ export default function App() {
                     onChange={e => handleToggleSync(e.target.checked)}
                     className="cursor-pointer"
                   />
-                  <label htmlFor="sync-chk" className="text-[10px] uppercase font-bold text-white flex items-center gap-1.5 cursor-pointer select-none">
-                    <RefreshCw size={11} className="text-[#00ff66]" />
+                  <label htmlFor="sync-chk" className="text-[10px] uppercase font-bold text-[var(--text-strong)] flex items-center gap-1.5 cursor-pointer select-none">
+                    <RefreshCw size={11} className="text-[var(--accent)]" />
                     <span>Enable Settings Cloud Sync</span>
                   </label>
-                  <span className="text-[8px] bg-[#004411] text-[#00ff66] border border-[#00ff66] px-1.5 rounded font-bold shrink-0">BASIC+</span>
+                  <span className="text-[10px] bg-[var(--line)] text-[var(--accent)] border border-[var(--accent)] px-1.5 rounded font-bold shrink-0">BASIC+</span>
                   <FeatureBadge status="preview" />
                 </div>
-                <p className="text-[10px] text-[#00aa44] leading-relaxed">Syncs model settings and active project checklists across devices.</p>
+                <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Syncs model settings and active project checklists across devices.</p>
 
                 {showSyncOverlay && (
-                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-4 border border-[#ff3333] rounded z-30">
-                    <div className="flex items-center gap-2 text-[#ff3333] text-[10px] font-bold">
+                  <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
+                    <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
                       <ShieldAlert size={14} />
                       <span>Sync locked: Upgrade to Basic Plan ($2.99/mo)</span>
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setUserTier('basic'); setShowSyncOverlay(false); setIsSyncEnabled(true); }} className="text-[9px] bg-amber-800 text-white px-3 py-1 rounded font-bold hover:bg-amber-900 transition-all">UPGRADE</button>
-                      <button type="button" onClick={() => setShowSyncOverlay(false)} className="text-[9px] border border-gray-600 text-gray-400 px-3 py-1 rounded hover:text-white transition-all">CANCEL</button>
+                      <button type="button" onClick={() => setShowSyncOverlay(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* WebRTC Collaboration Gated Sync */}
-              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
+              <div className="border border-[var(--line)] bg-[var(--surface-deep)] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -1939,43 +1946,43 @@ export default function App() {
                     }}
                     className="cursor-pointer"
                   />
-                  <label htmlFor="collab-chk" className="text-[10px] uppercase font-bold text-white flex items-center gap-1.5 cursor-pointer select-none">
-                    <Laptop size={11} className="text-[#00ff66]" />
+                  <label htmlFor="collab-chk" className="text-[10px] uppercase font-bold text-[var(--text-strong)] flex items-center gap-1.5 cursor-pointer select-none">
+                    <Laptop size={11} className="text-[var(--accent)]" />
                     <span>WebRTC Collaboration Room</span>
                   </label>
-                  <span className="text-[8px] bg-[#00ff66] text-black border border-[#00ff66] px-1.5 rounded font-extrabold shrink-0">ENTERPRISE</span>
+                  <span className="text-[10px] bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] px-1.5 rounded font-extrabold shrink-0">ENTERPRISE</span>
                   <FeatureBadge status="preview" />
                 </div>
-                <p className="text-[10px] text-[#00aa44] leading-relaxed">Preview real-time co-coding indicators, terminal stream status, and active agent pairing sessions.</p>
+                <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Preview real-time co-coding indicators, terminal stream status, and active agent pairing sessions.</p>
                 {collabActive && (
-                  <div className="text-[10px] bg-[#001102] border border-[#00ff66] p-2 rounded text-[#00ff66] animate-pulse font-mono">
+                  <div className="text-[10px] bg-[var(--surface-accent)] border border-[var(--accent)] p-2 rounded text-[var(--accent)] animate-pulse font-mono">
                     📡 COLLAB SESSION ACTIVE: Connected to signaling channel token room.
                   </div>
                 )}
 
                 {showCollabOverlay && (
-                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-4 border border-[#ff3333] rounded z-30">
-                    <div className="flex items-center gap-2 text-[#ff3333] text-[10px] font-bold">
+                  <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
+                    <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
                       <ShieldAlert size={14} />
                       <span>Collab locked: Upgrade to Enterprise ($25/mo)</span>
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setUserTier('enterprise'); setShowCollabOverlay(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
-                      <button type="button" onClick={() => setShowCollabOverlay(false)} className="text-[9px] border border-gray-600 text-gray-400 px-3 py-1 rounded hover:text-white transition-all">CANCEL</button>
+                      <button type="button" onClick={() => setShowCollabOverlay(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Semantic Cache Query Panel */}
-              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
+              <div className="border border-[var(--line)] bg-[var(--surface-deep)] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
-                  <Database size={11} className="text-[#00ff66]" />
-                  <span className="text-[10px] uppercase font-bold text-white">Semantic Cache Query</span>
-                  <span className="text-[8px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">PRO+</span>
+                  <Database size={11} className="text-[var(--accent)]" />
+                  <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">Semantic Cache Query</span>
+                  <span className="text-[10px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">PRO+</span>
                   <FeatureBadge status="preview" />
                 </div>
-                <p className="text-[10px] text-[#00aa44] leading-relaxed">Index and query workspace symbols, functions, and type definitions from a local semantic cache.</p>
+                <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Index and query workspace symbols, functions, and type definitions from a local semantic cache.</p>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -2001,7 +2008,7 @@ export default function App() {
                       }
                     }}
                     placeholder="Search cached symbols..."
-                    className="matrix-input flex-1 text-[12px] text-[#00ff66]"
+                    className="matrix-input flex-1 text-[12px] text-[var(--accent)]"
                   />
                   <button
                     type="button"
@@ -2029,119 +2036,119 @@ export default function App() {
                   </button>
                 </div>
                 {semanticIndexCount !== null && (
-                  <div className="text-[10px] text-[#00ff66] font-bold">✓ {semanticIndexCount} symbols indexed</div>
+                  <div className="text-[10px] text-[var(--accent)] font-bold">✓ {semanticIndexCount} symbols indexed</div>
                 )}
                 {semanticResults.length > 0 && (
-                  <div className="border border-[#004411] bg-black bg-opacity-40 rounded p-3 space-y-1.5 max-h-32 overflow-y-auto font-mono">
+                  <div className="border border-[var(--line)] bg-[var(--surface-overlay)] rounded p-3 space-y-1.5 max-h-32 overflow-y-auto font-mono">
                     {semanticResults.map((r, i) => (
                       <div key={i} className="flex items-center justify-between text-[10px]">
-                        <span className="text-white font-bold">{r.symbol}</span>
-                        <span className="text-[#00aa44]">{r.file} · <span className="text-[8px] uppercase border border-[#004411] px-1 rounded">{r.type}</span></span>
+                        <span className="text-[var(--text-strong)] font-bold">{r.symbol}</span>
+                        <span className="text-[var(--accent-dim)]">{r.file} · <span className="text-[10px] uppercase border border-[var(--line)] px-1 rounded">{r.type}</span></span>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {showSemanticLock && (
-                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-4 border border-[#ff3333] rounded z-30">
-                    <div className="flex items-center gap-2 text-[#ff3333] text-[10px] font-bold">
+                  <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
+                    <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
                       <ShieldAlert size={14} />
                       <span>Semantic Cache locked: Upgrade to Pro ($9.99/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('pro'); setShowSemanticLock(false); }} className="text-[9px] bg-blue-900 border border-blue-500 text-blue-200 px-3 py-1 rounded font-bold hover:bg-blue-905 transition-all">UPGRADE</button>
-                      <button type="button" onClick={() => setShowSemanticLock(false)} className="text-[9px] border border-gray-600 text-gray-400 px-3 py-1 rounded hover:text-white transition-all">CANCEL</button>
+                      <button type="button" onClick={() => { setUserTier('pro'); setShowSemanticLock(false); }} className="text-[9px] bg-blue-900 border border-blue-500 text-blue-200 px-3 py-1 rounded font-bold hover:bg-blue-800 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => setShowSemanticLock(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Self-Healing Rollback Monitor */}
-              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
+              <div className="border border-[var(--line)] bg-[var(--surface-deep)] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
-                  <RefreshCw size={11} className="text-[#00ff66]" />
-                  <span className="text-[10px] uppercase font-bold text-white">Self-Healing Rollback Monitor</span>
-                  <span className="text-[8px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">PRO+</span>
+                  <RefreshCw size={11} className="text-[var(--accent)]" />
+                  <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">Self-Healing Rollback Monitor</span>
+                  <span className="text-[10px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">PRO+</span>
                   <FeatureBadge status="preview" />
                 </div>
-                <p className="text-[10px] text-[#00aa44] leading-relaxed">Automatically reverts destructive file operations and monitors workspace integrity in real-time.</p>
+                <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Automatically reverts destructive file operations and monitors workspace integrity in real-time.</p>
                 {(userTier === 'pro' || userTier === 'enterprise') ? (
                   <>
-                    <div className="text-[10px] bg-[#001102] border border-[#00ff66] p-2 rounded text-[#00ff66] animate-pulse flex items-center gap-2">
+                    <div className="text-[10px] bg-[var(--surface-accent)] border border-[var(--accent)] p-2 rounded text-[var(--accent)] animate-pulse flex items-center gap-2">
                       <ShieldCheck size={11} />
                       <span>MONITORING ACTIVE</span>
                     </div>
-                    <div className="border border-[#004411] bg-black bg-opacity-40 rounded p-3 space-y-2 max-h-32 overflow-y-auto text-[10px] font-mono">
+                    <div className="border border-[var(--line)] bg-[var(--surface-overlay)] rounded p-3 space-y-2 max-h-32 overflow-y-auto text-[10px] font-mono">
                       <div className="flex items-center justify-between">
-                        <span className="text-amber-400 font-bold">↩ REVERT</span>
-                        <span className="text-[#00aa44]">rm -rf ./dist — auto-rolled back 2m ago</span>
+                        <span className="text-[var(--warn)] font-bold">↩ REVERT</span>
+                        <span className="text-[var(--accent-dim)]">rm -rf ./dist — auto-rolled back 2m ago</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-amber-400 font-bold">↩ REVERT</span>
-                        <span className="text-[#00aa44]">truncate package.json — auto-rolled back 14m ago</span>
+                        <span className="text-[var(--warn)] font-bold">↩ REVERT</span>
+                        <span className="text-[var(--accent-dim)]">truncate package.json — auto-rolled back 14m ago</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-[#00ff66] font-bold">✓ OK</span>
-                        <span className="text-[#00aa44]">git push origin main — approved 31m ago</span>
+                        <span className="text-[var(--accent)] font-bold">✓ OK</span>
+                        <span className="text-[var(--accent-dim)]">git push origin main — approved 31m ago</span>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="text-[10px] text-gray-500 border border-[#004411] bg-black bg-opacity-30 p-2.5 rounded">
+                  <div className="text-[10px] text-[var(--text-muted)] border border-[var(--line)] bg-[var(--surface-overlay)] p-2.5 rounded">
                     🔒 Upgrade to Pro or Enterprise to enable self-healing rollback monitoring.
                   </div>
                 )}
               </div>
 
               {/* RBAC Command Policies */}
-              <div className="border border-[#004411] bg-[#020502] p-4 rounded space-y-2 relative shadow-md">
+              <div className="border border-[var(--line)] bg-[var(--surface-deep)] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck size={11} className="text-[#00ff66]" />
-                  <span className="text-[10px] uppercase font-bold text-white">RBAC Command Policy Simulator</span>
-                  <span className="text-[8px] bg-[#00ff66] text-black border border-[#00ff66] px-1.5 rounded font-extrabold shrink-0">ENTERPRISE</span>
+                  <ShieldCheck size={11} className="text-[var(--accent)]" />
+                  <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">RBAC Command Policy Simulator</span>
+                  <span className="text-[10px] bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] px-1.5 rounded font-extrabold shrink-0">ENTERPRISE</span>
                   <FeatureBadge status="simulator" />
                 </div>
-                <p className="text-[10px] text-[#00aa44] leading-relaxed">Define role-based access controls and blocked command prefixes for organization workspaces.</p>
+                <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Define role-based access controls and blocked command prefixes for organization workspaces.</p>
                 {userTier === 'enterprise' ? (
                   <div className="space-y-3">
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] uppercase text-[#00aa44] font-bold">Active Role</label>
+                      <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Active Role</label>
                       <select
                         value={rbacRole}
                         onChange={e => setRbacRole(e.target.value as 'admin' | 'developer')}
-                        className="matrix-input text-[12px] text-[#00ff66] bg-black"
+                        className="matrix-input text-[12px] text-[var(--accent)] bg-[var(--surface-terminal)]"
                       >
                         <option value="admin">Admin</option>
                         <option value="developer">Developer</option>
                       </select>
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-[10px] uppercase text-[#00aa44] font-bold">Blocked Command Prefixes</label>
+                      <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Blocked Command Prefixes</label>
                       <input
                         type="text"
                         value={rbacBlockedPrefixes}
                         onChange={e => setRbacBlockedPrefixes(e.target.value)}
                         placeholder="Comma-separated blocked prefixes..."
-                        className="matrix-input text-[12px] text-[#00ff66]"
+                        className="matrix-input text-[12px] text-[var(--accent)]"
                       />
-                      <span className="text-[9px] text-[#00aa44]">Current role: <span className="text-white font-bold uppercase">{rbacRole}</span> — {rbacRole === 'admin' ? 'Full access, blocked prefixes ignored' : `${rbacBlockedPrefixes.split(',').filter(Boolean).length} prefix(es) enforced`}</span>
+                      <span className="text-[9px] text-[var(--accent-dim)]">Current role: <span className="text-[var(--text-strong)] font-bold uppercase">{rbacRole}</span> — {rbacRole === 'admin' ? 'Full access, blocked prefixes ignored' : `${rbacBlockedPrefixes.split(',').filter(Boolean).length} prefix(es) enforced`}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-[10px] text-gray-500 border border-[#004411] bg-black bg-opacity-35 p-2.5 rounded cursor-pointer" onClick={() => setShowRbacLock(true)}>
+                  <div className="text-[10px] text-[var(--text-muted)] border border-[var(--line)] bg-[var(--surface-overlay)] p-2.5 rounded cursor-pointer" onClick={() => setShowRbacLock(true)}>
                     RBAC simulator policies require Enterprise tier. Click to upgrade.
                   </div>
                 )}
 
                 {showRbacLock && (
-                  <div className="absolute inset-0 bg-black bg-opacity-80 flex items-center justify-between p-4 border border-[#ff3333] rounded z-30">
-                    <div className="flex items-center gap-2 text-[#ff3333] text-[10px] font-bold">
+                  <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
+                    <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
                       <ShieldAlert size={14} />
                       <span>RBAC simulator locked: Upgrade to Enterprise ($25/mo)</span>
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setUserTier('enterprise'); setShowRbacLock(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
-                      <button type="button" onClick={() => setShowRbacLock(false)} className="text-[9px] border border-gray-600 text-gray-400 px-3 py-1 rounded hover:text-white transition-all">CANCEL</button>
+                      <button type="button" onClick={() => setShowRbacLock(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
                     </div>
                   </div>
                 )}
@@ -2157,12 +2164,12 @@ export default function App() {
 
       {/* Cloud Sync Lock modal dialog */}
       {showSyncLockModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center p-4 backdrop-blur-sm z-50">
-          <div className="matrix-panel w-full max-w-sm p-6 border border-amber-600 bg-[#0e0804] flex flex-col gap-4 text-center rounded shadow-2xl">
-            <ShieldAlert className="text-amber-500 mx-auto" size={36} />
+        <div className="fixed inset-0 bg-[var(--backdrop)] flex items-center justify-center p-4 backdrop-blur-sm z-50">
+          <div className="matrix-panel w-full max-w-sm p-6 border border-amber-600 bg-[var(--surface-warn)] flex flex-col gap-4 text-center rounded shadow-2xl">
+            <ShieldAlert className="text-[var(--warn)] mx-auto" size={36} />
             <div className="space-y-1.5">
-              <h3 className="text-white font-bold text-sm uppercase">Cloud Sync Required</h3>
-              <p className="text-[11px] text-amber-200 leading-relaxed">
+              <h3 className="text-[var(--text-strong)] font-bold text-sm uppercase">Cloud Sync Required</h3>
+              <p className="text-[11px] text-[var(--warn-soft)] leading-relaxed">
                 To sync your mobile planning session draft directly to your desktop workspace, you must enable **Cloud Sync** (Basic Tier or higher).
               </p>
             </div>
@@ -2173,7 +2180,7 @@ export default function App() {
                   setShowSyncLockModal(false);
                   alert('Upgraded status to Basic Tier successfully!');
                 }}
-                className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold py-2 rounded uppercase transition-all"
+                className="bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold py-2 rounded uppercase transition-all"
               >
                 Upgrade to Basic ($2.99/mo)
               </button>
@@ -2183,13 +2190,13 @@ export default function App() {
                   alert('Copied implementation draft to clipboard!');
                   navigator.clipboard.writeText(planDraft);
                 }}
-                className="border border-amber-600 text-amber-500 hover:bg-black text-[11px] py-2 rounded uppercase transition-all"
+                className="border border-amber-600 text-[var(--warn)] hover:bg-[var(--surface-terminal)] text-[11px] py-2 rounded uppercase transition-all"
               >
                 Copy Markdown manually
               </button>
               <button
                 onClick={() => setShowSyncLockModal(false)}
-                className="text-[10px] text-gray-500 hover:text-white uppercase font-bold"
+                className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-strong)] uppercase font-bold"
               >
                 Cancel
               </button>

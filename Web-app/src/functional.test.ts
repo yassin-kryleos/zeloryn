@@ -2,20 +2,29 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Local storage mock
 const mockLocalStorage: Record<string, string> = {};
-(globalThis as any).localStorage = {
+vi.stubGlobal('localStorage', {
   getItem: (key: string) => mockLocalStorage[key] || null,
   setItem: (key: string, value: string) => { mockLocalStorage[key] = value; },
   removeItem: (key: string) => { delete mockLocalStorage[key]; },
   clear: () => { for (const key in mockLocalStorage) delete mockLocalStorage[key]; }
-};
+});
+
+interface MockSocket {
+  url: string;
+  close: () => void;
+  onopen: (() => void) | null;
+  onmessage: ((event: { data: string }) => void) | null;
+  onclose: (() => void) | null;
+  onerror: (() => void) | null;
+}
 
 describe('Web Companion Client Functional Test Suite', () => {
-  let mockWebSocket: any;
-  let mockClose: any;
+  let mockWebSocket: ReturnType<typeof vi.fn>;
+  let mockClose: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
-    mockClose = vi.fn();
-    mockWebSocket = vi.fn().mockImplementation((url) => {
+    mockClose = vi.fn<() => void>();
+    mockWebSocket = vi.fn().mockImplementation((url: string): MockSocket => {
       return {
         url,
         close: mockClose,
@@ -26,11 +35,10 @@ describe('Web Companion Client Functional Test Suite', () => {
       };
     });
 
-    (globalThis as any).WebSocket = mockWebSocket;
+    vi.stubGlobal('WebSocket', mockWebSocket);
   });
 
   afterEach(() => {
-    delete (globalThis as any).WebSocket;
     localStorage.clear();
     vi.clearAllMocks();
   });
@@ -51,7 +59,7 @@ describe('Web Companion Client Functional Test Suite', () => {
 
   describe('2. Companion Connection States', () => {
     const getWsUrl = (backendUrl: string) => backendUrl.replace(/^http/i, 'ws');
-    
+
     it('should form correct wsUrl with search query params on connection', () => {
       const backendUrl = 'http://localhost:3001';
       const code = '777666';
