@@ -14,7 +14,7 @@ test.describe('Web companion — smoke', () => {
     await page.goto('/');
     // The nav is a WAI-ARIA tablist (role="tablist") with role="tab" children.
     await expect(page.getByRole('tablist', { name: 'Main navigation' })).toBeVisible();
-    await expect(page.getByRole('tab')).toHaveCount(5);
+    await expect(page.getByRole('tab')).toHaveCount(6);
   });
 
   test('navigates to the Planning tab', async ({ page }) => {

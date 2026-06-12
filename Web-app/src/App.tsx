@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   Terminal, Sparkles, Key, FileText, Database, ShieldAlert, ShieldCheck,
-  Download, Laptop, RefreshCw, Smartphone, Mic, MicOff
+  Download, Laptop, RefreshCw, Smartphone, Mic, MicOff,
+  Gem, Check, X, Zap, Building2, Users
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
 
@@ -13,7 +14,7 @@ interface Message {
 type ResponseMode = 'balanced' | 'concise' | 'critical' | 'brutal_audit';
 type FeatureStatus = 'production' | 'preview' | 'simulator' | 'mock' | 'planned';
 type UserTier = 'free' | 'basic' | 'pro' | 'enterprise';
-type ActiveTab = 'marketing' | 'planning' | 'chat' | 'downloads' | 'settings';
+type ActiveTab = 'marketing' | 'pricing' | 'planning' | 'chat' | 'downloads' | 'settings';
 type BackendLog = { sender?: string; message?: string };
 type ToastKind = 'success' | 'error' | 'info';
 type Toast = { id: number; kind: ToastKind; message: string };
@@ -35,7 +36,42 @@ function FeatureBadge({ status, label }: { status: FeatureStatus; label?: string
 }
 
 const USER_TIERS: UserTier[] = ['free', 'basic', 'pro', 'enterprise'];
-const APP_TABS: ActiveTab[] = ['marketing', 'planning', 'chat', 'downloads', 'settings'];
+const APP_TABS: ActiveTab[] = ['marketing', 'pricing', 'planning', 'chat', 'downloads', 'settings'];
+
+interface PricingRow {
+  label: string;
+  group?: boolean;
+  values: Record<UserTier, boolean | string>;
+}
+
+const PRICING_MATRIX: PricingRow[] = [
+  { label: 'Pricing', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
+  { label: 'Monthly price', values: { free: '$0', basic: '$2.99', pro: '$9.99', enterprise: '$25/seat' } },
+  { label: 'Paired devices', values: { free: '1', basic: '3', pro: '10', enterprise: 'Unlimited' } },
+  { label: 'Support', values: { free: 'Community', basic: 'Email', pro: 'Priority', enterprise: 'Dedicated + SLA' } },
+
+  { label: 'Core (local-first)', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
+  { label: 'Local agent workspace', values: { free: true, basic: true, pro: true, enterprise: true } },
+  { label: 'BYOK model access', values: { free: true, basic: true, pro: true, enterprise: true } },
+  { label: 'Zero-egress execution', values: { free: true, basic: true, pro: true, enterprise: true } },
+  { label: 'Voice scoping & planning', values: { free: true, basic: true, pro: true, enterprise: true } },
+
+  { label: 'Sync & backup', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
+  { label: 'Settings cloud sync', values: { free: false, basic: true, pro: true, enterprise: true } },
+  { label: 'Automatic cloud backups', values: { free: false, basic: true, pro: true, enterprise: true } },
+
+  { label: 'Remote compute', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
+  { label: 'Remote containers', values: { free: false, basic: false, pro: true, enterprise: true } },
+  { label: 'Cloud sandbox builds', values: { free: false, basic: false, pro: true, enterprise: true } },
+  { label: 'Semantic cache query', values: { free: false, basic: false, pro: true, enterprise: true } },
+  { label: 'Self-healing rollback', values: { free: false, basic: false, pro: true, enterprise: true } },
+
+  { label: 'Organization', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
+  { label: 'Team workspaces', values: { free: false, basic: false, pro: false, enterprise: true } },
+  { label: 'Audit log & RBAC', values: { free: false, basic: false, pro: false, enterprise: true } },
+  { label: 'WebRTC co-coding rooms', values: { free: false, basic: false, pro: false, enterprise: true } },
+  { label: 'SSO / SAML', values: { free: false, basic: false, pro: false, enterprise: true } },
+];
 
 function readStoredTier(): UserTier {
   const storedTier = localStorage.getItem('web_user_tier');
@@ -752,10 +788,11 @@ export default function App() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               aria-label={
-                tab === 'marketing' ? 'Overview tab' : 
-                tab === 'planning' ? 'Planning tab' : 
-                tab === 'chat' ? 'Tutorial tab' : 
-                tab === 'downloads' ? 'Downloads tab' : 
+                tab === 'marketing' ? 'Overview tab' :
+                tab === 'pricing' ? 'Pricing tab' :
+                tab === 'planning' ? 'Planning tab' :
+                tab === 'chat' ? 'Tutorial tab' :
+                tab === 'downloads' ? 'Downloads tab' :
                 'Settings tab'
               }
               aria-selected={activeTab === tab}
@@ -767,10 +804,11 @@ export default function App() {
               }`}
             >
               {
-                tab === 'marketing' ? '✨ Overview' : 
-                tab === 'planning' ? '📋 Planning' : 
-                tab === 'chat' ? '📖 Tutorial' : 
-                tab === 'downloads' ? '📥 Downloads' : 
+                tab === 'marketing' ? '✨ Overview' :
+                tab === 'pricing' ? '💎 Pricing' :
+                tab === 'planning' ? '📋 Planning' :
+                tab === 'chat' ? '📖 Tutorial' :
+                tab === 'downloads' ? '📥 Downloads' :
                 '⚙️ Settings'
               }
             </button>
@@ -1244,87 +1282,199 @@ export default function App() {
               </div>
             </div>
 
-            {/* Pricing Section */}
-            <div className="space-y-6 pt-6 animate-fadeIn">
-              <h2 className="text-xl text-center font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
-                Subscription Billing Tiers <FeatureBadge status="mock" label="Mock Billing" />
+            {/* Pricing CTA — full details live on the dedicated Pricing page */}
+            <div className="glass-panel p-8 rounded space-y-5 text-center animate-fadeIn border border-[var(--accent-line)] bg-[var(--surface-deep)]">
+              <h2 className="text-xl font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
+                <Gem size={20} className="text-[var(--accent)]" /> Plans for Every Workflow
               </h2>
-              <div className="glass-panel p-4 rounded text-[11px] text-[var(--accent-dim)] flex flex-wrap items-center justify-center gap-3">
+              <p className="text-[13px] text-[var(--accent-dim)] max-w-2xl mx-auto leading-relaxed">
+                From a free local-first workspace to enterprise org controls with RBAC and audit logs — compare every tier, feature by feature, on the dedicated pricing page.
+              </p>
+              <div className="flex flex-wrap justify-center items-center gap-2 text-[11px] text-[var(--accent-dim)]">
+                <span className="font-bold text-[var(--text-strong)]">Free</span><span className="opacity-50">·</span>
+                <span className="font-bold text-[var(--warn)]">Basic $2.99</span><span className="opacity-50">·</span>
+                <span className="font-bold text-[var(--info)]">Pro $9.99</span><span className="opacity-50">·</span>
+                <span className="font-bold text-[var(--accent)]">Enterprise $25</span>
+              </div>
+              <div className="pt-2">
+                <button onClick={() => setActiveTab('pricing')} className="matrix-btn matrix-btn-primary px-6 py-2.5 font-bold uppercase rounded inline-flex items-center gap-2">
+                  <Gem size={14} /> Explore Pricing & Plans
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PRICING TAB */}
+        {activeTab === 'pricing' && (
+          <div className="flex-1 overflow-y-auto p-8 space-y-10 max-w-6xl mx-auto">
+            {/* Header */}
+            <div className="text-center space-y-4 py-4 animate-fadeIn">
+              <h1 className="text-4xl font-extrabold text-[var(--text-strong)] tracking-tight uppercase flex items-center justify-center gap-3">
+                <Gem size={30} className="text-[var(--accent)]" /> Pricing & Plans
+              </h1>
+              <p className="text-sm text-[var(--accent-dim)] max-w-2xl mx-auto leading-relaxed">
+                Kryleos Forge is local-first and free to start. Upgrade only when you need cross-device sync, remote compute, or organization-grade governance. Every paid tier includes all features of the tiers below it.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-[var(--accent-dim)]">
                 <span className="text-[var(--text-strong)] font-bold uppercase">Feature Status Guide:</span>
                 <FeatureBadge status="production" />
                 <FeatureBadge status="preview" />
                 <FeatureBadge status="simulator" />
-                <FeatureBadge status="mock" />
+                <FeatureBadge status="mock" label="Mock Billing" />
               </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Free */}
-                <div className={`pricing-card pricing-card-free ${userTier === 'free' ? 'pricing-card-active' : ''}`}>
-                  <div className="border-b border-[var(--line)] pb-3 text-center">
-                    <span className="text-[10px] text-[var(--accent-dim)] font-bold uppercase block tracking-wider mb-1">Free Tier</span>
-                    <span className="text-2xl font-extrabold text-[var(--text-strong)]">$0.00</span>
-                  </div>
-                  <ul className="text-[11px] text-[var(--accent-dim)] space-y-2 flex-1">
-                    <li>[+] Local agent workspace <FeatureBadge status="production" /></li>
-                    <li>[+] BYOK model access <FeatureBadge status="preview" /></li>
-                    <li className="opacity-45">[-] Settings Cloud Sync</li>
-                    <li className="opacity-45">[-] Remote containers</li>
-                  </ul>
-                  <button onClick={() => setUserTier('free')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'free' ? 'matrix-btn-primary' : ''}`}>
-                    {userTier === 'free' ? '[ACTIVE]' : 'SELECT FREE'}
-                  </button>
-                </div>
+            </div>
 
-                {/* Basic */}
-                <div className={`pricing-card pricing-card-basic ${userTier === 'basic' ? 'pricing-card-active' : ''}`}>
-                  <div className="border-b border-[var(--line)] pb-3 text-center">
-                    <span className="text-[10px] text-[var(--warn)] font-bold uppercase block tracking-wider mb-1">Basic Tier</span>
-                    <span className="text-2xl font-extrabold text-[var(--text-strong)]">$2.99<span className="text-[11px] font-normal text-[var(--warn)]">/mo</span></span>
-                  </div>
-                  <ul className="text-[11px] text-[var(--accent-dim)] space-y-2 flex-1">
-                    <li>[+] All Free features</li>
-                    <li>[+] Settings Cloud Sync <FeatureBadge status="preview" /></li>
-                    <li>[+] Auto Cloud Backups <FeatureBadge status="preview" /></li>
-                    <li className="opacity-45">[-] Remote containers</li>
-                  </ul>
-                  <button onClick={() => setUserTier('basic')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'basic' ? 'matrix-btn-primary' : ''}`}>
-                    {userTier === 'basic' ? '[ACTIVE]' : 'SELECT BASIC'}
-                  </button>
+            {/* Tier cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-fadeIn">
+              {/* Free */}
+              <div className={`pricing-card pricing-card-free ${userTier === 'free' ? 'pricing-card-active' : ''}`}>
+                <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
+                  <span className="text-[10px] text-[var(--accent-dim)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Zap size={12} /> Free</span>
+                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$0</span>
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase">forever</span>
                 </div>
+                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for solo developers getting started with local-first, zero-egress AI planning.</p>
+                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1">
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Local agent workspace</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> BYOK model access (DeepSeek, Gemini, OpenAI, Ollama)</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Zero-egress local execution</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Voice scoping & planning</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> 1 paired device</li>
+                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Settings cloud sync</li>
+                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
+                </ul>
+                <button onClick={() => { setUserTier('free'); pushToast('Switched to the Free tier.', 'success'); }} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'free' ? 'matrix-btn-primary' : ''}`}>
+                  {userTier === 'free' ? '✓ Current Plan' : 'Select Free'}
+                </button>
+              </div>
 
-                {/* Pro */}
-                <div className={`pricing-card pricing-card-pro ${userTier === 'pro' ? 'pricing-card-active' : ''}`}>
-                  <div className="border-b border-[var(--line)] pb-3 text-center">
-                    <span className="text-[10px] text-[var(--info)] font-bold uppercase block tracking-wider mb-1">Pro Tier</span>
-                    <span className="text-2xl font-extrabold text-[var(--text-strong)]">$9.99<span className="text-[11px] font-normal text-[var(--info)]">/mo</span></span>
-                  </div>
-                  <ul className="text-[11px] text-[var(--accent-dim)] space-y-2 flex-1">
-                    <li>[+] All Basic features</li>
-                    <li>[+] Remote Containers <FeatureBadge status="simulator" /></li>
-                    <li>[+] Cloud Sandbox <FeatureBadge status="simulator" /></li>
-                    <li className="opacity-45">[-] Organization RBAC</li>
-                  </ul>
-                  <button onClick={() => setUserTier('pro')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'pro' ? 'matrix-btn-primary' : ''}`}>
-                    {userTier === 'pro' ? '[ACTIVE]' : 'SELECT PRO'}
-                  </button>
+              {/* Basic */}
+              <div className={`pricing-card pricing-card-basic ${userTier === 'basic' ? 'pricing-card-active' : ''}`}>
+                <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
+                  <span className="text-[10px] text-[var(--warn)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><RefreshCw size={12} /> Basic</span>
+                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$2.99<span className="text-[12px] font-normal text-[var(--warn)]">/mo</span></span>
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase">billed monthly</span>
                 </div>
+                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for individuals who work across multiple machines and want their setup to follow them.</p>
+                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1">
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Free</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Settings cloud sync <FeatureBadge status="preview" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Automatic cloud backups <FeatureBadge status="preview" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Up to 3 paired devices</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Email support</li>
+                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
+                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
+                </ul>
+                <button onClick={() => { setUserTier('basic'); pushToast('Switched to the Basic tier.', 'success'); }} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'basic' ? 'matrix-btn-primary' : ''}`}>
+                  {userTier === 'basic' ? '✓ Current Plan' : 'Select Basic'}
+                </button>
+              </div>
 
-                {/* Enterprise */}
-                <div className={`pricing-card pricing-card-enterprise ${userTier === 'enterprise' ? 'pricing-card-active' : ''}`}>
-                  <div className="border-b border-[var(--line)] pb-3 text-center">
-                    <span className="text-[10px] text-[var(--accent)] font-bold uppercase block tracking-wider mb-1">Enterprise</span>
-                    <span className="text-2xl font-extrabold text-[var(--text-strong)]">$25.00<span className="text-[11px] font-normal text-[var(--accent)]">/mo</span></span>
-                  </div>
-                  <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1 font-semibold">
-                    <li>[+] All Pro features</li>
-                    <li>[+] Org Team Workspaces <FeatureBadge status="preview" /></li>
-                    <li>[+] Audit log & RBAC <FeatureBadge status="simulator" /></li>
-                    <li>[+] Co-coding rooms <FeatureBadge status="preview" /></li>
-                  </ul>
-                  <button onClick={() => setUserTier('enterprise')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'enterprise' ? 'matrix-btn-primary' : ''}`}>
-                    {userTier === 'enterprise' ? '[ACTIVE]' : 'SELECT ENTERPRISE'}
-                  </button>
+              {/* Pro — highlighted */}
+              <div className={`pricing-card pricing-card-pro relative ${userTier === 'pro' ? 'pricing-card-active' : ''}`}>
+                <span className="absolute top-3 right-3 text-[9px] bg-[var(--info)] text-[#001018] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider">Popular</span>
+                <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
+                  <span className="text-[10px] text-[var(--info)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Sparkles size={12} /> Pro</span>
+                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$9.99<span className="text-[12px] font-normal text-[var(--info)]">/mo</span></span>
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase">billed monthly</span>
                 </div>
+                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for power users and freelancers who need remote compute and self-healing safeguards.</p>
+                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1">
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Basic</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Remote containers <FeatureBadge status="simulator" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Cloud sandbox builds <FeatureBadge status="simulator" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Semantic cache query <FeatureBadge status="preview" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Self-healing rollback monitor <FeatureBadge status="preview" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Up to 10 paired devices · Priority support</li>
+                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
+                </ul>
+                <button onClick={() => { setUserTier('pro'); pushToast('Switched to the Pro tier.', 'success'); }} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'pro' ? 'matrix-btn-primary' : ''}`}>
+                  {userTier === 'pro' ? '✓ Current Plan' : 'Select Pro'}
+                </button>
+              </div>
+
+              {/* Enterprise */}
+              <div className={`pricing-card pricing-card-enterprise ${userTier === 'enterprise' ? 'pricing-card-active' : ''}`}>
+                <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
+                  <span className="text-[10px] text-[var(--accent)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Building2 size={12} /> Enterprise</span>
+                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$25<span className="text-[12px] font-normal text-[var(--accent)]">/seat/mo</span></span>
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase">billed annually</span>
+                </div>
+                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for teams and organizations that require governance, audit trails, and collaboration.</p>
+                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1 font-medium">
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Pro</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Org team workspaces <FeatureBadge status="preview" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Audit log & RBAC <FeatureBadge status="simulator" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> WebRTC co-coding rooms <FeatureBadge status="preview" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> SSO / SAML <FeatureBadge status="planned" /></li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Unlimited devices · Dedicated support + SLA</li>
+                </ul>
+                <button onClick={() => { setUserTier('enterprise'); pushToast('Switched to the Enterprise tier.', 'success'); }} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'enterprise' ? 'matrix-btn-primary' : ''}`}>
+                  {userTier === 'enterprise' ? '✓ Current Plan' : 'Select Enterprise'}
+                </button>
+              </div>
+            </div>
+
+            {/* Detailed comparison matrix */}
+            <div className="space-y-4 pt-4 animate-fadeIn">
+              <h2 className="text-xl text-center font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
+                <FileText size={18} className="text-[var(--accent)]" /> Full Feature Comparison
+              </h2>
+              <div className="glass-panel rounded overflow-x-auto">
+                <table className="w-full text-left border-collapse min-w-[640px]">
+                  <thead>
+                    <tr className="border-b border-[var(--line-strong)]">
+                      <th scope="col" className="p-3 text-[11px] uppercase font-bold text-[var(--text-strong)] tracking-wider">Capability</th>
+                      {([['free','Free'],['basic','Basic'],['pro','Pro'],['enterprise','Enterprise']] as Array<[UserTier,string]>).map(([key, label]) => (
+                        <th key={key} scope="col" className={`p-3 text-center text-[11px] uppercase font-bold tracking-wider ${userTier === key ? 'text-[var(--accent)]' : 'text-[var(--accent-dim)]'}`}>
+                          {label}{userTier === key && <span className="block text-[8px] text-[var(--accent)] font-extrabold">● Current</span>}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="text-[11px]">
+                    {PRICING_MATRIX.map((row, i) => (
+                      <tr key={i} className={`border-b border-[var(--line-faint)] ${row.group ? 'bg-[var(--surface-accent)]' : ''}`}>
+                        <th scope="row" className={`p-3 font-medium text-left ${row.group ? 'text-[var(--accent)] uppercase text-[10px] font-bold tracking-wider' : 'text-[var(--accent-soft)]'}`}>
+                          {row.label}
+                        </th>
+                        {(['free','basic','pro','enterprise'] as UserTier[]).map(tier => (
+                          <td key={tier} className={`p-3 text-center ${userTier === tier ? 'bg-[var(--surface-active)]' : ''}`}>
+                            {row.group ? '' : typeof row.values[tier] === 'boolean'
+                              ? (row.values[tier]
+                                  ? <Check size={15} className="text-[var(--accent)] inline" aria-label="Included" />
+                                  : <X size={15} className="text-[var(--text-faint)] inline" aria-label="Not included" />)
+                              : <span className="text-[var(--accent-soft)] font-semibold">{row.values[tier]}</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[10px] text-[var(--text-muted)] text-center">
+                Billing is a local <FeatureBadge status="mock" label="Mock" /> simulation in this companion build — selecting a plan changes the active demo tier and unlocks the corresponding gated panels in Settings. No payment is processed.
+              </p>
+            </div>
+
+            {/* FAQ */}
+            <div className="space-y-4 pt-4 animate-fadeIn">
+              <h2 className="text-xl text-center font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
+                <Users size={18} className="text-[var(--accent)]" /> Frequently Asked
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {[
+                  ['Is my code ever uploaded?', 'No. On every tier, source code and system instructions stay on your machine. Zero-egress execution routes through local Ollama models; cloud features only sync settings and plan metadata you opt into.'],
+                  ['Can I bring my own API keys?', 'Yes — BYOK is available from the Free tier. Add DeepSeek, Gemini, or OpenAI keys in Settings, or run fully offline with Ollama.'],
+                  ['What counts as a paired device?', 'Any desktop or mobile companion linked to your workspace via a pairing code. Free includes 1, Basic 3, Pro 10, and Enterprise is unlimited.'],
+                  ['Can I change or cancel anytime?', 'Plans are month-to-month (Enterprise is billed annually per seat). Switch tiers instantly here — downgrades take effect at the end of the current cycle.'],
+                ].map(([q, a]) => (
+                  <div key={q} className="glass-panel p-5 rounded space-y-2">
+                    <h3 className="text-[12px] font-bold text-[var(--text-strong)] uppercase tracking-wide">{q}</h3>
+                    <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">{a}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
