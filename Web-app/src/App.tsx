@@ -1105,6 +1105,34 @@ export default function App() {
               </div>
             </div>
 
+            {/* Kryleos Group callout — draw visitors to the main site */}
+            <a
+              href="https://www.kryleos.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group glass-panel block p-6 rounded border border-[var(--accent-line)] bg-[var(--surface-accent)] animate-fadeIn no-underline"
+            >
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <span className="w-11 h-11 rounded-full bg-[var(--surface-active)] border border-[var(--accent)] flex items-center justify-center shrink-0 shadow-[var(--glow-sm)]">
+                    <Gem size={20} className="text-[var(--accent)]" />
+                  </span>
+                  <div className="text-center sm:text-left">
+                    <h2 className="text-md font-bold text-[var(--text-strong)] uppercase tracking-wider">
+                      Part of the Kryleos Group
+                    </h2>
+                    <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
+                      Forge is one of many apps &amp; services we build. Explore the rest at kryleos.com.
+                    </p>
+                  </div>
+                </div>
+                <span className="matrix-btn matrix-btn-primary px-5 py-2.5 font-bold uppercase rounded flex items-center gap-2 whitespace-nowrap">
+                  Visit Kryleos.com
+                  <ExternalLink size={14} className="transition-transform group-hover:translate-x-0.5" />
+                </span>
+              </div>
+            </a>
+
             {/* CONCEPT CLARITY: Chat Assistant vs Developer Planner */}
             <div className="glass-panel p-6 rounded space-y-4 border border-[var(--accent-line)] bg-[var(--surface-deep)] animate-fadeIn">
               <h2 className="text-md font-bold text-[var(--text-strong)] uppercase tracking-wider text-center border-b border-[var(--line)] pb-2">
