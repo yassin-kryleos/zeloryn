@@ -23,6 +23,7 @@ Kryleos Forge is a desktop AI project execution tool that manages the full **Bui
 - `15-Phase-1-to-10-Implementation-Plan.md` - execution-ready plan, dependencies, tests, milestones, and no-go criteria for phases 1-10.
 - `16-Preview-Deck-and-Workspace-Panes.md` - planned coding workspace preview deck inspired by the best file, browser, terminal, side chat, artifact, and review patterns from modern AI coding tools.
 - `17-Mobile-Companion.md` - full spec for the native iOS/Android mobile companion: platform, sync model, remote execution trigger, screens, tier gating, technical architecture, and V1 acceptance criteria.
+- `18-Codex-Agent-Delegation-Optimization.md` - tactical guide for model tier selection, reasoning intensity, and safe subagent delegation during large engineering projects.
 - `User-Guide.md` - user-facing guide for operating the app.
 - `Project-Brochure.md` - short product brochure/overview for sharing.
 
