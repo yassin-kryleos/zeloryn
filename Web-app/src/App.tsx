@@ -332,8 +332,10 @@ export default function App() {
   // Plan import options modal (replaces native window.confirm)
   const [showImportModal, setShowImportModal] = useState(false);
 
-  // Authentication (mock, local-only demo account)
+  // Authentication — backed by the desktop sync API when reachable,
+  // with a graceful local-only demo fallback when it is not.
   const [authUser, setAuthUser] = useState<AuthUser | null>(readStoredUser);
+  const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem('web_auth_token'));
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [authName, setAuthName] = useState('');
@@ -554,6 +556,11 @@ export default function App() {
     if (authUser) localStorage.setItem('web_auth_user', JSON.stringify(authUser));
     else localStorage.removeItem('web_auth_user');
   }, [authUser]);
+
+  useEffect(() => {
+    if (authToken) localStorage.setItem('web_auth_token', authToken);
+    else localStorage.removeItem('web_auth_token');
+  }, [authToken]);
 
   // Close any open modal/overlay on Escape (a11y)
   useEffect(() => {
@@ -807,7 +814,39 @@ export default function App() {
     setShowCheckoutModal(true);
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const apiBase = () => backendUrl.replace(/\/$/, '');
+
+  // Call the desktop sync API. Throws a TypeError on network/unreachable
+  // (caught by callers to trigger local fallback), or an Error on a 4xx.
+  const backendAuthRequest = async (mode: AuthMode, email: string, password: string): Promise<{ email: string; tier: string; token: string }> => {
+    const res = await fetch(`${apiBase()}/api/auth/${mode === 'signup' ? 'register' : 'login'}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || (mode === 'signup' ? 'Could not create account.' : 'Invalid email or password.'));
+    }
+    return data.user;
+  };
+
+  const finishAuth = (name: string, email: string, synced: boolean) => {
+    setAuthUser({ name, email });
+    setShowAuthModal(false);
+    setAuthError('');
+    setAuthPassword('');
+    setAuthName('');
+    const verb = authMode === 'signup' ? 'Account created' : 'Signed in';
+    pushToast(`${verb} — welcome, ${name}.${synced ? ' Account synced to your desktop workspace.' : ' (local session — desktop offline)'}`, 'success');
+    if (pendingTier) {
+      const tier = pendingTier;
+      setPendingTier(null);
+      openCheckout(tier);
+    }
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const email = authEmail.trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
@@ -823,21 +862,28 @@ export default function App() {
       return;
     }
     const name = authMode === 'signup' ? authName.trim() : email.split('@')[0];
-    setAuthUser({ name, email });
-    setShowAuthModal(false);
     setAuthError('');
-    setAuthPassword('');
-    setAuthName('');
-    pushToast(`${authMode === 'signup' ? 'Account created' : 'Signed in'} — welcome, ${name}.`, 'success');
-    if (pendingTier) {
-      const tier = pendingTier;
-      setPendingTier(null);
-      openCheckout(tier);
+    try {
+      const user = await backendAuthRequest(authMode, email, authPassword);
+      setAuthToken(user.token);
+      setBackendStatus('online');
+      if ((USER_TIERS as string[]).includes(user.tier)) setUserTier(user.tier as UserTier);
+      finishAuth(name, user.email, true);
+    } catch (err) {
+      // Network/unreachable → fall back to a local-only demo session.
+      if (err instanceof TypeError) {
+        setAuthToken(null);
+        finishAuth(name, email, false);
+        return;
+      }
+      // 4xx (bad credentials / duplicate account) → surface the message.
+      setAuthError(err instanceof Error ? err.message : 'Authentication failed.');
     }
   };
 
   const handleLogout = () => {
     setAuthUser(null);
+    setAuthToken(null);
     pushToast('Signed out.', 'info');
   };
 
@@ -846,6 +892,14 @@ export default function App() {
     if (tier === userTier) return;
     if (tier === 'free') {
       setUserTier('free');
+      // Keep the backend account in sync when paired (best-effort).
+      if (authToken) {
+        fetch(`${apiBase()}/api/auth/subscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+          body: JSON.stringify({ tier: 'free' }),
+        }).catch(() => {});
+      }
       pushToast('Switched to the Free plan.', 'success');
       return;
     }
@@ -866,7 +920,18 @@ export default function App() {
     return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
   };
 
-  const handlePay = (e: React.FormEvent) => {
+  const finalizePurchase = (tier: UserTier, synced: boolean) => {
+    setIsProcessingPayment(false);
+    setUserTier(tier);
+    localStorage.setItem('web_purchased_tier', tier);
+    setShowCheckoutModal(false);
+    setCardNumber('');
+    setCardExpiry('');
+    setCardCvc('');
+    pushToast(`Payment successful — ${TIER_LABELS[tier]} plan is now active${synced ? ' and synced to your account' : ''}.`, 'success');
+  };
+
+  const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
     const digits = cardNumber.replace(/\s/g, '');
     if (!cardName.trim()) {
@@ -887,16 +952,29 @@ export default function App() {
     }
     setCheckoutError('');
     setIsProcessingPayment(true);
-    window.setTimeout(() => {
-      setIsProcessingPayment(false);
-      setUserTier(checkoutTier);
-      localStorage.setItem('web_purchased_tier', checkoutTier);
-      setShowCheckoutModal(false);
-      setCardNumber('');
-      setCardExpiry('');
-      setCardCvc('');
-      pushToast(`Payment successful — ${TIER_LABELS[checkoutTier]} plan is now active.`, 'success');
-    }, 1400);
+
+    // When paired with the desktop account, record the subscription server-side.
+    if (authToken) {
+      try {
+        const res = await fetch(`${apiBase()}/api/auth/subscribe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+          body: JSON.stringify({ tier: checkoutTier }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success) {
+          setBackendStatus('online');
+          const tier = (USER_TIERS as string[]).includes(data.user?.tier) ? (data.user.tier as UserTier) : checkoutTier;
+          finalizePurchase(tier, true);
+          return;
+        }
+      } catch {
+        // fall through to local activation
+      }
+    }
+
+    // Local demo activation (no backend, or backend unavailable).
+    window.setTimeout(() => finalizePurchase(checkoutTier, false), 1200);
   };
 
   const handleToggleSync = (checked: boolean) => {
@@ -2683,7 +2761,7 @@ export default function App() {
             </div>
 
             <p className="text-[9px] text-[var(--text-muted)] text-center border-t border-[var(--line)] pt-3 leading-relaxed">
-              Demo account — credentials are stored locally in your browser only. No server authentication is performed.
+              Authenticates against your desktop workspace at <span className="font-mono">{apiBase()}</span> when reachable. If it's offline, a local-only browser session is used instead.
             </p>
           </form>
         </div>
@@ -2753,7 +2831,10 @@ export default function App() {
             )}
 
             <p className="text-[9px] text-[var(--text-muted)] text-center border-t border-[var(--line)] pt-3 leading-relaxed flex items-center justify-center gap-1.5">
-              <ShieldCheck size={11} className="text-[var(--accent)]" /> Mock checkout — no real payment is processed. Use any test card (e.g. 4242 4242 4242 4242).
+              <ShieldCheck size={11} className="text-[var(--accent)]" />
+              {authToken
+                ? <>Linked to your account — your plan syncs to the desktop workspace. Sandbox billing; no real charge. Use a test card (e.g. 4242 4242 4242 4242).</>
+                : <>Local demo checkout — no real payment is processed. Use any test card (e.g. 4242 4242 4242 4242).</>}
             </p>
           </form>
         </div>

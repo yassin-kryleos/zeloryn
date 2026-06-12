@@ -60,6 +60,9 @@ test.describe('Web companion — smoke', () => {
   });
 
   test('logged-out purchase requires sign-in, then completes checkout', async ({ page }) => {
+    // Pin the backend to a closed port so the test deterministically exercises
+    // the local-fallback auth/checkout path regardless of any running desktop backend.
+    await page.addInitScript(() => localStorage.setItem('web_backend_url', 'http://localhost:59999'));
     await page.goto('/');
 
     // Logged out: header shows a Log In affordance.
@@ -91,6 +94,37 @@ test.describe('Web companion — smoke', () => {
     // Payment confirmation toast + active plan reflected in the header.
     await expect(page.getByRole('status').filter({ hasText: /pro plan is now active/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /log out/i })).toBeVisible();
+  });
+
+  test('signs in and purchases against the backend API when reachable', async ({ page }) => {
+    // Mock the desktop sync API so the backend-synced path is exercised deterministically.
+    await page.route('**/api/auth/login', route =>
+      route.fulfill({ json: { success: true, user: { email: 'pro@kryleos.dev', isPremium: false, tier: 'free', token: 'token_test_123' } } }),
+    );
+    await page.route('**/api/auth/subscribe', route =>
+      route.fulfill({ json: { success: true, user: { email: 'pro@kryleos.dev', isPremium: true, tier: 'enterprise', token: 'token_test_123' } } }),
+    );
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /^log in$/i }).click();
+    await page.locator('#auth-email').fill('pro@kryleos.dev');
+    await page.locator('#auth-password').fill('forge123');
+    await page.getByRole('dialog', { name: /sign in/i }).getByRole('button', { name: /sign in/i }).click();
+
+    // Signed-in session reflects the backend account.
+    await expect(page.getByRole('status').filter({ hasText: /synced to your desktop workspace/i })).toBeVisible();
+
+    // Purchase routes through the backend and reflects the returned tier.
+    await page.getByRole('tab', { name: 'Pricing tab' }).click();
+    await page.getByRole('button', { name: /choose enterprise/i }).click();
+    const checkout = page.getByRole('dialog', { name: /checkout/i });
+    await page.locator('#card-name').fill('Test Buyer');
+    await page.locator('#card-number').fill('4242424242424242');
+    await page.locator('#card-expiry').fill('12/28');
+    await page.locator('#card-cvc').fill('123');
+    await checkout.getByRole('button', { name: /pay/i }).click();
+
+    await expect(page.getByRole('status').filter({ hasText: /enterprise plan is now active and synced/i })).toBeVisible();
   });
 
   test('sign-in rejects a too-short password', async ({ page }) => {
