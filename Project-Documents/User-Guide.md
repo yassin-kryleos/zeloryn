@@ -203,7 +203,7 @@ A non-blocking warning appears at model setup if your selected model is below th
 The Kryleos Forge Mobile Companion (native iOS/Android) extends the Build Loop to your phone:
 
 - **Today view** — same 3–5 prioritized tasks as Desktop FLOW. Tap **Execute** to trigger a FORGE run on Desktop.
-- **PLAN** — Build/Ask mode on mobile. Messages sync to Desktop session (Solo Plus+).
+- **PLAN** — Scratchbook ideation on mobile, same as Desktop. Messages sync to Desktop session (Solo Plus+).
 - **Push notifications** — get notified when a FORGE run completes on Desktop.
 
 Execution always runs on Desktop — mobile triggers it, Desktop runs it with full approval gates.

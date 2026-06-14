@@ -16,7 +16,7 @@ The Kryleos Forge Mobile Companion extends the Build Loop to mobile. It is not a
 
 - Mobile queues PLAN messages and execution trigger commands locally when offline or Desktop is unreachable.
 - When the Desktop app is running and online, the relay service delivers queued items automatically.
-- PLAN Build mode messages sync to Desktop and appear in the same session within seconds of Desktop detecting the relay queue.
+- PLAN Scratchbook messages sync to Desktop and appear in the same session within seconds of Desktop detecting the relay queue.
 - Execution triggers queue and fire as soon as Desktop picks them up.
 - Sync direction: Mobile → Desktop (PLAN messages, execute commands). Desktop → Mobile (execution results, trace summaries, FLOW Today updates).
 
@@ -56,10 +56,10 @@ Default landing screen. Mirrors FLOW Today view exactly.
 
 ### PLAN Space
 
-- Input toggles: **Build mode** (default) / **Ask mode** — same segmented control as Desktop.
-- Build mode messages queue locally if offline; sync to Desktop session on connectivity.
-- Ask mode messages are ephemeral — not queued, not synced.
-- Spec accumulates across sessions, same as Desktop.
+- A single **Scratchbook** ideation chat — same as Desktop, no Build/Ask mode toggle. Nothing here updates the plan automatically.
+- Messages queue locally if offline; sync to Desktop session on connectivity.
+- **Summarize & Push** (and the resulting Plan Workspace review) happens on Desktop once the conversation syncs — mobile only queues the conversation.
+- Session history accumulates across sessions, same as Desktop.
 - File `@mentions` are available if the workspace path is known, but file previews require Desktop connectivity.
 
 ### Notifications
@@ -85,7 +85,7 @@ Default landing screen. Mirrors FLOW Today view exactly.
 | Feature | Free | Solo | Solo Plus | Founder+ |
 |---|:---:|:---:|:---:|:---:|
 | Today view (read-only) | Yes | Yes | Yes | Yes |
-| PLAN Build/Ask mode | Yes | Yes | Yes | Yes |
+| PLAN Scratchbook | Yes | Yes | Yes | Yes |
 | Execute trigger → Desktop | Yes | Yes | Yes | Yes |
 | PLAN sync to Desktop | No | No | Yes | Yes |
 | Execution result push notifications | No | Yes | Yes | Yes |
@@ -129,6 +129,6 @@ The Desktop Forge app adds a lightweight relay polling loop (runs in the main pr
 - Tapping Execute on mobile queues the item and it appears in FORGE on Desktop within 10 seconds (when Desktop is online).
 - Desktop executes with full command approval gate intact — no bypassing safety controls.
 - Execution result push notification arrives on mobile within 30 seconds of Desktop completing.
-- PLAN Build mode message typed on mobile appears in Desktop PLAN session within 10 seconds (Solo Plus+).
+- PLAN Scratchbook message typed on mobile appears in Desktop PLAN session within 10 seconds (Solo Plus+).
 - App functions in offline mode: Today view shows last-synced state; PLAN messages queue locally and sync on reconnect.
 - All V1 out-of-scope features are absent or labeled "Coming soon."

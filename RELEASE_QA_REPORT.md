@@ -1,3 +1,7 @@
+# Release QA Report — Kryleos Forge (SUPERSEDED)
+
+> **⚠️ Superseded.** This report's 9.5/10 "release-ready" verdict predates the hardened `qa/scripts/release-score.mjs` (which scores tests by pass/fail exit code rather than file presence, and adds phase-gate honesty assertions) and the Phase 2 Honesty Pass. It is kept for historical record only — **do not cite the 9.5/10 score**. The current readiness gate is the hardened scorer (target ≥ 8.5) plus the manual Definition-of-Release-Ready checklist in `IMPLEMENTATION_PLAN.md`. Until that gate is green and the remaining Phase 2-5 work lands, the product's verdict is **🟡 beta / invited-testers only** — not a public release.
+
 # Release QA Report — Kryleos Forge
 
 **Date:** 2026-06-10 · **Branch:** `qa/full-test-audit` · **Release target:** v1.0.0

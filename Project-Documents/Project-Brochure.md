@@ -11,7 +11,7 @@ Define what you're building. Track it on a Kanban board. Execute with AI agents.
 ## The Build Loop: PLAN → CREW → FLOW → FORGE
 
 ### PLAN
-Your AI planning workspace. Build mode accumulates your project spec across sessions. Ask mode handles ephemeral queries. Every plan item gets structured acceptance criteria — verifiable conditions that define what "done" actually means.
+Your AI planning workspace. Chat freely in the Scratchbook to explore ideas — nothing touches your plan until you hit Summarize & Push. Confirmed items land in the Plan Workspace with structured acceptance criteria — verifiable conditions that define what "done" actually means.
 
 ### CREW
 Specialist agent review before you commit to execution. Technical Reviewer, Scope Guard, and Risk Identifier evaluate your plan and produce a structured output you push to your board when ready.
@@ -68,7 +68,7 @@ Plan your product, not just your files. Forge manages multi-repo execution, trac
 
 ## Mobile Companion (Solo Plus+)
 
-Native iOS and Android. Today view mirrors your FLOW board. Trigger FORGE execution from your phone — Desktop runs it with full approval gates. PLAN in Build or Ask mode on the go; messages sync to your Desktop session.
+Native iOS and Android. Today view mirrors your FLOW board. Trigger FORGE execution from your phone — Desktop runs it with full approval gates. Ideate in the PLAN Scratchbook on the go; messages sync to your Desktop session.
 
 ---
 

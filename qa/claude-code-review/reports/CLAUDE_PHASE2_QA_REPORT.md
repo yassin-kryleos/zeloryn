@@ -37,7 +37,7 @@
 
 ## 2. Live Web-app UI/UX walkthrough (evidence)
 
-All screenshots captured from a live Vite dev server (`localhost:5174`), **not mockups**.
+All screenshots in this walkthrough were captured from a live Vite dev server (`localhost:5174`), **not mockups**. (This is distinct from the two pre-existing PNGs in `qa/screenshots/`, which the verification table below correctly flags as mockups, not live captures.)
 
 ### 2.1 Overview tab
 - Hero section renders: "KRYLEOS FORGE // AUTONOMOUS DEVELOPER PLANNER"

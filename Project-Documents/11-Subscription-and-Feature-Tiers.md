@@ -96,7 +96,7 @@ Web and Mobile companion surfaces must use the same maturity language as Desktop
 
 ### Free Tier
 
-Free is for trust-building and evaluation. It provides full access to all five Build Loop spaces (PLAN, CREW, FLOW, FORGE, Chat) with no artificial item caps. Local-first, BYOK model support, Ollama, community agent packs, and all three CREW agent personas are available. The PLAN→CREW handoff on Free uses structured .md export and manual copy-paste — no automatic sync. Core safety features (command approval, graceful abort, Zero Egress Mode) are available on Free. Execution tracing, drift detection, and cross-device sync are not available.
+Free is for trust-building and evaluation. It provides full access to all four Build Loop spaces (PLAN, CREW, FLOW, FORGE) with no artificial item caps. Local-first, BYOK model support, Ollama, community agent packs, and all three CREW agent personas are available. The PLAN→CREW handoff on Free uses structured .md export and manual copy-paste — no automatic sync. Core safety features (command approval, graceful abort, Zero Egress Mode) are available on Free. Execution tracing, drift detection, and cross-device sync are not available.
 
 ### Solo Plan
 
