@@ -6,7 +6,7 @@ import {
   LogIn, LogOut, User, CreditCard, Lock, ExternalLink
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
-import { TIER_LABELS, TIER_PRICES, type TierId } from './pricing.generated';
+import { TIER_LABELS, type TierId } from './pricing.generated';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -351,16 +351,8 @@ export default function App() {
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isNavOpen, setIsNavOpen] = useState(false);
 
-  // Checkout (mock payment) flow
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [checkoutTier, setCheckoutTier] = useState<UserTier>('solo_plus');
+  // Checkout (Stripe / Razorpay redirect) flow
   const [pendingTier, setPendingTier] = useState<UserTier | null>(null);
-  const [cardName, setCardName] = useState('');
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvc, setCardCvc] = useState('');
-  const [checkoutError, setCheckoutError] = useState('');
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // Settings state (Stored locally in localStorage)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('web_api_key') || '');
@@ -582,7 +574,6 @@ export default function App() {
       setShowSemanticLock(false);
       setShowRbacLock(false);
       setShowAuthModal(false);
-      setShowCheckoutModal(false);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -818,12 +809,6 @@ export default function App() {
     setShowAuthModal(true);
   };
 
-  const openCheckout = (tier: UserTier) => {
-    setCheckoutTier(tier);
-    setCheckoutError('');
-    setShowCheckoutModal(true);
-  };
-
   const apiBase = () => backendUrl.replace(/\/$/, '');
 
   // Call the desktop sync API. Throws a TypeError on network/unreachable
@@ -841,7 +826,7 @@ export default function App() {
     return data.user;
   };
 
-  const finishAuth = (name: string, email: string, synced: boolean) => {
+  const finishAuth = (name: string, email: string, synced: boolean, token: string | null) => {
     setAuthUser({ name, email });
     setShowAuthModal(false);
     setAuthError('');
@@ -852,7 +837,8 @@ export default function App() {
     if (pendingTier) {
       const tier = pendingTier;
       setPendingTier(null);
-      openCheckout(tier);
+      // authToken state may not have committed yet — pass the fresh token directly.
+      handleSubscribe(tier, token);
     }
   };
 
@@ -880,12 +866,12 @@ export default function App() {
       setAuthToken(user.token);
       setBackendStatus('online');
       if ((USER_TIERS as string[]).includes(user.tier)) setUserTier(user.tier as UserTier);
-      finishAuth(name, user.email, true);
+      finishAuth(name, user.email, true, user.token);
     } catch (err) {
       // Network/unreachable → fall back to a local-only demo session.
       if (err instanceof TypeError) {
         setAuthToken(null);
-        finishAuth(name, email, false);
+        finishAuth(name, email, false, null);
         return;
       }
       // 4xx (bad credentials / duplicate account) → surface the message.
@@ -923,72 +909,120 @@ export default function App() {
       openAuth('login');
       return;
     }
-    openCheckout(tier);
+    handleSubscribe(tier);
   };
 
-  const formatCardNumber = (value: string) =>
-    value.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+  interface RazorpayCheckoutOptions {
+    key: string;
+    order_id: string;
+    amount: number;
+    currency: string;
+    name: string;
+    description: string;
+    prefill?: { email?: string };
+    handler?: () => void;
+    modal?: { ondismiss?: () => void };
+  }
+  interface RazorpayCheckoutInstance {
+    open: () => void;
+  }
+  type RazorpayWindow = Window & {
+    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckoutInstance;
+  };
+  const razorpayWindow = window as unknown as RazorpayWindow;
 
-  const formatExpiry = (value: string) => {
-    const digits = value.replace(/\D/g, '').slice(0, 4);
-    return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+  // Region-based payment routing: India-locale users pay via Razorpay (INR),
+  // everyone else via Stripe (USD). Defaults to Stripe if locale is undetermined.
+  const isIndianLocale = (): boolean => {
+    try {
+      const locale = Intl.NumberFormat().resolvedOptions().locale;
+      return locale === 'en-IN' || locale === 'hi-IN' || locale.toLowerCase().endsWith('-in');
+    } catch {
+      return false;
+    }
   };
 
-  const finalizePurchase = (tier: UserTier, synced: boolean) => {
-    setIsProcessingPayment(false);
-    setUserTier(tier);
-    localStorage.setItem('web_purchased_tier', tier);
-    setShowCheckoutModal(false);
-    setCardNumber('');
-    setCardExpiry('');
-    setCardCvc('');
-    pushToast(`Payment successful — ${TIER_LABELS[tier]} plan is now active${synced ? ' and synced to your account' : ''}.`, 'success');
+  const loadRazorpayCheckoutScript = (): Promise<boolean> => {
+    if (razorpayWindow.Razorpay) return Promise.resolve(true);
+    return new Promise(resolve => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
   };
 
-  const handlePay = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const digits = cardNumber.replace(/\s/g, '');
-    if (!cardName.trim()) {
-      setCheckoutError('Enter the cardholder name.');
+  const handleSubscribe = async (tier: UserTier, tokenOverride?: string | null) => {
+    const token = tokenOverride ?? authToken;
+    if (!token) {
+      pushToast('Connect to your synced desktop account to upgrade.', 'info');
       return;
     }
-    if (digits.length < 15) {
-      setCheckoutError('Enter a valid card number.');
-      return;
+    if (isIndianLocale()) {
+      return handleSubscribeRazorpay(tier, token);
     }
-    if (!/^\d{2}\/\d{2}$/.test(cardExpiry)) {
-      setCheckoutError('Expiry must be in MM/YY format.');
-      return;
-    }
-    if (cardCvc.replace(/\D/g, '').length < 3) {
-      setCheckoutError('Enter a valid 3-4 digit CVC.');
-      return;
-    }
-    setCheckoutError('');
-    setIsProcessingPayment(true);
-
-    // When paired with the desktop account, record the subscription server-side.
-    if (authToken) {
-      try {
-        const res = await fetch(`${apiBase()}/api/auth/subscribe`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-          body: JSON.stringify({ tier: checkoutTier }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.success) {
-          setBackendStatus('online');
-          const tier = (USER_TIERS as string[]).includes(data.user?.tier) ? (data.user.tier as UserTier) : checkoutTier;
-          finalizePurchase(tier, true);
-          return;
-        }
-      } catch {
-        // fall through to local activation
+    try {
+      const res = await fetch(`${apiBase()}/api/billing/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ tier }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.url) {
+        setBackendStatus('online');
+        window.open(data.url, '_blank');
+        pushToast(`Redirecting to Stripe checkout for the ${TIER_LABELS[tier]} plan…`, 'info');
+      } else {
+        pushToast(`Upgrade failed: ${data.error || 'No checkout URL returned'}`, 'error');
       }
+    } catch (err) {
+      pushToast(`Upgrade error: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
+  };
 
-    // Local demo activation (no backend, or backend unavailable).
-    window.setTimeout(() => finalizePurchase(checkoutTier, false), 1200);
+  const handleSubscribeRazorpay = async (tier: UserTier, tokenOverride?: string | null) => {
+    const token = tokenOverride ?? authToken;
+    if (!token) return;
+    try {
+      const res = await fetch(`${apiBase()}/api/billing/razorpay/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ tier }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        pushToast(`Upgrade failed: ${data.error || 'Could not create Razorpay order'}`, 'error');
+        return;
+      }
+      setBackendStatus('online');
+
+      const loaded = await loadRazorpayCheckoutScript();
+      if (!loaded || !razorpayWindow.Razorpay) {
+        pushToast('Could not load Razorpay checkout. Check your connection and try again.', 'error');
+        return;
+      }
+
+      const checkout = new razorpayWindow.Razorpay({
+        key: data.keyId,
+        order_id: data.orderId,
+        amount: data.amount,
+        currency: data.currency,
+        name: 'Kryleos Forge',
+        description: `Upgrade to ${TIER_LABELS[tier]} plan`,
+        prefill: { email: authUser?.email },
+        handler: () => {
+          pushToast(`Payment received — ${TIER_LABELS[tier]} plan will activate shortly.`, 'success');
+        },
+        modal: {
+          ondismiss: () => pushToast('Checkout closed.', 'info'),
+        },
+      });
+      checkout.open();
+    } catch (err) {
+      pushToast(`Upgrade error: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
   };
 
   const handleToggleSync = (checked: boolean) => {
@@ -2877,78 +2911,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Checkout dialog (mock payment) */}
-      {showCheckoutModal && (
-        <div
-          className="fixed inset-0 bg-[var(--backdrop)] flex items-center justify-center p-4 backdrop-blur-sm z-50"
-          onClick={() => !isProcessingPayment && setShowCheckoutModal(false)}
-        >
-          <form
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="checkout-modal-title"
-            onSubmit={handlePay}
-            className="forge-panel w-full max-w-md p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2 text-[var(--accent)] border-b border-[var(--line)] pb-3">
-              <CreditCard size={18} />
-              <h3 id="checkout-modal-title" className="text-[var(--text-strong)] font-bold text-sm uppercase tracking-wider">Checkout</h3>
-            </div>
-
-            {/* Order summary */}
-            <div className="flex items-center justify-between bg-[var(--surface-accent)] border border-[var(--line)] rounded p-3">
-              <div className="flex flex-col">
-                <span className="text-[10px] uppercase text-[var(--accent-dim)] font-bold tracking-wider">{TIER_LABELS[checkoutTier]} Plan</span>
-                <span className="text-[9px] text-[var(--text-muted)]">Billed monthly · cancel anytime</span>
-              </div>
-              <span className="text-xl font-extrabold text-[var(--text-strong)]">${(TIER_PRICES[checkoutTier] ?? 0).toFixed(2)}<span className="text-[10px] font-normal text-[var(--accent-dim)]">/mo</span></span>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="card-name" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Cardholder Name</label>
-              <input id="card-name" type="text" value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Name on card" className="forge-input" autoComplete="cc-name" />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="card-number" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Card Number</label>
-              <input id="card-number" type="text" inputMode="numeric" value={cardNumber} onChange={e => setCardNumber(formatCardNumber(e.target.value))} placeholder="4242 4242 4242 4242" className="forge-input" autoComplete="cc-number" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="card-expiry" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Expiry</label>
-                <input id="card-expiry" type="text" inputMode="numeric" value={cardExpiry} onChange={e => setCardExpiry(formatExpiry(e.target.value))} placeholder="MM/YY" className="forge-input" autoComplete="cc-exp" />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="card-cvc" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">CVC</label>
-                <input id="card-cvc" type="text" inputMode="numeric" value={cardCvc} onChange={e => setCardCvc(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="123" className="forge-input" autoComplete="cc-csc" />
-              </div>
-            </div>
-
-            {checkoutError && <div role="alert" className="text-[10px] text-[var(--danger)] font-bold">{checkoutError}</div>}
-
-            <button type="submit" disabled={isProcessingPayment} className="forge-btn forge-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
-              {isProcessingPayment
-                ? <><RefreshCw size={14} className="animate-spin" /> Processing…</>
-                : <><Lock size={13} /> Pay ${TIER_PRICES[checkoutTier].toFixed(2)}</>}
-            </button>
-
-            {!isProcessingPayment && (
-              <button type="button" onClick={() => setShowCheckoutModal(false)} className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-strong)] uppercase font-bold">
-                Cancel
-              </button>
-            )}
-
-            <p className="text-[9px] text-[var(--text-muted)] text-center border-t border-[var(--line)] pt-3 leading-relaxed flex items-center justify-center gap-1.5">
-              <ShieldCheck size={11} className="text-[var(--accent)]" />
-              {authToken
-                ? <>Linked to your account — your plan syncs to the desktop workspace. Sandbox billing; no real charge. Use a test card (e.g. 4242 4242 4242 4242).</>
-                : <>Local demo checkout — no real payment is processed. Use any test card (e.g. 4242 4242 4242 4242).</>}
-            </p>
-          </form>
-        </div>
-      )}
 
       {/* Toast notifications */}
       <div className="toast-stack" aria-live="polite" aria-atomic="false">

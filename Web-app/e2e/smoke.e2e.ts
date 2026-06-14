@@ -47,7 +47,7 @@ test.describe('Web companion — smoke', () => {
 
   test('Import Plan opens a themed dialog and Escape closes it', async ({ page }) => {
     // Paid tier so Import opens the options dialog (free tier shows the upsell).
-    await page.addInitScript(() => localStorage.setItem('web_user_tier', 'pro'));
+    await page.addInitScript(() => localStorage.setItem('web_user_tier', 'solo'));
     await page.goto('/');
     await page.getByRole('tab', { name: 'Planning tab' }).click();
     await page.getByRole('button', { name: /import plan/i }).click();
@@ -59,10 +59,14 @@ test.describe('Web companion — smoke', () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test('logged-out purchase requires sign-in, then completes checkout', async ({ page }) => {
-    // Pin the backend to a closed port so the test deterministically exercises
-    // the local-fallback auth/checkout path regardless of any running desktop backend.
-    await page.addInitScript(() => localStorage.setItem('web_backend_url', 'http://localhost:59999'));
+  test('logged-out purchase requires sign-in, then redirects to Stripe checkout', async ({ page }) => {
+    await page.route('**/api/auth/login', route =>
+      route.fulfill({ json: { success: true, user: { email: 'buyer@example.com', isPremium: false, tier: 'free', token: 'token_test_456' } } }),
+    );
+    await page.route('**/api/billing/create-checkout-session', route =>
+      route.fulfill({ json: { success: true, url: 'https://checkout.stripe.com/test-session-solo' } }),
+    );
+
     await page.goto('/');
 
     // Logged out: header shows a Log In affordance.
@@ -70,39 +74,28 @@ test.describe('Web companion — smoke', () => {
 
     // Attempting to buy a paid plan forces authentication first.
     await page.getByRole('tab', { name: 'Pricing tab' }).click();
-    await page.getByRole('button', { name: /choose pro/i }).click();
+    await page.getByRole('button', { name: /^choose solo$/i }).click();
 
     const authDialog = page.getByRole('dialog', { name: /sign in/i });
     await expect(authDialog).toBeVisible();
-    await expect(authDialog).toContainText(/purchasing the .*pro.* plan/i);
+    await expect(authDialog).toContainText(/purchasing the .*solo.* plan/i);
 
     await page.locator('#auth-email').fill('buyer@example.com');
     await page.locator('#auth-password').fill('forge123');
     await authDialog.getByRole('button', { name: /sign in/i }).click();
 
-    // Checkout opens automatically for the pending plan.
-    const checkout = page.getByRole('dialog', { name: /checkout/i });
-    await expect(checkout).toBeVisible();
-    await expect(checkout).toContainText('$9.99');
-
-    await page.locator('#card-name').fill('Test Buyer');
-    await page.locator('#card-number').fill('4242424242424242');
-    await page.locator('#card-expiry').fill('12/28');
-    await page.locator('#card-cvc').fill('123');
-    await checkout.getByRole('button', { name: /pay \$9\.99/i }).click();
-
-    // Payment confirmation toast + active plan reflected in the header.
-    await expect(page.getByRole('status').filter({ hasText: /pro plan is now active/i })).toBeVisible();
+    // Signing in resumes the pending purchase, which redirects to Stripe checkout.
+    await expect(page.getByRole('status').filter({ hasText: /redirecting to stripe checkout for the solo plan/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /log out/i })).toBeVisible();
   });
 
-  test('signs in and purchases against the backend API when reachable', async ({ page }) => {
+  test('signed-in purchase redirects to Stripe checkout for the chosen plan', async ({ page }) => {
     // Mock the desktop sync API so the backend-synced path is exercised deterministically.
     await page.route('**/api/auth/login', route =>
       route.fulfill({ json: { success: true, user: { email: 'pro@kryleos.dev', isPremium: false, tier: 'free', token: 'token_test_123' } } }),
     );
-    await page.route('**/api/auth/subscribe', route =>
-      route.fulfill({ json: { success: true, user: { email: 'pro@kryleos.dev', isPremium: true, tier: 'enterprise', token: 'token_test_123' } } }),
+    await page.route('**/api/billing/create-checkout-session', route =>
+      route.fulfill({ json: { success: true, url: 'https://checkout.stripe.com/test-session-founder' } }),
     );
 
     await page.goto('/');
@@ -114,17 +107,11 @@ test.describe('Web companion — smoke', () => {
     // Signed-in session reflects the backend account.
     await expect(page.getByRole('status').filter({ hasText: /synced to your desktop workspace/i })).toBeVisible();
 
-    // Purchase routes through the backend and reflects the returned tier.
+    // Purchase routes through the backend checkout-session endpoint.
     await page.getByRole('tab', { name: 'Pricing tab' }).click();
-    await page.getByRole('button', { name: /choose enterprise/i }).click();
-    const checkout = page.getByRole('dialog', { name: /checkout/i });
-    await page.locator('#card-name').fill('Test Buyer');
-    await page.locator('#card-number').fill('4242424242424242');
-    await page.locator('#card-expiry').fill('12/28');
-    await page.locator('#card-cvc').fill('123');
-    await checkout.getByRole('button', { name: /pay/i }).click();
+    await page.getByRole('button', { name: /^choose founder$/i }).click();
 
-    await expect(page.getByRole('status').filter({ hasText: /enterprise plan is now active and synced/i })).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /redirecting to stripe checkout for the founder plan/i })).toBeVisible();
   });
 
   test('sign-in rejects a too-short password', async ({ page }) => {
