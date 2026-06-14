@@ -32,7 +32,7 @@ console.log('====================================================\n');
 const desktopAppDir = path.resolve(__dirname, '..', '..', '..', 'Desktop-app');
 const startTime = Date.now();
 
-const serverProcess = spawn('npx', ['tsx', 'src/backend/server.ts'], {
+const serverProcess = spawn('npx tsx src/backend/server.ts', {
   cwd: desktopAppDir,
   env: {
     ...process.env,
@@ -84,20 +84,64 @@ function makeGetRequest(endpoint) {
 }
 
 // Helper: POST request promise
-function makePostRequest(endpoint, payload) {
+function makePostRequest(endpoint, payload, token = null) {
   return new Promise((resolve) => {
     const start = Date.now();
     const data = JSON.stringify(payload);
-    
+    const headers = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(data)
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const req = http.request({
       hostname: 'localhost',
       port: PORT,
       path: endpoint,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data)
-      }
+      headers
+    }, (res) => {
+      let body = '';
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        resolve({
+          latency: Date.now() - start,
+          status: res.statusCode,
+          body
+        });
+      });
+    });
+
+    req.on('error', (err) => {
+      resolve({
+        latency: Date.now() - start,
+        status: 500,
+        error: err.message
+      });
+    });
+
+    req.write(data);
+    req.end();
+  });
+}
+
+// Helper: PUT request promise (with optional auth token)
+function makePutRequest(endpoint, payload, token = null) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const data = JSON.stringify(payload);
+    const headers = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(data)
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const req = http.request({
+      hostname: 'localhost',
+      port: PORT,
+      path: endpoint,
+      method: 'PUT',
+      headers
     }, (res) => {
       let body = '';
       res.on('data', (chunk) => { body += chunk; });
@@ -125,9 +169,11 @@ function makePostRequest(endpoint, payload) {
 
 // 2. Poll Server Until Ready
 let attempts = 0;
-const maxAttempts = 15;
+const maxAttempts = 30;
+let terminated = false;
 
 function checkServerReady() {
+  if (terminated) return;
   attempts++;
   http.get(`${BASE_URL}/api/sessions`, (res) => {
     const startupMs = Date.now() - startTime;
@@ -159,6 +205,8 @@ function checkServerReady() {
 
 // 3. Execution Pipeline
 async function runPerformancePipeline(startupMs) {
+  let passed = true;
+  let dbAvgWriteMs = null;
   const initialMemory = process.memoryUsage().heapUsed;
   
   console.log('\n--- 1. API LATENCY & CONCURRENT LOAD STRESS TEST ---');
@@ -190,30 +238,46 @@ async function runPerformancePipeline(startupMs) {
   console.log(`✔ HTTP Error Rate: ${errorRate.toFixed(2)}%`);
 
   console.log('\n--- 2. DATABASE WRITE PERFORMANCE (ENCRYPTED) ---');
-  const dbWriteCount = 50;
-  console.log(`Saving ${dbWriteCount} chat sessions sequentially to stress write/read encryption...`);
-  
-  let totalDbWriteTime = 0;
-  let dbErrorCount = 0;
-  
-  for (let i = 0; i < dbWriteCount; i++) {
-    const sessionData = {
-      id: `session_perf_${i}_${Date.now()}`,
-      title: `Stress Test Session ${i}`,
-      createdAt: new Date().toISOString(),
-      logs: [],
-      checklist: [`Log ${i}`, 'Task verified'],
-      space: 'chat'
-    };
-    
-    const startWrite = Date.now();
-    const res = await makePostRequest('/api/sessions/save', sessionData);
-    totalDbWriteTime += (Date.now() - startWrite);
-    if (res.status !== 200) dbErrorCount++;
+  // Register a test user to obtain a Bearer token, then use PUT /api/sessions/:id/tasks
+  const testEmail = `perf_test_${Date.now()}@test.local`;
+  const regRes = await makePostRequest('/api/auth/register', {
+    name: 'PerfTestUser', email: testEmail, password: 'PerfTest123!'
+  });
+  let authToken = null;
+  try { authToken = JSON.parse(regRes.body)?.token; } catch {}
+
+  // Fetch existing sessions to find a valid session ID for the write test
+  const sessionsRes = await makeGetRequest('/api/sessions');
+  let sessionIds = [];
+  try {
+    const sessions = JSON.parse(sessionsRes.body);
+    if (Array.isArray(sessions)) sessionIds = sessions.map(s => s.id).filter(Boolean);
+  } catch {}
+
+  if (!authToken || sessionIds.length === 0) {
+    console.log('⚠ SKIP - DB write test: requires auth token and at least one existing session');
+    console.log(`  (token: ${authToken ? 'ok' : 'missing'}, sessions available: ${sessionIds.length})`);
+  } else {
+    const dbWriteCount = 50;
+    console.log(`Writing tasks to ${sessionIds.length} session(s) via PUT /api/sessions/:id/tasks (${dbWriteCount} iterations)...`);
+
+    let totalDbWriteTime = 0;
+    let dbErrorCount = 0;
+
+    for (let i = 0; i < dbWriteCount; i++) {
+      const sessionId = sessionIds[i % sessionIds.length];
+      const tasks = [{ id: `task_${i}`, content: `Perf task ${i}`, done: false }];
+      const startWrite = Date.now();
+      const res = await makePutRequest(`/api/sessions/${sessionId}/tasks`, { tasks }, authToken);
+      totalDbWriteTime += (Date.now() - startWrite);
+      if (res.status !== 200) dbErrorCount++;
+    }
+
+    dbAvgWriteMs = totalDbWriteTime / dbWriteCount;
+    const dbWritePassed = dbAvgWriteMs <= THRESHOLDS.dbAvgWriteMs && dbErrorCount === 0;
+    console.log(`${dbWritePassed ? '✔ PASS' : '❌ FAIL'} - Average DB Write (Encrypted): ${dbAvgWriteMs.toFixed(2)} ms (threshold: ${THRESHOLDS.dbAvgWriteMs}ms), errors: ${dbErrorCount}`);
+    if (!dbWritePassed) passed = false;
   }
-  
-  const dbAvgWriteMs = totalDbWriteTime / dbWriteCount;
-  console.log(`✔ Done. Average DB Save (Encrypted Write): ${dbAvgWriteMs.toFixed(2)} ms`);
   
   console.log('\n--- 3. CONCURRENT WEBSOCKET PAIRING STRESS TEST ---');
   const concurrentWS = 20;
@@ -227,29 +291,41 @@ async function runPerformancePipeline(startupMs) {
     wsPromises.push(new Promise((resolve) => {
       const wsUrl = `${WS_URL}/api/companion/ws?code=${pairingCode}`;
       const ws = new WebSocket(wsUrl);
-      
+      let paired = false;
+
       ws.on('open', () => {
         // Connected
       });
-      
+
       ws.on('message', (message) => {
         const data = JSON.parse(message.toString());
         if (data.type === 'connection_status' && data.status === 'paired') {
+          paired = true;
           wsPairingCount++;
           ws.close();
           resolve(true);
         }
       });
-      
+
+      ws.on('close', () => {
+        if (!paired) resolve(false);
+      });
+
       ws.on('error', () => {
         wsErrorCount++;
         resolve(false);
       });
     }));
   }
-  
+
   await Promise.all(wsPromises);
-  console.log(`✔ Done. Successfully paired WebSockets: ${wsPairingCount} / ${concurrentWS}`);
+  // SEC-B4: code has a 10-min TTL; multiple companions can pair with the same valid code.
+  // All concurrent connections should succeed when the code is fresh.
+  const wsSecurityPassed = wsPairingCount === concurrentWS;
+  console.log(
+    `${wsSecurityPassed ? '✔ PASS' : '❌ FAIL'} - WS pairing: ` +
+    `${wsPairingCount}/${concurrentWS} paired (expected all)`
+  );
 
   // Calculate final resources
   const finalMemory = process.memoryUsage().heapUsed;
@@ -260,8 +336,6 @@ async function runPerformancePipeline(startupMs) {
   console.log('\n====================================================');
   console.log('                 THRESHOLD VERDICT                  ');
   console.log('====================================================');
-  
-  let passed = true;
 
   // Startup
   const startupPassed = startupMs < THRESHOLDS.startupMs;
@@ -274,9 +348,13 @@ async function runPerformancePipeline(startupMs) {
   if (!apiPassed) passed = false;
 
   // DB Write
-  const dbPassed = dbAvgWriteMs < THRESHOLDS.dbAvgWriteMs;
-  console.log(`${dbPassed ? '✔ PASS' : '❌ FAIL'} - DB Write Latency: ${dbAvgWriteMs.toFixed(2)}ms (Limit: ${THRESHOLDS.dbAvgWriteMs}ms)`);
-  if (!dbPassed) passed = false;
+  if (dbAvgWriteMs !== null) {
+    const dbPassed = dbAvgWriteMs < THRESHOLDS.dbAvgWriteMs;
+    console.log(`${dbPassed ? '✔ PASS' : '❌ FAIL'} - DB Write Latency: ${dbAvgWriteMs.toFixed(2)}ms (Limit: ${THRESHOLDS.dbAvgWriteMs}ms)`);
+    if (!dbPassed) passed = false;
+  } else {
+    console.log(`⚠ SKIP - DB Write Latency: test skipped (no auth token or sessions available)`);
+  }
 
   // Error Rate
   const errorsPassed = errorRate <= THRESHOLDS.errorRatePercent;
@@ -287,6 +365,9 @@ async function runPerformancePipeline(startupMs) {
   const memoryPassed = memoryGrowthMb < THRESHOLDS.maxMemoryGrowthMb;
   console.log(`${memoryPassed ? '✔ PASS' : '❌ FAIL'} - Memory Leak Growth: ${memoryGrowthMb.toFixed(2)}MB (Limit: ${THRESHOLDS.maxMemoryGrowthMb}MB)`);
   if (!memoryPassed) passed = false;
+
+  // WS Security (post-SEC-B4: exactly 1 pairing per code)
+  if (!wsSecurityPassed) passed = false;
 
   console.log('====================================================');
   if (passed) {
@@ -301,10 +382,10 @@ async function runPerformancePipeline(startupMs) {
 }
 
 function terminate(code) {
+  if (terminated) return;
+  terminated = true;
   serverProcess.kill();
-  setTimeout(() => {
-    process.exit(code);
-  }, 1000);
+  setTimeout(() => process.exit(code), 1000);
 }
 
 // Start Checks

@@ -6,16 +6,16 @@
   --font-mono: 'JetBrains Mono', 'Share Tech Mono', monospace;
 
   /* ============ Forge Dark Theme (default) ============ */
-  --matrix-bg: #030712;
-  --matrix-panel-bg: rgba(11, 15, 26, 0.85);
-  --matrix-neon: #34d399;
-  --matrix-dim: #059669;
-  --matrix-dark: #1f2937;
-  --matrix-very-dark: #0b1329;
-  --matrix-text: #f3f4f6;
-  --matrix-red: #ef4444;
-  --matrix-purple: #a78bfa;
-  --matrix-purple-glow: rgba(139, 92, 246, 0.2);
+  --forge-bg: #030712;
+  --forge-panel-bg: rgba(11, 15, 26, 0.85);
+  --forge-neon: #34d399;
+  --forge-dim: #059669;
+  --forge-dark: #1f2937;
+  --forge-very-dark: #0b1329;
+  --forge-text: #f3f4f6;
+  --forge-red: #ef4444;
+  --forge-purple: #a78bfa;
+  --forge-purple-glow: rgba(139, 92, 246, 0.2);
   --border-color: rgba(52, 211, 153, 0.15);
   --glow-shadow: 0 0 20px rgba(52, 211, 153, 0.25);
   --accent-glow: rgba(52, 211, 153, 0.1);
@@ -57,18 +57,18 @@
   --glow-md: 0 0 12px rgba(52, 211, 153, 0.4);
 }
 
-body.theme-matrix {
+body.theme-forge-legacy {
   /* ============ Classic Terminal Green ============ */
-  --matrix-bg: #010602;
-  --matrix-panel-bg: rgba(2, 12, 4, 0.85);
-  --matrix-neon: #39ff14;
-  --matrix-dim: #00aa44;
-  --matrix-dark: #003311;
-  --matrix-very-dark: #001103;
-  --matrix-text: #d1ffd6;
-  --matrix-red: #ff3333;
-  --matrix-purple: #bb66ff;
-  --matrix-purple-glow: rgba(187, 102, 255, 0.25);
+  --forge-bg: #010602;
+  --forge-panel-bg: rgba(2, 12, 4, 0.85);
+  --forge-neon: #39ff14;
+  --forge-dim: #00aa44;
+  --forge-dark: #003311;
+  --forge-very-dark: #001103;
+  --forge-text: #d1ffd6;
+  --forge-red: #ff3333;
+  --forge-purple: #bb66ff;
+  --forge-purple-glow: rgba(187, 102, 255, 0.25);
   --border-color: rgba(57, 255, 20, 0.2);
   --glow-shadow: 0 0 25px rgba(57, 255, 20, 0.35);
   --accent-glow: rgba(57, 255, 20, 0.1);
@@ -111,16 +111,16 @@ body.theme-matrix {
 
 body.theme-light {
   /* ============ Futuristic clean light ============ */
-  --matrix-bg: #f8fafc;
-  --matrix-panel-bg: rgba(255, 255, 255, 0.85);
-  --matrix-neon: #1d4ed8;
-  --matrix-dim: #1e40af;
-  --matrix-dark: #e2e8f0;
-  --matrix-very-dark: #f1f5f9;
-  --matrix-text: #0f172a;
-  --matrix-red: #dc2626;
-  --matrix-purple: #6d28d9;
-  --matrix-purple-glow: rgba(124, 58, 237, 0.15);
+  --forge-bg: #f8fafc;
+  --forge-panel-bg: rgba(255, 255, 255, 0.85);
+  --forge-neon: #1d4ed8;
+  --forge-dim: #1e40af;
+  --forge-dark: #e2e8f0;
+  --forge-very-dark: #f1f5f9;
+  --forge-text: #0f172a;
+  --forge-red: #dc2626;
+  --forge-purple: #6d28d9;
+  --forge-purple-glow: rgba(124, 58, 237, 0.15);
   --border-color: rgba(37, 99, 235, 0.18);
   --glow-shadow: 0 0 15px rgba(37, 99, 235, 0.15);
   --accent-glow: rgba(37, 99, 235, 0.05);
@@ -174,15 +174,15 @@ body.theme-light {
 
 body {
   margin: 0;
-  background-color: var(--matrix-bg);
-  color: var(--matrix-text);
+  background-color: var(--forge-bg);
+  color: var(--forge-text);
   font-family: var(--font-sans);
   min-height: 100vh;
   overflow-x: hidden;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-body.theme-matrix {
+body.theme-forge-legacy {
   font-family: var(--font-mono);
 }
 
@@ -198,7 +198,7 @@ body.theme-matrix {
   position: relative;
 }
 
-body.theme-matrix .app-container {
+body.theme-forge-legacy .app-container {
   background-image:
     linear-gradient(rgba(57, 255, 20, 0.03) 1px, transparent 1px),
     linear-gradient(90deg, rgba(57, 255, 20, 0.03) 1px, transparent 1px);
@@ -213,7 +213,7 @@ body.theme-light .app-container {
 
 /* Premium Glassmorphic Card */
 .glass-panel {
-  background: var(--matrix-panel-bg);
+  background: var(--forge-panel-bg);
   border: 1px solid var(--border-color);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   backdrop-filter: blur(16px);
@@ -233,7 +233,7 @@ body.theme-light .app-container {
 }
 
 .glass-panel:hover {
-  border-color: var(--matrix-neon);
+  border-color: var(--forge-neon);
   box-shadow: var(--glow-shadow);
   transform: translateY(-2px);
 }
@@ -243,8 +243,8 @@ body.theme-light .glass-panel {
 }
 
 /* Modal panel */
-.matrix-panel {
-  background: var(--matrix-panel-bg);
+.forge-panel {
+  background: var(--forge-panel-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-radius: 8px;
@@ -276,23 +276,23 @@ body.theme-light .glass-panel {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--matrix-very-dark);
+  background: var(--forge-very-dark);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--matrix-dark);
+  background: var(--forge-dark);
   border-radius: 4px;
-  border: 2px solid var(--matrix-very-dark);
+  border: 2px solid var(--forge-very-dark);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--matrix-neon);
+  background: var(--forge-neon);
 }
 
 /* Inputs and Textareas */
-.matrix-input {
-  background-color: var(--matrix-very-dark) !important;
+.forge-input {
+  background-color: var(--forge-very-dark) !important;
   border: 1px solid var(--border-color) !important;
-  color: var(--matrix-text) !important;
+  color: var(--forge-text) !important;
   padding: 10px 14px;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -302,23 +302,23 @@ body.theme-light .glass-panel {
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.matrix-input::placeholder {
+.forge-input::placeholder {
   color: var(--text-faint);
   opacity: 1;
 }
 
-.matrix-input:focus {
-  border-color: var(--matrix-neon) !important;
+.forge-input:focus {
+  border-color: var(--forge-neon) !important;
   box-shadow: var(--glow-shadow), inset 0 2px 4px rgba(0, 0, 0, 0.3) !important;
 }
 
-body.theme-matrix .matrix-input {
+body.theme-forge-legacy .forge-input {
   background-color: #000000 !important;
-  color: var(--matrix-neon) !important;
-  text-shadow: 0 0 2px var(--matrix-neon);
+  color: var(--forge-neon) !important;
+  text-shadow: 0 0 2px var(--forge-neon);
 }
 
-body.theme-light .matrix-input {
+body.theme-light .forge-input {
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
@@ -333,10 +333,10 @@ textarea:focus-visible,
 }
 
 /* Cyber buttons */
-.matrix-btn {
-  background: linear-gradient(135deg, var(--matrix-very-dark), var(--matrix-dark));
+.forge-btn {
+  background: linear-gradient(135deg, var(--forge-very-dark), var(--forge-dark));
   border: 1px solid var(--border-color);
-  color: var(--matrix-text);
+  color: var(--forge-text);
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
@@ -352,39 +352,39 @@ textarea:focus-visible,
   gap: 8px;
 }
 
-.matrix-btn:hover {
-  border-color: var(--matrix-neon);
+.forge-btn:hover {
+  border-color: var(--forge-neon);
   box-shadow: var(--glow-shadow);
   color: var(--text-strong);
   transform: translateY(-1px);
 }
 
-.matrix-btn:active {
+.forge-btn:active {
   transform: translateY(0);
 }
 
-body.theme-matrix .matrix-btn {
+body.theme-forge-legacy .forge-btn {
   font-family: var(--font-mono);
-  color: var(--matrix-neon);
-  text-shadow: 0 0 3px var(--matrix-neon);
+  color: var(--forge-neon);
+  text-shadow: 0 0 3px var(--forge-neon);
 }
 
-body.theme-matrix .matrix-btn:hover {
-  background-color: var(--matrix-neon);
+body.theme-forge-legacy .forge-btn:hover {
+  background-color: var(--forge-neon);
   color: #000;
-  box-shadow: 0 0 15px var(--matrix-neon);
+  box-shadow: 0 0 15px var(--forge-neon);
   text-shadow: none;
 }
 
-.matrix-btn-primary {
-  background: linear-gradient(135deg, var(--matrix-dim), var(--matrix-neon)) !important;
-  border-color: var(--matrix-neon) !important;
+.forge-btn-primary {
+  background: linear-gradient(135deg, var(--forge-dim), var(--forge-neon)) !important;
+  border-color: var(--forge-neon) !important;
   color: var(--on-accent) !important;
   font-weight: 800;
   text-shadow: none !important;
 }
 
-.matrix-btn-primary:hover {
+.forge-btn-primary:hover {
   filter: brightness(1.12);
   box-shadow: var(--glow-md) !important;
 }
@@ -453,7 +453,7 @@ body.theme-light .feature-badge-planned { color: #6d28d9; }
   display: block;
   position: absolute;
   top: 0; left: 0; right: 0; height: 4px;
-  background: linear-gradient(to bottom, transparent, var(--matrix-neon), transparent);
+  background: linear-gradient(to bottom, transparent, var(--forge-neon), transparent);
   animation: scanner-sweep 6s linear infinite;
   z-index: 11;
   pointer-events: none;
@@ -486,7 +486,7 @@ body.theme-light .feature-badge-planned { color: #6d28d9; }
 .chat-bubble-user {
   background: rgba(5, 150, 105, 0.15);
   border: 1px solid rgba(16, 185, 129, 0.3);
-  color: var(--matrix-text);
+  color: var(--forge-text);
   margin-left: auto;
   border-right-width: 4px;
 }
@@ -499,7 +499,7 @@ body.theme-light .chat-bubble-user {
 .chat-bubble-assistant {
   background: rgba(15, 23, 42, 0.5);
   border: 1px solid var(--border-color);
-  color: var(--matrix-text);
+  color: var(--forge-text);
   border-left-width: 4px;
 }
 
@@ -507,15 +507,15 @@ body.theme-light .chat-bubble-assistant {
   background: rgba(241, 245, 249, 0.8);
 }
 
-body.theme-matrix .chat-bubble-assistant {
-  color: var(--matrix-neon);
-  text-shadow: 0 0 2px var(--matrix-neon);
+body.theme-forge-legacy .chat-bubble-assistant {
+  color: var(--forge-neon);
+  text-shadow: 0 0 2px var(--forge-neon);
 }
 
 .chat-bubble-architect {
   background: rgba(124, 58, 237, 0.1);
   border: 1px solid rgba(139, 92, 246, 0.3);
-  color: var(--matrix-text);
+  color: var(--forge-text);
   border-left-width: 4px;
 }
 
@@ -526,7 +526,7 @@ body.theme-matrix .chat-bubble-assistant {
 }
 
 .pricing-card {
-  background: var(--matrix-panel-bg);
+  background: var(--forge-panel-bg);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 24px;
@@ -560,7 +560,7 @@ body.theme-light .pricing-card {
 }
 
 .pricing-card-active {
-  border-color: var(--matrix-neon);
+  border-color: var(--forge-neon);
   box-shadow: var(--glow-shadow);
 }
 
@@ -604,7 +604,7 @@ body.theme-light .pricing-card {
   border-radius: 8px;
   border: 1px solid var(--accent-line);
   border-left-width: 4px;
-  background: var(--matrix-panel-bg);
+  background: var(--forge-panel-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);

@@ -314,6 +314,12 @@ const getForgeCommands = (type: 'auth' | 'cache' | 'api' | 'custom', customInput
   return SIM_DATA[type].forge.commands;
 };
 
+// Converts **bold** markers in static content strings to <strong> elements.
+function renderMd(text: string): React.ReactNode {
+  const parts = text.split(/\*\*(.+?)\*\*/g);
+  return parts.map((part, i) => (i % 2 === 1 ? <strong key={i}>{part}</strong> : part));
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('marketing');
 
@@ -342,6 +348,8 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const [isNavOpen, setIsNavOpen] = useState(false);
 
   // Checkout (mock payment) flow
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
@@ -361,6 +369,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('web_theme') || 'forge');
   const [customInstructions, setCustomInstructions] = useState(() => localStorage.getItem('web_custom_instructions') || '');
   const [responseMode, setResponseMode] = useState<ResponseMode>(() => (localStorage.getItem('web_response_mode') as ResponseMode) || 'balanced');
+  const [thinkingCapability, setThinkingCapability] = useState<'low' | 'medium' | 'high' | 'ultra'>(() => (localStorage.getItem('web_thinking_capability') as 'low' | 'medium' | 'high' | 'ultra') || 'medium');
   const [backendUrl, setBackendUrl] = useState(() => localStorage.getItem('web_backend_url') || 'http://localhost:3001');
   const [backendStatus, setBackendStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const [isSyncEnabled, setIsSyncEnabled] = useState(false);
@@ -592,6 +601,7 @@ export default function App() {
     localStorage.setItem('web_theme', theme);
     localStorage.setItem('web_custom_instructions', customInstructions);
     localStorage.setItem('web_response_mode', responseMode);
+    localStorage.setItem('web_thinking_capability', thinkingCapability);
     localStorage.setItem('web_backend_url', backendUrl);
     pushToast('Settings saved locally in browser storage.', 'success');
   };
@@ -609,7 +619,7 @@ export default function App() {
 
       ws.onopen = () => {
         setBackendStatus('online');
-        ws.send(JSON.stringify({ type: 'config', customInstructions, responseMode }));
+        ws.send(JSON.stringify({ type: 'config', customInstructions, responseMode, thinkingCapability }));
         ws.send(JSON.stringify({ type: 'query', text, space: 'chat', sessionId: `web_${space}_${Date.now()}` }));
       };
       ws.onmessage = (event) => {
@@ -848,6 +858,7 @@ export default function App() {
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAuthSubmitting) return;
     const email = authEmail.trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       setAuthError('Enter a valid email address.');
@@ -863,6 +874,7 @@ export default function App() {
     }
     const name = authMode === 'signup' ? authName.trim() : email.split('@')[0];
     setAuthError('');
+    setIsAuthSubmitting(true);
     try {
       const user = await backendAuthRequest(authMode, email, authPassword);
       setAuthToken(user.token);
@@ -878,6 +890,8 @@ export default function App() {
       }
       // 4xx (bad credentials / duplicate account) → surface the message.
       setAuthError(err instanceof Error ? err.message : 'Authentication failed.');
+    } finally {
+      setIsAuthSubmitting(false);
     }
   };
 
@@ -994,25 +1008,80 @@ export default function App() {
   return (
     <div className={`app-container ${theme === 'matrix' ? 'font-mono' : 'font-sans'}`}>
       {/* Navbar Header */}
-      <header className="border-b border-[var(--line)] bg-[var(--surface-header)] px-6 py-4 flex flex-col md:flex-row gap-3 items-center justify-between shrink-0 shadow-lg relative z-20">
-        <div className="flex items-center gap-3">
-          <Terminal className="text-[var(--accent)] animate-blink" size={20} />
-          <div className="flex flex-col">
-            <span className="text-[12px] font-bold tracking-widest text-[var(--accent)]">
-              KRYLEOS FORGE // companion_hub
-            </span>
-            <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider">
-              Secure Multi-Agent Web Companion
-            </span>
+      <header className="border-b border-[var(--line)] bg-[var(--surface-header)] px-6 py-4 flex flex-col gap-3 shrink-0 shadow-lg relative z-20">
+        {/* Top row: logo + hamburger + auth */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Terminal className="text-[var(--accent)] animate-blink" size={20} />
+            <div className="flex flex-col">
+              <span className="text-[12px] font-bold tracking-widest text-[var(--accent)]">
+                KRYLEOS FORGE // companion_hub
+              </span>
+              <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider">
+                Secure Multi-Agent Web Companion
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Auth control — always visible */}
+            {authUser ? (
+              <>
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="flex items-center gap-2 px-3 py-1.5 border border-[var(--line)] rounded text-[10px] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all max-w-[180px]"
+                  title={`Signed in as ${authUser.email} · ${TIER_LABELS[userTier]} plan`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-[var(--surface-active)] border border-[var(--accent)] flex items-center justify-center shrink-0">
+                    <User size={11} className="text-[var(--accent)]" />
+                  </span>
+                  <span className="flex flex-col items-start leading-tight min-w-0">
+                    <span className="text-[var(--text-strong)] font-bold truncate max-w-[110px]">{authUser.name}</span>
+                    <span className="text-[8px] uppercase tracking-wider text-[var(--accent)]">{TIER_LABELS[userTier]} plan</span>
+                  </span>
+                </button>
+                <button
+                  onClick={handleLogout}
+                  aria-label="Log out"
+                  title="Log out"
+                  className="p-1.5 border border-[var(--line)] rounded text-[var(--accent-dim)] hover:border-[var(--danger)] hover:text-[var(--danger)] transition-all"
+                >
+                  <LogOut size={14} />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => openAuth('login')}
+                className="forge-btn forge-btn-primary px-4 py-1.5 text-[10px] font-bold uppercase rounded flex items-center gap-1.5"
+              >
+                <LogIn size={12} /> Log In
+              </button>
+            )}
+
+            {/* Hamburger — mobile only */}
+            <button
+              className="md:hidden p-1.5 border border-[var(--line)] rounded text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all"
+              aria-label={isNavOpen ? 'Close navigation' : 'Open navigation'}
+              onClick={() => setIsNavOpen(o => !o)}
+            >
+              {isNavOpen
+                ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              }
+            </button>
           </div>
         </div>
-        
-        {/* Nav Tabs */}
-        <nav aria-label="Main navigation" role="tablist" className="flex flex-wrap justify-center gap-2">
+
+        {/* Nav Tabs — always visible on md+, toggle on mobile */}
+        <nav
+          aria-label="Main navigation"
+          role="tablist"
+          className={`${isNavOpen ? 'flex' : 'hidden'} md:flex flex-wrap justify-center gap-2`}
+        >
           {APP_TABS.map(tab => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => { setActiveTab(tab); setIsNavOpen(false); }}
               aria-label={
                 tab === 'marketing' ? 'Overview tab' :
                 tab === 'pricing' ? 'Pricing tab' :
@@ -1024,8 +1093,8 @@ export default function App() {
               aria-selected={activeTab === tab}
               role="tab"
               className={`px-4 py-1.5 border rounded text-[10px] uppercase font-bold cursor-pointer transition-all ${
-                activeTab === tab 
-                  ? 'bg-[var(--surface-active)] text-[var(--accent)] border-[var(--accent)] shadow-[var(--glow-md)]' 
+                activeTab === tab
+                  ? 'bg-[var(--surface-active)] text-[var(--accent)] border-[var(--accent)] shadow-[var(--glow-md)]'
                   : 'bg-transparent text-[var(--accent-dim)] border-[var(--line)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
               }`}
             >
@@ -1041,41 +1110,6 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Auth control */}
-        <div className="flex items-center gap-2">
-          {authUser ? (
-            <>
-              <button
-                onClick={() => setActiveTab('settings')}
-                className="flex items-center gap-2 px-3 py-1.5 border border-[var(--line)] rounded text-[10px] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all max-w-[180px]"
-                title={`Signed in as ${authUser.email} · ${TIER_LABELS[userTier]} plan`}
-              >
-                <span className="w-5 h-5 rounded-full bg-[var(--surface-active)] border border-[var(--accent)] flex items-center justify-center shrink-0">
-                  <User size={11} className="text-[var(--accent)]" />
-                </span>
-                <span className="flex flex-col items-start leading-tight min-w-0">
-                  <span className="text-[var(--text-strong)] font-bold truncate max-w-[110px]">{authUser.name}</span>
-                  <span className="text-[8px] uppercase tracking-wider text-[var(--accent)]">{TIER_LABELS[userTier]} plan</span>
-                </span>
-              </button>
-              <button
-                onClick={handleLogout}
-                aria-label="Log out"
-                title="Log out"
-                className="p-1.5 border border-[var(--line)] rounded text-[var(--accent-dim)] hover:border-[var(--danger)] hover:text-[var(--danger)] transition-all"
-              >
-                <LogOut size={14} />
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => openAuth('login')}
-              className="matrix-btn matrix-btn-primary px-4 py-1.5 text-[10px] font-bold rounded flex items-center gap-1.5"
-            >
-              <LogIn size={13} /> Log In
-            </button>
-          )}
-        </div>
       </header>
 
       {/* Main Content Area */}
@@ -1096,10 +1130,10 @@ export default function App() {
                 Kryleos Forge is a next-generation developer workbench designed to orchestrate local and remote multi-agent AI teams. It functions as both a public landing companion and an interactive scoper, letting you plan, audit, and execute tasks across devices.
               </p>
               <div className="flex justify-center gap-4 pt-4">
-                <button onClick={() => setActiveTab('planning')} className="matrix-btn matrix-btn-primary px-5 py-2.5 font-bold uppercase rounded">
+                <button onClick={() => setActiveTab('planning')} className="forge-btn forge-btn-primary px-5 py-2.5 font-bold uppercase rounded">
                   [Start Scoping Plan]
                 </button>
-                <button onClick={() => setActiveTab('settings')} className="matrix-btn px-5 py-2.5 font-bold uppercase rounded">
+                <button onClick={() => setActiveTab('settings')} className="forge-btn px-5 py-2.5 font-bold uppercase rounded">
                   [Configure API Keys]
                 </button>
               </div>
@@ -1126,7 +1160,7 @@ export default function App() {
                     </p>
                   </div>
                 </div>
-                <span className="matrix-btn matrix-btn-primary px-5 py-2.5 font-bold uppercase rounded flex items-center gap-2 whitespace-nowrap">
+                <span className="forge-btn forge-btn-primary px-5 py-2.5 font-bold uppercase rounded flex items-center gap-2 whitespace-nowrap">
                   Visit Kryleos.com
                   <ExternalLink size={14} className="transition-transform group-hover:translate-x-0.5" />
                 </span>
@@ -1159,10 +1193,10 @@ export default function App() {
                     <span>Kryleos Developer Planner (10/10)</span>
                   </div>
                   <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 list-disc pl-4 font-sans font-medium">
-                    <li>**Checklist-First approach**: Prompts are immediately structured into granular planning files</li>
-                    <li>**Multi-Agent Crew**: Specialized bots take tasks from the checklist to work in parallel</li>
-                    <li>**Synchronized Status Board**: Track tasks moving across visual Kanban board columns</li>
-                    <li>**Local Compile Sandboxes**: Code changes build and test securely within isolated loops</li>
+                    <li>{renderMd('**Checklist-First approach**: Prompts are immediately structured into granular planning files')}</li>
+                    <li>{renderMd('**Multi-Agent Crew**: Specialized bots take tasks from the checklist to work in parallel')}</li>
+                    <li>{renderMd('**Synchronized Status Board**: Track tasks moving across visual Kanban board columns')}</li>
+                    <li>{renderMd('**Local Compile Sandboxes**: Code changes build and test securely within isolated loops')}</li>
                   </ul>
                 </div>
               </div>
@@ -1224,7 +1258,7 @@ export default function App() {
                         value={simCustomInput}
                         onChange={e => setSimCustomInput(e.target.value)}
                         placeholder="e.g., Integrate email confirmation using Nodemailer..."
-                        className="matrix-input flex-1 text-[12px] text-[var(--accent)]"
+                        className="forge-input flex-1 text-[12px] text-[var(--accent)]"
                       />
                     </div>
                     <div className="flex flex-wrap gap-2 mt-1">
@@ -1256,7 +1290,7 @@ export default function App() {
                             setSimProgress(0);
                           }
                         }}
-                        className="matrix-btn matrix-btn-primary px-4 py-1.5 text-[10px] font-bold rounded flex items-center gap-1.5"
+                        className="forge-btn forge-btn-primary px-4 py-1.5 text-[10px] font-bold rounded flex items-center gap-1.5"
                       >
                         <RefreshCw className={simRunning ? 'animate-spin' : ''} size={11} />
                         <span>{simRunning ? 'RUNNING...' : 'RUN LIFE-CYCLE SIMULATION'}</span>
@@ -1587,7 +1621,7 @@ export default function App() {
                 <span className="font-bold text-[var(--accent)]">Enterprise $25</span>
               </div>
               <div className="pt-2">
-                <button onClick={() => setActiveTab('pricing')} className="matrix-btn matrix-btn-primary px-6 py-2.5 font-bold uppercase rounded inline-flex items-center gap-2">
+                <button onClick={() => setActiveTab('pricing')} className="forge-btn forge-btn-primary px-6 py-2.5 font-bold uppercase rounded inline-flex items-center gap-2">
                   <Gem size={14} /> Explore Pricing & Plans
                 </button>
               </div>
@@ -1634,7 +1668,7 @@ export default function App() {
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Settings cloud sync</li>
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
                 </ul>
-                <button onClick={() => requestPlan('free')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'free' ? 'matrix-btn-primary' : ''}`}>
+                <button onClick={() => requestPlan('free')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'free' ? 'forge-btn-primary' : ''}`}>
                   {userTier === 'free' ? '✓ Current Plan' : 'Get Started Free'}
                 </button>
               </div>
@@ -1656,7 +1690,7 @@ export default function App() {
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
                 </ul>
-                <button onClick={() => requestPlan('basic')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'basic' ? 'matrix-btn-primary' : ''}`}>
+                <button onClick={() => requestPlan('basic')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'basic' ? 'forge-btn-primary' : ''}`}>
                   {userTier === 'basic' ? '✓ Current Plan' : 'Choose Basic'}
                 </button>
               </div>
@@ -1679,7 +1713,7 @@ export default function App() {
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Up to 10 paired devices · Priority support</li>
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
                 </ul>
-                <button onClick={() => requestPlan('pro')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'pro' ? 'matrix-btn-primary' : ''}`}>
+                <button onClick={() => requestPlan('pro')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'pro' ? 'forge-btn-primary' : ''}`}>
                   {userTier === 'pro' ? '✓ Current Plan' : 'Choose Pro'}
                 </button>
               </div>
@@ -1700,7 +1734,7 @@ export default function App() {
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> SSO / SAML <FeatureBadge status="planned" /></li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Unlimited devices · Dedicated support + SLA</li>
                 </ul>
-                <button onClick={() => requestPlan('enterprise')} className={`matrix-btn w-full py-2 font-bold rounded ${userTier === 'enterprise' ? 'matrix-btn-primary' : ''}`}>
+                <button onClick={() => requestPlan('enterprise')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'enterprise' ? 'forge-btn-primary' : ''}`}>
                   {userTier === 'enterprise' ? '✓ Current Plan' : 'Choose Enterprise'}
                 </button>
               </div>
@@ -1811,7 +1845,7 @@ export default function App() {
                   onChange={e => setPlanInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSendPlan()}
                   placeholder="Outline feature scopes, task lists, or folder structures..."
-                  className="matrix-input flex-1 text-[12px] text-[var(--accent)]"
+                  className="forge-input flex-1 text-[12px] text-[var(--accent)]"
                 />
                 {planVoice.isSupported && (
                   <button
@@ -1824,7 +1858,7 @@ export default function App() {
                     {planVoice.isListening ? <MicOff size={14} /> : <Mic size={14} />}
                   </button>
                 )}
-                <button onClick={handleSendPlan} className="matrix-btn matrix-btn-primary px-4 font-bold">SEND</button>
+                <button onClick={handleSendPlan} className="forge-btn forge-btn-primary px-4 font-bold">SEND</button>
               </div>
               {planVoice.error && <div className="px-3 pb-2 text-[9px] text-[var(--danger)]">{planVoice.error}</div>}
             </div>
@@ -1840,7 +1874,7 @@ export default function App() {
                   <button onClick={() => setIsPlanEditing(!isPlanEditing)} className="text-[9px] border border-[var(--accent-dim)] text-[var(--accent-dim)] px-3 py-1 rounded font-bold hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all">
                     {isPlanEditing ? 'VIEW' : 'EDIT'}
                   </button>
-                  <button onClick={() => handleImportRequest()} className="matrix-btn matrix-btn-primary text-[9px] px-3 py-1 rounded font-bold flex items-center gap-1.5">
+                  <button onClick={() => handleImportRequest()} className="forge-btn forge-btn-primary text-[9px] px-3 py-1 rounded font-bold flex items-center gap-1.5">
                     <Download size={11} />
                     <span>IMPORT PLAN</span>
                   </button>
@@ -1898,7 +1932,7 @@ export default function App() {
                   </div>
                 </div>
                 <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
-                  Start by launching the desktop application. Navigate to the **Settings** tab to input your API credentials (or enable **Zero-Egress Mode** to route queries exclusively via local Ollama models). Test each connection using the health-check ping controls.
+                  {renderMd('Start by launching the desktop application. Navigate to the **Settings** tab to input your API credentials (or enable **Zero-Egress Mode** to route queries exclusively via local Ollama models). Test each connection using the health-check ping controls.')}
                 </p>
               </div>
 
@@ -1912,7 +1946,7 @@ export default function App() {
                   </div>
                 </div>
                 <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
-                  Use the **Planning** tab to organize your next coding roadmap. Press the **Voice Input** microphone button to speak features naturally. The assistant will parse your voice notes, output structured Markdown, and expand tasks into actionable checklists.
+                  {renderMd('Use the **Planning** tab to organize your next coding roadmap. Press the **Voice Input** microphone button to speak features naturally. The assistant will parse your voice notes, output structured Markdown, and expand tasks into actionable checklists.')}
                 </p>
               </div>
 
@@ -1926,7 +1960,7 @@ export default function App() {
                   </div>
                 </div>
                 <p className="text-[12px] text-[var(--accent-dim)] leading-relaxed">
-                  Bridge your workspace across devices. Copy the active pairing code generated by the desktop server, input it in the web companion header, and click **Connect**. Once paired, WebSocket streams will broadcast telemetry data and logs dynamically.
+                  {renderMd('Bridge your workspace across devices. Copy the active pairing code generated by the desktop server, input it in the web companion header, and click **Connect**. Once paired, WebSocket streams will broadcast telemetry data and logs dynamically.')}
                 </p>
               </div>
 
@@ -2003,15 +2037,15 @@ export default function App() {
                           return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
                         }).join(' ')}
                         fill="none"
-                        stroke="var(--matrix-neon)"
+                        stroke="var(--forge-neon)"
                         strokeWidth="2.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="filter drop-shadow-[0_0_4px_var(--matrix-neon)]"
+                        className="filter drop-shadow-[0_0_4px_var(--forge-neon)]"
                       />
                       <defs>
                         <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--matrix-neon)" />
+                          <stop offset="0%" stopColor="var(--forge-neon)" />
                           <stop offset="100%" stopColor="transparent" />
                         </linearGradient>
                       </defs>
@@ -2026,7 +2060,7 @@ export default function App() {
                 <div className="glass-panel p-6 rounded flex flex-col gap-4">
                   <div className="flex justify-between items-center text-[var(--text-strong)] font-bold text-sm">
                     <span className="uppercase tracking-wider">02 // Memory Allocation</span>
-                    <span className="font-mono text-[var(--matrix-purple)] text-base">
+                    <span className="font-mono text-[var(--forge-purple)] text-base">
                       {memoryHistory[memoryHistory.length - 1]} MB
                     </span>
                   </div>
@@ -2065,15 +2099,15 @@ export default function App() {
                           return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
                         }).join(' ')}
                         fill="none"
-                        stroke="var(--matrix-purple)"
+                        stroke="var(--forge-purple)"
                         strokeWidth="2.5"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="filter drop-shadow-[0_0_4px_var(--matrix-purple)]"
+                        className="filter drop-shadow-[0_0_4px_var(--forge-purple)]"
                       />
                       <defs>
                         <linearGradient id="memGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="var(--matrix-purple)" />
+                          <stop offset="0%" stopColor="var(--forge-purple)" />
                           <stop offset="100%" stopColor="transparent" />
                         </linearGradient>
                       </defs>
@@ -2097,7 +2131,7 @@ export default function App() {
                   Stressed during execution loops? Use our structured box breathing guide inside the mobile companion (4s inhale, 4s hold, 4s exhale, 4s hold) to stay coherent and maintain focus.
                 </p>
               </div>
-              <button onClick={() => setActiveTab('planning')} className="matrix-btn whitespace-nowrap">
+              <button onClick={() => setActiveTab('planning')} className="forge-btn whitespace-nowrap">
                 [GO TO PLANNING SPACE]
               </button>
             </div>
@@ -2135,14 +2169,14 @@ export default function App() {
                   </ul>
                 </div>
                 <div className="flex flex-col gap-2 pt-2">
-                  <button onClick={() => pushToast('Preparing NSIS installer for Windows (x64)…', 'info')} className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase">
+                  <button onClick={() => pushToast('Preparing NSIS installer for Windows (x64)…', 'info')} className="forge-btn forge-btn-primary w-full py-2.5 font-bold uppercase">
                     [DOWNLOAD FOR WINDOWS (x64)]
                   </button>
                   <div className="flex gap-2">
-                    <button onClick={() => pushToast('Preparing macOS DMG package…', 'info')} className="matrix-btn w-[48%] py-2 font-bold uppercase">
+                    <button onClick={() => pushToast('Preparing macOS DMG package…', 'info')} className="forge-btn w-[48%] py-2 font-bold uppercase">
                       [MACOS (ARM/INTEL)]
                     </button>
-                    <button onClick={() => pushToast('Preparing Linux DEB package…', 'info')} className="matrix-btn w-[48%] py-2 font-bold uppercase">
+                    <button onClick={() => pushToast('Preparing Linux DEB package…', 'info')} className="forge-btn w-[48%] py-2 font-bold uppercase">
                       [LINUX (DEB/RPM)]
                     </button>
                   </div>
@@ -2167,10 +2201,10 @@ export default function App() {
                   </ul>
                 </div>
                 <div className="flex flex-col gap-2 pt-2">
-                  <button onClick={() => pushToast('Redirecting to the Apple App Store…', 'info')} className="matrix-btn w-full py-2.5 font-bold uppercase">
+                  <button onClick={() => pushToast('Redirecting to the Apple App Store…', 'info')} className="forge-btn w-full py-2.5 font-bold uppercase">
                     [GET ON APPLE APP STORE]
                   </button>
-                  <button onClick={() => pushToast('Redirecting to the Google Play Store…', 'info')} className="matrix-btn w-full py-2.5 font-bold uppercase">
+                  <button onClick={() => pushToast('Redirecting to the Google Play Store…', 'info')} className="forge-btn w-full py-2.5 font-bold uppercase">
                     [GET ON GOOGLE PLAY STORE]
                   </button>
                 </div>
@@ -2202,7 +2236,7 @@ export default function App() {
                   value={apiKey}
                   onChange={e => setApiKey(e.target.value)}
                   placeholder="sk-..."
-                  className="matrix-input"
+                  className="forge-input"
                 />
               </div>
 
@@ -2216,7 +2250,7 @@ export default function App() {
                   value={geminiApiKey}
                   onChange={e => setGeminiApiKey(e.target.value)}
                   placeholder="AIzaSy..."
-                  className="matrix-input"
+                  className="forge-input"
                 />
               </div>
 
@@ -2230,7 +2264,7 @@ export default function App() {
                   value={openaiApiKey}
                   onChange={e => setOpenaiApiKey(e.target.value)}
                   placeholder="sk-proj-..."
-                  className="matrix-input"
+                  className="forge-input"
                 />
               </div>
 
@@ -2306,7 +2340,7 @@ export default function App() {
                   value={backendUrl}
                   onChange={e => setBackendUrl(e.target.value)}
                   placeholder="http://localhost:3001"
-                  className="matrix-input"
+                  className="forge-input"
                 />
                 <span className={`text-[10px] uppercase font-bold ${backendStatus === 'online' ? 'text-[var(--accent)]' : 'text-[var(--danger)]'}`}>
                   Backend status: {backendStatus.toUpperCase()}
@@ -2321,12 +2355,12 @@ export default function App() {
                     value={pairingCode}
                     onChange={e => setPairingCode(e.target.value)}
                     placeholder="Enter 6-digit code"
-                    className="matrix-input flex-1"
+                    className="forge-input flex-1"
                   />
                   <button
                     type="button"
                     onClick={toggleCompanionConnection}
-                    className={`matrix-btn px-5 font-bold border transition-all ${
+                    className={`forge-btn px-5 font-bold border transition-all ${
                       companionStatus === 'connected' ? 'border-[var(--danger)] text-[var(--danger)] hover:bg-[var(--surface-danger)]' : 'border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--surface-active)]'
                     }`}
                   >
@@ -2347,7 +2381,7 @@ export default function App() {
                   onChange={e => setCustomInstructions(e.target.value)}
                   placeholder="Instruct models on coding standards..."
                   rows={2}
-                  className="matrix-input resize-none"
+                  className="forge-input resize-none"
                 />
               </div>
 
@@ -2366,6 +2400,29 @@ export default function App() {
                       onClick={() => setResponseMode(mode)}
                       className={`border rounded py-1.5 text-[10px] font-bold transition-all ${
                         responseMode === mode ? 'border-[var(--accent)] bg-[var(--surface-active)] text-[var(--text-strong)] shadow-[var(--glow-sm)]' : 'border-[var(--line)] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2 mt-4">
+                <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Thinking Capability</label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  {([
+                    ['low', 'Low'],
+                    ['medium', 'Medium'],
+                    ['high', 'High'],
+                    ['ultra', 'Ultra']
+                  ] as Array<['low' | 'medium' | 'high' | 'ultra', string]>).map(([cap, label]) => (
+                    <button
+                      key={cap}
+                      type="button"
+                      onClick={() => setThinkingCapability(cap)}
+                      className={`border rounded py-1.5 text-[10px] font-bold transition-all ${
+                        thinkingCapability === cap ? 'border-[var(--accent)] bg-[var(--surface-active)] text-[var(--text-strong)] shadow-[var(--glow-sm)]' : 'border-[var(--line)] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
                       }`}
                     >
                       {label}
@@ -2485,7 +2542,7 @@ export default function App() {
                       }
                     }}
                     placeholder="Search cached symbols..."
-                    className="matrix-input flex-1 text-[12px] text-[var(--accent)]"
+                    className="forge-input flex-1 text-[12px] text-[var(--accent)]"
                   />
                   <button
                     type="button"
@@ -2507,7 +2564,7 @@ export default function App() {
                         setIsBuildingIndex(false);
                       }, 1500);
                     }}
-                    className="matrix-btn matrix-btn-primary px-4 font-bold text-[10px]"
+                    className="forge-btn forge-btn-primary px-4 font-bold text-[10px]"
                   >
                     {isBuildingIndex ? 'INDEXING...' : 'BUILD INDEX'}
                   </button>
@@ -2593,7 +2650,7 @@ export default function App() {
                       <select
                         value={rbacRole}
                         onChange={e => setRbacRole(e.target.value as 'admin' | 'developer')}
-                        className="matrix-input text-[12px] text-[var(--accent)] bg-[var(--surface-terminal)]"
+                        className="forge-input text-[12px] text-[var(--accent)] bg-[var(--surface-terminal)]"
                       >
                         <option value="admin">Admin</option>
                         <option value="developer">Developer</option>
@@ -2606,7 +2663,7 @@ export default function App() {
                         value={rbacBlockedPrefixes}
                         onChange={e => setRbacBlockedPrefixes(e.target.value)}
                         placeholder="Comma-separated blocked prefixes..."
-                        className="matrix-input text-[12px] text-[var(--accent)]"
+                        className="forge-input text-[12px] text-[var(--accent)]"
                       />
                       <span className="text-[9px] text-[var(--accent-dim)]">Current role: <span className="text-[var(--text-strong)] font-bold uppercase">{rbacRole}</span> — {rbacRole === 'admin' ? 'Full access, blocked prefixes ignored' : `${rbacBlockedPrefixes.split(',').filter(Boolean).length} prefix(es) enforced`}</span>
                     </div>
@@ -2631,7 +2688,7 @@ export default function App() {
                 )}
               </div>
 
-              <button type="submit" className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase rounded mt-4">
+              <button type="submit" className="forge-btn forge-btn-primary w-full py-2.5 font-bold uppercase rounded mt-4">
                 [SAVE WEB CONFIGURATION]
               </button>
             </form>
@@ -2659,12 +2716,12 @@ export default function App() {
       {/* Cloud Sync Lock modal dialog */}
       {showSyncLockModal && (
         <div className="fixed inset-0 bg-[var(--backdrop)] flex items-center justify-center p-4 backdrop-blur-sm z-50">
-          <div className="matrix-panel w-full max-w-sm p-6 border border-amber-600 bg-[var(--surface-warn)] flex flex-col gap-4 text-center rounded shadow-2xl">
+          <div className="forge-panel w-full max-w-sm p-6 border border-amber-600 bg-[var(--surface-warn)] flex flex-col gap-4 text-center rounded shadow-2xl">
             <ShieldAlert className="text-[var(--warn)] mx-auto" size={36} />
             <div className="space-y-1.5">
               <h3 className="text-[var(--text-strong)] font-bold text-sm uppercase">Cloud Sync Required</h3>
               <p className="text-[11px] text-[var(--warn-soft)] leading-relaxed">
-                To sync your mobile planning session draft directly to your desktop workspace, you must enable **Cloud Sync** (Basic Tier or higher).
+                {renderMd('To sync your mobile planning session draft directly to your desktop workspace, you must enable **Cloud Sync** (Basic Tier or higher).')}
               </p>
             </div>
             <div className="flex flex-col gap-2 pt-2">
@@ -2710,7 +2767,7 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="import-modal-title"
-            className="matrix-panel w-full max-w-sm p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
+            className="forge-panel w-full max-w-sm p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 text-[var(--accent)]">
@@ -2723,13 +2780,13 @@ export default function App() {
             <div className="flex flex-col gap-2 pt-1">
               <button
                 onClick={handleImportClean}
-                className="matrix-btn matrix-btn-primary w-full py-2 font-bold uppercase rounded"
+                className="forge-btn forge-btn-primary w-full py-2 font-bold uppercase rounded"
               >
                 Import cleanly
               </button>
               <button
                 onClick={handleImportSimulateConflict}
-                className="matrix-btn w-full py-2 font-bold uppercase rounded"
+                className="forge-btn w-full py-2 font-bold uppercase rounded"
               >
                 Simulate merge conflict
               </button>
@@ -2755,7 +2812,7 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="auth-modal-title"
             onSubmit={handleAuthSubmit}
-            className="matrix-panel w-full max-w-sm p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
+            className="forge-panel w-full max-w-sm p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 text-[var(--accent)] border-b border-[var(--line)] pb-3">
@@ -2774,24 +2831,24 @@ export default function App() {
             {authMode === 'signup' && (
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="auth-name" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Full Name</label>
-                <input id="auth-name" type="text" value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Ada Lovelace" className="matrix-input" autoComplete="name" />
+                <input id="auth-name" type="text" value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Ada Lovelace" className="forge-input" autoComplete="name" />
               </div>
             )}
 
             <div className="flex flex-col gap-1.5">
               <label htmlFor="auth-email" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Email</label>
-              <input id="auth-email" type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@example.com" className="matrix-input" autoComplete="email" />
+              <input id="auth-email" type="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@example.com" className="forge-input" autoComplete="email" />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label htmlFor="auth-password" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Password</label>
-              <input id="auth-password" type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="At least 6 characters" className="matrix-input" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} />
+              <input id="auth-password" type="password" value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="At least 6 characters" className="forge-input" autoComplete={authMode === 'login' ? 'current-password' : 'new-password'} />
             </div>
 
             {authError && <div role="alert" className="text-[10px] text-[var(--danger)] font-bold">{authError}</div>}
 
-            <button type="submit" className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2">
-              <LogIn size={14} /> {authMode === 'login' ? 'Sign In' : 'Create Account'}
+            <button type="submit" disabled={isAuthSubmitting} className="forge-btn forge-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+              <LogIn size={14} /> {isAuthSubmitting ? 'Please wait…' : authMode === 'login' ? 'Sign In' : 'Create Account'}
             </button>
 
             <div className="text-[10px] text-[var(--accent-dim)] text-center">
@@ -2823,7 +2880,7 @@ export default function App() {
             aria-modal="true"
             aria-labelledby="checkout-modal-title"
             onSubmit={handlePay}
-            className="matrix-panel w-full max-w-md p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
+            className="forge-panel w-full max-w-md p-6 border border-[var(--accent-line)] bg-[var(--surface-deep)] flex flex-col gap-4 rounded shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 text-[var(--accent)] border-b border-[var(--line)] pb-3">
@@ -2842,28 +2899,28 @@ export default function App() {
 
             <div className="flex flex-col gap-1.5">
               <label htmlFor="card-name" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Cardholder Name</label>
-              <input id="card-name" type="text" value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Name on card" className="matrix-input" autoComplete="cc-name" />
+              <input id="card-name" type="text" value={cardName} onChange={e => setCardName(e.target.value)} placeholder="Name on card" className="forge-input" autoComplete="cc-name" />
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label htmlFor="card-number" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Card Number</label>
-              <input id="card-number" type="text" inputMode="numeric" value={cardNumber} onChange={e => setCardNumber(formatCardNumber(e.target.value))} placeholder="4242 4242 4242 4242" className="matrix-input" autoComplete="cc-number" />
+              <input id="card-number" type="text" inputMode="numeric" value={cardNumber} onChange={e => setCardNumber(formatCardNumber(e.target.value))} placeholder="4242 4242 4242 4242" className="forge-input" autoComplete="cc-number" />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="card-expiry" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Expiry</label>
-                <input id="card-expiry" type="text" inputMode="numeric" value={cardExpiry} onChange={e => setCardExpiry(formatExpiry(e.target.value))} placeholder="MM/YY" className="matrix-input" autoComplete="cc-exp" />
+                <input id="card-expiry" type="text" inputMode="numeric" value={cardExpiry} onChange={e => setCardExpiry(formatExpiry(e.target.value))} placeholder="MM/YY" className="forge-input" autoComplete="cc-exp" />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="card-cvc" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">CVC</label>
-                <input id="card-cvc" type="text" inputMode="numeric" value={cardCvc} onChange={e => setCardCvc(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="123" className="matrix-input" autoComplete="cc-csc" />
+                <input id="card-cvc" type="text" inputMode="numeric" value={cardCvc} onChange={e => setCardCvc(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="123" className="forge-input" autoComplete="cc-csc" />
               </div>
             </div>
 
             {checkoutError && <div role="alert" className="text-[10px] text-[var(--danger)] font-bold">{checkoutError}</div>}
 
-            <button type="submit" disabled={isProcessingPayment} className="matrix-btn matrix-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
+            <button type="submit" disabled={isProcessingPayment} className="forge-btn forge-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
               {isProcessingPayment
                 ? <><RefreshCw size={14} className="animate-spin" /> Processing…</>
                 : <><Lock size={13} /> Pay ${TIER_PRICES[checkoutTier].toFixed(2)}</>}

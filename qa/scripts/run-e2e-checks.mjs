@@ -20,7 +20,7 @@ console.log('--- STARTING COMPANION E2E PAIRING CHECK ---');
 
 // 1. Spawn server subprocess in Desktop-app
 const desktopAppDir = path.resolve(__dirname, '..', '..', 'Desktop-app');
-const serverProcess = spawn('npx', ['tsx', 'src/backend/server.ts'], {
+const serverProcess = spawn('npx tsx src/backend/server.ts', {
   cwd: desktopAppDir,
   env: {
     ...process.env,
