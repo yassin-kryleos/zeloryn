@@ -11,6 +11,7 @@ lerna-debug.log*
 node_modules/
 dist/
 dist-backend/
+dist-desktop/
 dist-ssr/
 web-build/
 *.vsix
