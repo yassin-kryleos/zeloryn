@@ -1,0 +1,44 @@
+import { describe, expect, it } from 'vitest';
+import { AgentOrchestrator, type ChatClient } from './agents';
+import { WorkspaceSandbox } from './tools';
+
+const noopClient: ChatClient = {
+  async chatStream(_messages, callbacks) { callbacks.onComplete?.('', ''); }
+};
+
+function parse(text: string) {
+  const o = new AgentOrchestrator(new WorkspaceSandbox(process.cwd()), noopClient, () => {});
+  // parseActionBlock is private; exercise it directly for parser hardening coverage.
+  return (o as any).parseActionBlock(text) as any;
+}
+
+describe('parseActionBlock — local-model tolerant parsing', () => {
+  it('parses a standard <action> block', () => {
+    const a = parse('thinking...\n<action>{"type":"tool","tool":"runCommand","arguments":{"command":"node -v"}}</action>');
+    expect(a.type).toBe('tool');
+    expect(a.tool).toBe('runCommand');
+    expect(a.arguments.command).toBe('node -v');
+  });
+
+  it('parses a ```json fenced block when no action tag', () => {
+    const a = parse('Sure, here is the action:\n```json\n{"type":"tool","tool":"runCommand","arguments":{"command":"node -v"}}\n```');
+    expect(a.type).toBe('tool');
+    expect(a.tool).toBe('runCommand');
+  });
+
+  it('parses bare JSON with no tag or fence', () => {
+    const a = parse('I will run it. {"type":"tool","tool":"runCommand","arguments":{"command":"npm test"}} done');
+    expect(a.type).toBe('tool');
+    expect(a.arguments.command).toBe('npm test');
+  });
+
+  it('skips leading objects without a type and finds the action object', () => {
+    const a = parse('context {"foo":1} then {"type":"respond","message":"hi"}');
+    expect(a.type).toBe('respond');
+    expect(a.message).toBe('hi');
+  });
+
+  it('returns null when there is no JSON action at all', () => {
+    expect(parse('Node version is v20. No action needed.')).toBeNull();
+  });
+});

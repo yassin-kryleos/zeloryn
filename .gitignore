@@ -48,3 +48,8 @@ Thumbs.db
 # Keep nested app repos from polluting the root repo
 Desktop-app/.git/
 Mobile-app/.git/
+
+# Archived nested-repo .git dirs from the 2026-06-15 de-submodule vendoring
+# (history preserved in Desktop-app-history.bundle / Mobile-app-history.bundle)
+Desktop-app/.git-archive/
+Mobile-app/.git-archive/

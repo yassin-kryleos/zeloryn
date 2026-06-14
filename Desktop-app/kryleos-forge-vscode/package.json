@@ -1,0 +1,111 @@
+{
+  "name": "kryleos-forge-vscode",
+  "displayName": "Kryleos Forge",
+  "description": "Connect VS Code to the local Kryleos Forge desktop backend.",
+  "version": "0.1.0",
+  "publisher": "kryleos",
+  "engines": {
+    "vscode": "^1.88.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:kryleosForge.syncWorkspace",
+    "onCommand:kryleosForge.askForgeAgent",
+    "onCommand:kryleosForge.testCommandApproval",
+    "onCommand:kryleosForge.refreshReview",
+    "onView:kryleosForge.review"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Kryleos Forge",
+      "properties": {
+        "kryleosForge.backendUrl": {
+          "type": "string",
+          "default": "http://localhost:3001",
+          "description": "Local Kryleos Forge backend URL."
+        },
+        "kryleosForge.autoSyncWorkspace": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically sync the active VS Code workspace folder to Forge."
+        },
+        "kryleosForge.model": {
+          "type": "string",
+          "default": "ollama:qwen2.5:7b",
+          "description": "Model ID sent to Forge before VS Code Ask runs."
+        },
+        "kryleosForge.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama endpoint URL sent to Forge before VS Code Ask runs."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "kryleosForge.syncWorkspace",
+        "title": "Kryleos Forge: Sync Workspace"
+      },
+      {
+        "command": "kryleosForge.askForgeAgent",
+        "title": "Kryleos Forge: Ask Forge Agent"
+      },
+      {
+        "command": "kryleosForge.testCommandApproval",
+        "title": "Kryleos Forge: Test Command Approval Prompt"
+      },
+      {
+        "command": "kryleosForge.refreshReview",
+        "title": "Kryleos Forge: Refresh Review"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "kryleosForge.askForgeAgent",
+          "group": "navigation@80"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "kryleosForge.askForgeAgent",
+          "group": "navigation@80"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kryleosForge",
+          "title": "Forge",
+          "icon": "resources/forge.svg"
+        }
+      ]
+    },
+    "views": {
+      "kryleosForge": [
+        {
+          "id": "kryleosForge.review",
+          "name": "Review",
+          "type": "webview"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.3",
+    "typescript": "~6.0.2"
+  }
+}

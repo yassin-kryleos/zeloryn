@@ -1,0 +1,309 @@
+const { app, BrowserWindow, ipcMain, dialog, safeStorage, shell } = require('electron');
+const { autoUpdater } = require('electron-updater');
+const path = require('path');
+const http = require('http');
+const crypto = require('crypto');
+const fs = require('fs');
+const { spawn } = require('child_process');
+
+let mainWindow;
+let backendProcess = null;
+
+// AES-256 fallback encryption, used only when Electron safeStorage is
+// unavailable (testing / unsupported OS keychain).
+const ALGORITHM = 'aes-256-cbc';
+
+// SEC-B3: derive the fallback key from a PER-INSTALL random secret persisted
+// with owner-only permissions, NOT from a hardcoded constant. The key file
+// lives under Electron's userData dir (or OS temp as a last resort).
+let _fallbackKeyCache = null;
+function getFallbackKey() {
+  if (_fallbackKeyCache) return _fallbackKeyCache;
+  let baseDir;
+  try {
+    baseDir = app.getPath('userData');
+  } catch {
+    baseDir = require('os').tmpdir();
+  }
+  const keyPath = path.join(baseDir, '.kryleos_fallback.key');
+  try {
+    if (fs.existsSync(keyPath)) {
+      const existing = fs.readFileSync(keyPath);
+      if (existing.length === 32) {
+        _fallbackKeyCache = existing;
+        return existing;
+      }
+    }
+    const key = crypto.randomBytes(32);
+    fs.writeFileSync(keyPath, key, { mode: 0o600 });
+    try { fs.chmodSync(keyPath, 0o600); } catch {}
+    _fallbackKeyCache = key;
+    return key;
+  } catch (err) {
+    // If we cannot persist a key, derive an ephemeral process-scoped one rather
+    // than reverting to a shared constant. Secrets won't survive restart, which
+    // is the safe failure mode.
+    if (!_fallbackKeyCache) _fallbackKeyCache = crypto.randomBytes(32);
+    return _fallbackKeyCache;
+  }
+}
+
+// Legacy decrypt for data written by the old constant-key scheme, so existing
+// installs aren't bricked. Encryption never uses this path again.
+function legacyDecrypt(cipherText) {
+  const legacySeed = process.env.OS_FINGERPRINT || 'kryleos-fallback-key-9988';
+  const parts = cipherText.split(':');
+  const iv = Buffer.from(parts[1], 'hex');
+  const encryptedText = Buffer.from(parts[2], 'hex');
+  const key = crypto.scryptSync(legacySeed, 'salt', 32);
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
+
+function fallbackEncrypt(text) {
+  try {
+    const key = getFallbackKey();
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+    let encrypted = cipher.update(text, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return `aes256:${iv.toString('hex')}:${encrypted}`;
+  } catch (err) {
+    console.error('Fallback encryption failed:', err);
+    return Buffer.from(text).toString('base64');
+  }
+}
+
+function fallbackDecrypt(cipherText) {
+  try {
+    if (!cipherText.startsWith('aes256:')) {
+      return Buffer.from(cipherText, 'base64').toString('utf8');
+    }
+    const parts = cipherText.split(':');
+    const iv = Buffer.from(parts[1], 'hex');
+    const encryptedText = Buffer.from(parts[2], 'hex');
+    const key = getFallbackKey();
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    // Try the legacy constant-key scheme for pre-existing data, then plain base64.
+    try {
+      return legacyDecrypt(cipherText);
+    } catch {
+      try {
+        return Buffer.from(cipherText, 'base64').toString('utf8');
+      } catch {
+        return cipherText;
+      }
+    }
+  }
+}
+
+// Register safeStorage handlers for secure OS keychain storage
+ipcMain.handle('encrypt-string', async (event, plainText) => {
+  if (!safeStorage || !safeStorage.isEncryptionAvailable()) {
+    return fallbackEncrypt(plainText);
+  }
+  try {
+    const encrypted = safeStorage.encryptString(plainText);
+    return encrypted.toString('base64');
+  } catch (err) {
+    console.error('SafeStorage encryption failed, trying fallback:', err);
+    return fallbackEncrypt(plainText);
+  }
+});
+
+ipcMain.handle('decrypt-string', async (event, cipherTextBase64) => {
+  if (cipherTextBase64.startsWith('aes256:')) {
+    return fallbackDecrypt(cipherTextBase64);
+  }
+  if (!safeStorage || !safeStorage.isEncryptionAvailable()) {
+    return fallbackDecrypt(cipherTextBase64);
+  }
+  try {
+    const buffer = Buffer.from(cipherTextBase64, 'base64');
+    return safeStorage.decryptString(buffer);
+  } catch (err) {
+    // If safeStorage decrypt failed, it might be pre-existing unencrypted or fallback-encrypted key
+    return fallbackDecrypt(cipherTextBase64);
+  }
+});
+
+ipcMain.handle('is-encryption-available', async () => {
+  return !!(safeStorage && safeStorage.isEncryptionAvailable());
+});
+
+// Register IPC handler to open external links
+ipcMain.handle('open-external', async (event, url) => {
+  await shell.openExternal(url);
+});
+
+// Register IPC handler to select directories via native OS dialog
+ipcMain.handle('select-directory', async () => {
+  if (!mainWindow) return null;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0];
+});
+
+// Production-only: the backend is normally started by `npm run dev`
+// (concurrently) via `tsx src/backend/server.ts`. A packaged build has no dev
+// server and no tsx, so the main process starts the esbuild-bundled backend
+// (dist-backend/server.cjs) itself as a child Node process on the same fixed
+// port (3001) the renderer already hardcodes.
+function startBackend() {
+  if (!app.isPackaged) return;
+
+  // dist-backend/** and node_modules/** are unpacked from app.asar (see
+  // electron-builder.yml asarUnpack) because a plain-node child process
+  // (ELECTRON_RUN_AS_NODE) cannot resolve require() targets inside an asar
+  // archive. Resolve against the unpacked tree under resourcesPath, not
+  // __dirname (which still points inside app.asar).
+  const serverPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist-backend', 'server.cjs');
+  const workspaceDir = path.join(app.getPath('documents'), 'Kryleos Forge');
+  try {
+    fs.mkdirSync(workspaceDir, { recursive: true });
+  } catch (err) {
+    console.error('[backend] could not create default workspace dir:', err);
+  }
+
+  backendProcess = spawn(process.execPath, [serverPath], {
+    cwd: workspaceDir,
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: '3001' },
+    stdio: 'inherit'
+  });
+
+  backendProcess.on('exit', (code, signal) => {
+    console.error(`[backend] exited (code=${code}, signal=${signal})`);
+    backendProcess = null;
+  });
+}
+
+function stopBackend() {
+  if (backendProcess && !backendProcess.killed) {
+    backendProcess.kill();
+  }
+  backendProcess = null;
+}
+
+// Unsigned builds cannot auto-apply updates (Squirrel.Mac requires a signed
+// app; the Windows Authenticode verifier rejects an unsigned package). Until
+// code-signing certs are purchased, only check-and-notify: point the user at
+// the GitHub release so they can download and reinstall manually.
+function setupAutoUpdater() {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+
+  autoUpdater.on('update-available', (info) => {
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Update available',
+      message: `Kryleos Forge ${info.version} is available (you have ${app.getVersion()}).`,
+      detail: 'This beta build is unsigned, so updates are not applied automatically. Open the GitHub release to download and reinstall.',
+      buttons: ['Open Releases Page', 'Later']
+    }).then((result) => {
+      if (result.response === 0) {
+        shell.openExternal('https://github.com/thetimelord69/Kryleos-forge/releases/latest');
+      }
+    });
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[updater] error:', err);
+  });
+
+  autoUpdater.checkForUpdates().catch((err) => {
+    console.error('[updater] check failed:', err);
+  });
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    backgroundColor: '#040805',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs')
+    },
+    title: 'Kryleos Forge // Agent Workspace',
+    show: false // Show only after loading to prevent visual flicker
+  });
+
+  // Hide default menu bar
+  mainWindow.setMenuBarVisibility(false);
+
+  if (app.isPackaged) {
+    // Packaged: wait for the backend child process to come up, then load the
+    // built renderer from disk (no dev server involved).
+    const indexPath = path.join(__dirname, '..', '..', 'dist', 'index.html');
+
+    function loadWhenBackendReady() {
+      http.get('http://127.0.0.1:3001/', () => {
+        mainWindow.loadFile(indexPath);
+        mainWindow.once('ready-to-show', () => {
+          mainWindow.show();
+        });
+      }).on('error', () => {
+        setTimeout(loadWhenBackendReady, 300);
+      });
+    }
+
+    loadWhenBackendReady();
+  } else {
+    const targetUrl = process.env.ELECTRON_DEV_URL || 'http://localhost:5173';
+
+    // Wait for Vite server to be ready before loading
+    function loadWithRetry() {
+      http.get(targetUrl, (res) => {
+        // Server is online, load window
+        mainWindow.loadURL(targetUrl);
+        mainWindow.once('ready-to-show', () => {
+          mainWindow.show();
+        });
+      }).on('error', () => {
+        // Server offline, retry in 300ms
+        setTimeout(loadWithRetry, 300);
+      });
+    }
+
+    loadWithRetry();
+  }
+
+  mainWindow.on('closed', function () {
+    mainWindow = null;
+  });
+}
+
+app.on('ready', () => {
+  startBackend();
+  createWindow();
+  setupAutoUpdater();
+});
+
+app.on('window-all-closed', function () {
+  stopBackend();
+  // Quit when all windows are closed, except on macOS
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+app.on('before-quit', stopBackend);
+
+app.on('activate', function () {
+  if (mainWindow === null) {
+    createWindow();
+  }
+});

@@ -57,6 +57,7 @@ const out = banner + body;
 const targets = [
   path.join(ROOT, 'Web-app', 'src', 'pricing.generated.ts'),
   path.join(ROOT, 'Desktop-app', 'src', 'pricing.generated.ts'),
+  path.join(ROOT, 'Mobile-app', 'src', 'pricing.generated.ts'),
 ];
 
 for (const target of targets) {

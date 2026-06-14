@@ -16,7 +16,7 @@ export const PRICING_TIERS = [
   { id: 'agency', label: 'Agency', priceUsd: null, priceInr: null, status: 'preview' },
 ];
 
-// Tiers that can actually be checked out (drives Gumroad product list / priceMap).
+// Tiers that can actually be checked out (drives Stripe/Razorpay priceMap).
 export const BUYABLE_TIER_IDS = PRICING_TIERS
   .filter(t => t.status === 'production' && t.priceUsd > 0)
   .map(t => t.id);

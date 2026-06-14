@@ -1,0 +1,3259 @@
+import express from 'express';
+import * as http from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import * as path from 'path';
+import * as fs from 'fs';
+import dotenv from 'dotenv';
+import { exec, execSync, execFile } from 'child_process';
+import { WorkspaceSandbox, type ReviewStatus, classifyCommand } from './tools';
+import { DeepSeekClient, type Message } from './deepseek';
+import { GeminiClient } from './gemini';
+import { OpenAIClient } from './openai';
+import { AnthropicClient } from './anthropic';
+import { OpenRouterClient } from './openrouter';
+import { OllamaClient } from './ollama';
+import { GoogleClient } from './google';
+import { AgentOrchestrator, type ChatClient, type ResponseMode } from './agents';
+import { ChatDatabase, type ChatSession, type ProjectTask } from './db';
+import { generateWorkspaceGraph } from './graph';
+import * as syncController from './sync';
+import { threeWayMerge } from './diff3';
+import { getPublicKey } from './security';
+import { PlanningV2Service } from './planningV2';
+import { CostGuard, estimateTokens, estimateCost, getProviderForModel } from './costGuard';
+import { scanSecrets } from './secretScanner';
+import { companionHub } from './companionHub';
+import Stripe from 'stripe';
+import { generateFounderWorkflow } from './founderWorkflows';
+import { generateAgencyWorkflow } from './agencyWorkflows';
+import { unresolvedBlockers } from '../shared/dependencies';
+import { TIER_PRICES, TIER_PRICES_INR, BUYABLE_TIER_IDS, type TierId } from '../pricing.generated';
+import { verifyLicenseKey } from './license';
+import { razorpayKeySecret, isMockRazorpay, createOrder as createRazorpayOrder } from './razorpay';
+import * as crypto from 'crypto';
+
+dotenv.config();
+
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY || 'sk_test_mock_key';
+const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_mock_secret';
+const stripe = new Stripe(stripeSecretKey, {
+  apiVersion: '2025-01-27' as any,
+});
+if (process.env.NODE_ENV === 'production' && stripeSecretKey.startsWith('sk_test_')) {
+  throw new Error('FATAL: Production environment must not use a Stripe test key. Set STRIPE_SECRET_KEY.');
+}
+
+let globalZeroEgressMode = false;
+let globalPrivacyMode = false;
+
+function getResponseModeInstructions(responseMode: ResponseMode): string {
+  switch (responseMode) {
+    case 'concise':
+      return 'RESPONSE MODE: Concise. Give a direct answer, avoid filler, avoid restating context, and keep output as short as practical.';
+    case 'critical':
+      return 'RESPONSE MODE: Critical Reviewer. Be direct and skeptical. Call out mistakes, risky assumptions, and missing evidence clearly.';
+    case 'brutal_audit':
+      return 'RESPONSE MODE: Brutal Audit. Be blunt and terse. Lead with defects, risks, and contradictions. Do not flatter.';
+    case 'minimal_context':
+      return 'RESPONSE MODE: Minimal Context. Prioritize brevity and speed. Exclude non-essential details and focus strictly on the immediate query.';
+    case 'docs_heavy':
+      return 'RESPONSE MODE: Docs-Heavy. Focus heavily on detailed inline documentation, docstrings, codebase explanation files, and user documentation.';
+    case 'code_only':
+      return 'RESPONSE MODE: Code-Only. Output strictly raw code blocks and files with minimal conversational wrapper text.';
+    default:
+      return 'RESPONSE MODE: Balanced. Be clear, useful, and appropriately concise.';
+  }
+}
+
+function optimizePromptForMode(text: string, responseMode: ResponseMode): string {
+  if (responseMode === 'concise') {
+    const maxChars = 6000;
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, 4500)}\n\n[CONCISE MODE TRUNCATION: Middle content omitted to reduce unnecessary token usage.]\n\n${text.slice(-1200)}`;
+  }
+  if (responseMode === 'minimal_context') {
+    const maxChars = 3000;
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, 2000)}\n\n[MINIMAL CONTEXT MODE TRUNCATION: Context aggressively trimmed to minimize tokens.]\n\n${text.slice(-800)}`;
+  }
+  return text;
+}
+
+async function resolveQueryMentions(text: string, sandbox: WorkspaceSandbox): Promise<string> {
+  const mentionRegex = /(?:^|\s)@([a-zA-Z0-9_\-\.\/\\~\*]+)/g;
+  const matches = [...text.matchAll(mentionRegex)];
+  if (matches.length === 0) return text;
+
+  const contextBlocks: string[] = [];
+  const processedPaths = new Set<string>();
+  const ignoredKeywords = new Set([
+    'architect', 'keymaker', 'oracle', 'sentinel', 'assistant',
+    'system', 'user', 'developer', 'researcher', 'coordinator'
+  ]);
+
+  for (const match of matches) {
+    const rawPath = match[1];
+    if (ignoredKeywords.has(rawPath.toLowerCase())) continue;
+    if (processedPaths.has(rawPath)) continue;
+    processedPaths.add(rawPath);
+
+    // Expand wildcard matches (e.g. @src/components/* or @src/components/*.ts)
+    if (rawPath.includes('*')) {
+      try {
+        const starIndex = rawPath.indexOf('*');
+        const dirPart = rawPath.substring(0, starIndex);
+        const cleanDirPart = dirPart.endsWith('/') ? dirPart.slice(0, -1) : dirPart;
+        const extPart = rawPath.substring(starIndex + 1);
+
+        const targetDir = cleanDirPart || '.';
+        const entries = await sandbox.listDir(targetDir);
+
+        for (const file of entries) {
+          if (file.isDirectory) continue;
+          if (extPart && !file.name.endsWith(extPart)) continue;
+
+          const relativeFilePath = targetDir === '.' ? file.name : `${targetDir}/${file.name}`;
+          if (processedPaths.has(relativeFilePath)) continue;
+          processedPaths.add(relativeFilePath);
+
+          try {
+            const fileContent = await sandbox.readFile(relativeFilePath);
+            contextBlocks.push(`\n[REFERENCED FILE PATH: ${relativeFilePath}]\n\`\`\`\n${fileContent}\n\`\`\``);
+          } catch {
+            // Ignore individual file read errors
+          }
+        }
+      } catch (err: any) {
+        contextBlocks.push(`\n[WARNING: Could not expand wildcard mention "${rawPath}" - ${err.message}]`);
+      }
+      continue;
+    }
+
+    try {
+      const fileContent = await sandbox.readFile(rawPath);
+      contextBlocks.push(`\n[REFERENCED FILE PATH: ${rawPath}]\n\`\`\`\n${fileContent}\n\`\`\``);
+
+      // Scan for relative imports: e.g. import { X } from './utils';
+      const importRegex = /from\s+['"](\.\.?\/[^'"]+)['"]/g;
+      const importMatches = [...fileContent.matchAll(importRegex)];
+      
+      const fileDir = path.dirname(rawPath);
+
+      for (const impMatch of importMatches) {
+        const relativeImportPath = impMatch[1];
+        const resolvedImportBase = path.join(fileDir, relativeImportPath).replace(/\\/g, '/');
+        
+        // Potential extensions to try resolving
+        const extensions = ['.ts', '.tsx', '.js', '.jsx', ''];
+        let resolvedContent = '';
+        let foundPath = '';
+
+        for (const ext of extensions) {
+          const testPath = resolvedImportBase + ext;
+          if (processedPaths.has(testPath)) continue;
+          try {
+            resolvedContent = await sandbox.readFile(testPath);
+            foundPath = testPath;
+            break;
+          } catch {
+            // Extension didn't match, keep checking
+          }
+        }
+
+        if (foundPath && resolvedContent) {
+          processedPaths.add(foundPath);
+          contextBlocks.push(`\n[IMPORTED DEPENDENCY OF ${rawPath} -> PATH: ${foundPath}]\n\`\`\`\n${resolvedContent}\n\`\`\``);
+        }
+      }
+    } catch (err: any) {
+      contextBlocks.push(`\n[WARNING: Could not reference file "${rawPath}" - ${err.message}]`);
+    }
+  }
+
+  return `${text}\n\n=== REFERENCE CONTEXT ===\n${contextBlocks.join('\n')}`;
+}
+
+const app = express();
+
+// SEC-M4: security headers. CSP and cross-origin resource policy are disabled
+// here because this is a local API behind a custom CORS layer (below) and the
+// HTML is served separately by Vite; helmet still adds X-Content-Type-Options,
+// X-Frame-Options, Referrer-Policy, etc.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: false,
+}));
+
+// SEC-M4: rate limiter for sensitive auth/billing routes to blunt brute force.
+// Webhooks, telemetry, and companion WS are intentionally NOT limited here.
+const sensitiveLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30,                  // per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Exempt telemetry, companion websockets, and payment webhooks from origin restriction checks
+  const isExempt = req.path === '/api/telemetry' ||
+                   req.path === '/api/companion/ws' ||
+                   req.path === '/api/billing/webhook' ||
+                   req.path === '/api/billing/razorpay/webhook';
+  
+  if (origin) {
+    const isLocal = origin.startsWith('http://localhost:') || 
+                    origin.startsWith('http://127.0.0.1:') || 
+                    origin.startsWith('vscode-webview://');
+                    
+    if (!isLocal && !isExempt) {
+      console.warn(`[Security Alert] Blocked request to ${req.path} from untrusted origin: ${origin}`);
+      return res.status(403).json({ error: 'Access Denied: Request origin is untrusted.' });
+    }
+    
+    // Configure CORS headers dynamically
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    // If no origin is provided, fallback to allow-all or specific localhost for cross-origin compliance
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// SEC: true if this request arrived over the loopback interface, regardless
+// of which interface the server is bound to (see SEC-B5 — companion-over-LAN
+// users set KRYLEOS_BIND_HOST=0.0.0.0).
+function isLoopbackRequest(req: express.Request): boolean {
+  const addr = req.socket.remoteAddress || '';
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+// SEC: the pairing code/secret are displayed as a QR code by the desktop UI
+// for the user to scan with their phone — they must never be served to a
+// network caller. Without this guard, a device on the same LAN/Tailnet as a
+// companion-enabled instance (KRYLEOS_BIND_HOST=0.0.0.0) could fetch the
+// pairing secret directly and self-register via PAIR_DEVICE, bypassing the
+// pairing code entirely.
+function requireLoopback(req: express.Request, res: express.Response, next: express.NextFunction) {
+  if (!isLoopbackRequest(req)) {
+    return res.status(403).json({ error: 'This endpoint is only available to the local desktop app.' });
+  }
+  next();
+}
+
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
+  let event: any;
+  const sig = req.headers['stripe-signature'];
+  
+  // SEC-M2: fail closed. The unsigned-bypass path is permitted ONLY when running
+  // with mock billing keys AND outside production. Real keys are ALWAYS verified
+  // regardless of NODE_ENV, and production never accepts an unsigned webhook.
+  const usingMockBilling =
+    stripeSecretKey === 'sk_test_mock_key' || stripeWebhookSecret === 'whsec_mock_secret';
+  const allowUnsigned = usingMockBilling && process.env.NODE_ENV !== 'production';
+
+  if (!allowUnsigned) {
+    // Enforce real signature verification.
+    if (!sig) {
+      console.error('[Stripe Webhook] Rejected: missing signature with verification required.');
+      return res.status(400).send('Webhook Error: signature required');
+    }
+    if (usingMockBilling) {
+      // Production (or any non-dev) with mock keys is a misconfiguration — refuse.
+      console.error('[Stripe Webhook] Rejected: mock billing keys in a verifying environment.');
+      return res.status(400).send('Webhook Error: real Stripe keys required');
+    }
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig as string, stripeWebhookSecret);
+    } catch (err: any) {
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+  } else {
+    // Dev/test mock path only.
+    try {
+      event = JSON.parse(req.body.toString('utf8'));
+    } catch (err: any) {
+      return res.status(400).send(`Webhook Error parsing JSON: ${err.message}`);
+    }
+  }
+
+  try {
+    const obj = event.data.object;
+    let email = obj.metadata?.email || obj.customer_email;
+    let tier = obj.metadata?.tier || 'basic';
+
+    if (!email && obj.customer) {
+      try {
+        if (stripeSecretKey !== 'sk_test_mock_key') {
+          const customer = await stripe.customers.retrieve(obj.customer as string);
+          if (customer && !customer.deleted) {
+            email = customer.email;
+          }
+        } else {
+          email = obj.customer_email || 'test@example.com';
+        }
+      } catch {}
+    }
+
+    if (event.type === 'checkout.session.completed' || event.type === 'customer.subscription.updated') {
+      if (email) {
+        await syncController.subscribeByEmail(email, tier);
+        console.log(`[Stripe Webhook] Subscribed ${email} to ${tier}`);
+      }
+    } else if (event.type === 'customer.subscription.deleted') {
+      if (email) {
+        await syncController.subscribeByEmail(email, 'free');
+        console.log(`[Stripe Webhook] Subscription deleted. Demoted ${email} to free`);
+      }
+    }
+    res.json({ received: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEC-M2 (Razorpay variant): fail closed. Unsigned-bypass permitted ONLY with
+// mock keys outside production; real keys are always signature-verified, and
+// production never accepts an unsigned webhook.
+app.post('/api/billing/razorpay/webhook', express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
+  const sig = req.headers['x-razorpay-signature'];
+  const allowUnsigned = isMockRazorpay && process.env.NODE_ENV !== 'production';
+
+  let body: any;
+
+  if (!allowUnsigned) {
+    if (!sig) {
+      console.error('[Razorpay Webhook] Rejected: missing signature with verification required.');
+      return res.status(400).send('Webhook Error: signature required');
+    }
+    if (isMockRazorpay) {
+      console.error('[Razorpay Webhook] Rejected: mock billing keys in a verifying environment.');
+      return res.status(400).send('Webhook Error: real Razorpay keys required');
+    }
+    const expected = crypto.createHmac('sha256', razorpayKeySecret).update(req.body).digest('hex');
+    const sigBuf = Buffer.from(sig as string, 'utf8');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+      return res.status(400).send('Webhook Error: invalid signature');
+    }
+  }
+
+  try {
+    body = JSON.parse(req.body.toString('utf8'));
+  } catch (err: any) {
+    return res.status(400).send(`Webhook Error parsing JSON: ${err.message}`);
+  }
+
+  try {
+    if (body.event === 'payment.captured') {
+      const order = body.payload?.payment?.entity?.notes ?? body.payload?.order?.entity?.notes;
+      const email = order?.email;
+      const tier = order?.tier;
+      if (email && tier) {
+        await syncController.subscribeByEmail(email, tier);
+        console.log(`[Razorpay Webhook] Subscribed ${email} to ${tier}`);
+      }
+    }
+    res.json({ received: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.use(express.json({ limit: '1mb' }));
+
+const server = http.createServer(app);
+let totalBytesSent = 0;
+let totalBytesReceived = 0;
+
+const wss = new WebSocketServer({ 
+  server,
+  perMessageDeflate: {
+    zlibDeflateOptions: {
+      chunkSize: 1024,
+      memLevel: 7,
+      level: 3
+    },
+    zlibInflateOptions: {
+      chunkSize: 10 * 1024
+    },
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true,
+    concurrencyLimit: 10
+  }
+});
+
+const chatDb = new ChatDatabase();
+// Active project id (set via POST /api/projects/active). The planning layer
+// must read the same FLOW board the renderer writes: project-scoped
+// `flow_board_<projectId>` when a project is active, global `flow_board` otherwise.
+let activeProjectId: string | null = null;
+const activeFlowSessionId = () => (activeProjectId ? `flow_board_${activeProjectId}` : 'flow_board');
+const planningV2 = () => new PlanningV2Service(chatDb, sandbox.getWorkspaceRoot(), activeFlowSessionId());
+
+// Server-side blockedBy enforcement: locate the plan item across saved FLOW
+// boards (`flow_board` and project-scoped `flow_board_*` sessions) and return
+// its unresolved blocker ids. A blocked item must never reach FORGE even if a
+// client (UI, VS Code extension, or raw WebSocket caller) skips the UI gate.
+async function findUnresolvedBlockers(planItemId: string): Promise<string[]> {
+  const sessions = await chatDb.listSessions('project');
+  for (const meta of sessions) {
+    const session = await chatDb.getSession(meta.id);
+    const tasks = session?.tasks || [];
+    if (tasks.some(task => task.id === planItemId)) {
+      return unresolvedBlockers(tasks, planItemId);
+    }
+  }
+  return [];
+}
+
+// Phase 5.4: resolves a remote START_FORGE_RUN's planItemId to its
+// ProjectTask, the same way findUnresolvedBlockers locates it across saved
+// FLOW boards (`flow_board` and project-scoped `flow_board_*` sessions).
+async function findTaskById(planItemId: string): Promise<ProjectTask | null> {
+  const sessions = await chatDb.listSessions('project');
+  for (const meta of sessions) {
+    const session = await chatDb.getSession(meta.id);
+    const task = (session?.tasks || []).find(t => t.id === planItemId);
+    if (task) return task;
+  }
+  return null;
+}
+
+// Phase 5.6: records FORGE-run initiations to `.kryleos/command_initiations.json`,
+// mirroring the {source, deviceId} audit fields agents.ts now writes to
+// command_approvals.json for approve/reject/abort.
+export async function logCommandInitiation(workspaceRoot: string, entry: { planItemId: string; deviceId?: string; source: 'local' | 'remote' }): Promise<void> {
+  try {
+    const dir = path.join(workspaceRoot, '.kryleos');
+    const filePath = path.join(dir, 'command_initiations.json');
+    await fs.promises.mkdir(dir, { recursive: true });
+    let logs = [];
+    try {
+      const existing = await fs.promises.readFile(filePath, 'utf8');
+      logs = JSON.parse(existing);
+    } catch {}
+    logs.push({
+      timestamp: new Date().toISOString(),
+      planItemId: entry.planItemId,
+      deviceId: entry.deviceId ?? null,
+      source: entry.source
+    });
+    await fs.promises.writeFile(filePath, JSON.stringify(logs, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to log command initiation:', err);
+  }
+}
+
+// Phase 5.4: the FORGE-run launch body shared by the local `case 'query'`
+// handler and a remote companion's START_FORGE_RUN. `send` decouples it from
+// a specific WebSocket so a remote run can broadcast to all paired companions
+// instead of replying to one `ws`.
+async function startForgeRun(opts: {
+  orchestrator: AgentOrchestrator;
+  queryText: string;
+  originalText: string;
+  sessionId?: string;
+  space: 'code' | 'cowork' | 'project';
+  planItemId?: string;
+  zeroEgressMode: boolean;
+  modelProxy: ChatClient;
+  send: (payload: any) => void;
+  deviceId?: string;
+  source?: 'local' | 'remote';
+}): Promise<void> {
+  const { orchestrator, queryText, originalText, sessionId, space, planItemId, zeroEgressMode, modelProxy, send, deviceId, source } = opts;
+  if (planItemId) {
+    await logCommandInitiation(sandbox.getWorkspaceRoot(), { planItemId, deviceId, source: source || 'local' });
+  }
+  send({ type: 'status', message: 'Orchestrating agents...' });
+  if (zeroEgressMode) {
+    orchestrator.addLog('SYSTEM', 'user', 'All model calls are local — no data sent to external providers', 'info');
+  }
+  await orchestrator.handleUserQuery(queryText, sessionId, space, originalText);
+  if (planItemId) {
+    try {
+      const trace = await planningV2().saveTrace({
+        planItemId,
+        logs: orchestrator.getLogs(),
+        client: modelProxy
+      });
+      send({ type: 'execution_trace', trace, message: `Execution trace saved for plan item ${planItemId}.` });
+      companionHub.broadcastSessionUpdate({ latestTrace: trace });
+    } catch (traceErr: any) {
+      send({ type: 'error', message: `Trace capture failed: ${traceErr.message}` });
+    }
+  }
+}
+
+// Set default workspace root to the directory this application is running in
+const defaultWorkspace = path.resolve(process.cwd());
+
+const sandbox = new WorkspaceSandbox(defaultWorkspace);
+companionHub.setWorkspaceRoot(defaultWorkspace);
+const deepseekClient = new DeepSeekClient({
+  apiKey: '',
+  model: 'deepseek-chat'
+});
+const geminiClient = new GeminiClient({
+  apiKey: '',
+  model: 'gemini-2.5-flash',
+  useSearch: false
+});
+const openaiClient = new OpenAIClient({
+  apiKey: '',
+  model: 'gpt-4o-mini'
+});
+const anthropicClient = new AnthropicClient({
+  apiKey: '',
+  model: 'claude-3-5-sonnet-latest'
+});
+const openrouterClient = new OpenRouterClient({
+  apiKey: '',
+  model: 'meta-llama/llama-3.3-70b-instruct'
+});
+const ollamaClient = new OllamaClient({
+  model: 'llama3'
+});
+
+function isOllamaModel(model: string): boolean {
+  return model.startsWith('ollama:') || model === 'llama3' || model === 'qwen2.5-coder';
+}
+
+function normalizeOllamaModel(model: string): string {
+  return model.startsWith('ollama:') ? model.slice('ollama:'.length) : model;
+}
+
+// Last model selected by any connection. Lets REST routes (e.g. plan drift) reach
+// the configured provider outside the per-connection WebSocket scope. Falls back
+// gracefully: if no key is configured the call errors and callers no-op.
+let activeModel = 'deepseek-chat';
+const getModelClient = (overridePrivacy?: boolean): ChatClient => ({
+  async chatStream(messages, callbacks) {
+    if ((globalZeroEgressMode || globalPrivacyMode) && !isOllamaModel(activeModel)) {
+      if (globalPrivacyMode && overridePrivacy) {
+        // Allowed manual override
+      } else {
+        const modeName = globalPrivacyMode ? 'Privacy Mode' : 'Zero Egress Mode';
+        const err = new Error(`${modeName} is active. External API calls to hosted models are blocked at the server layer.`);
+        callbacks.onError?.(err);
+        return;
+      }
+    }
+    if (activeModel.startsWith('gemini')) {
+      return geminiClient.chatStream(messages, callbacks);
+    }
+    const adapted = {
+      onContentChunk: callbacks.onContentChunk,
+      onComplete: (content: string) => callbacks.onComplete?.(content, ''),
+      onError: callbacks.onError
+    };
+    if (activeModel.startsWith('gpt')) return openaiClient.chatStream(messages, adapted);
+    if (activeModel.startsWith('claude')) return anthropicClient.chatStream(messages, adapted);
+    if (isOllamaModel(activeModel)) {
+      ollamaClient.setModel(normalizeOllamaModel(activeModel));
+      return ollamaClient.chatStream(messages, adapted);
+    }
+    if (activeModel.includes('/') || activeModel.startsWith('meta-') || activeModel.startsWith('qwen/')) {
+      return openrouterClient.chatStream(messages, adapted);
+    }
+    return deepseekClient.chatStream(messages, adapted);
+  }
+});
+
+const secretsFilePath = path.join(process.env.USERPROFILE || process.env.HOME || defaultWorkspace, '.kryleos_forge_secrets.json');
+
+const googleClient = new GoogleClient({
+  clientId: process.env.GOOGLE_CLIENT_ID || '1048684784400-mockclientid.apps.googleusercontent.com',
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'mock_secret_foo_bar_123'
+});
+
+if (fs.existsSync(secretsFilePath)) {
+  try {
+    const content = fs.readFileSync(secretsFilePath, 'utf-8').trim();
+    const parsed = JSON.parse(content);
+    if (parsed.googleTokens) {
+      googleClient.setTokens(parsed.googleTokens);
+    }
+  } catch (err) {
+    console.warn('Corrupted secrets file — resetting:', err instanceof Error ? err.message : err);
+    try { fs.unlinkSync(secretsFilePath); } catch (_) { /* ignore */ }
+  }
+}
+
+app.get('/api/sessions', async (req, res) => {
+  try {
+    const list = await chatDb.listSessions(req.query.space as any);
+    res.json(list);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/sessions/:id', async (req, res) => {
+  try {
+    const session = await chatDb.getSession(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    res.json(session);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/sessions/:id', async (req, res) => {
+  try {
+    await chatDb.deleteSession(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Strip HTML tags from a string to prevent stored XSS (SEC-7).
+function stripHtml(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  return value.replace(/<[^>]*>/g, '');
+}
+
+function sanitizeTask(task: unknown): unknown {
+  if (!task || typeof task !== 'object') return task;
+  const t = task as Record<string, unknown>;
+  return Object.fromEntries(
+    Object.entries(t).map(([k, v]) => [k, stripHtml(v)])
+  );
+}
+
+// REST fallback for board persistence so task saves survive a closed
+// WebSocket. Mirrors the WS `save_tasks` path.
+app.put('/api/sessions/:id/tasks', async (req, res) => {
+  const tasks = req.body?.tasks;
+  if (!Array.isArray(tasks)) {
+    return res.status(400).json({ success: false, error: 'tasks array is required' });
+  }
+  try {
+    const existing = await chatDb.getSession(req.params.id);
+    const session: ChatSession = existing || {
+      id: req.params.id,
+      title: req.params.id === 'flow_board' ? 'FLOW Board' : 'Project Tasks',
+      createdAt: new Date().toISOString(),
+      logs: [],
+      checklist: [],
+      space: 'project' as const,
+      tasks: []
+    };
+    session.tasks = tasks.map(sanitizeTask) as ProjectTask[];
+    await chatDb.saveSession(session);
+    res.json({ success: true, tasks: session.tasks });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/workspace', (_req, res) => {
+  res.json({
+    workspaceRoot: sandbox.getWorkspaceRoot(),
+    defaultWorkspace
+  });
+});
+
+app.post('/api/workspace', (req, res) => {
+  const { path: newPath } = req.body;
+  if (!newPath) {
+    return res.status(400).json({ error: 'path is required' });
+  }
+  try {
+    sandbox.setWorkspaceRoot(newPath);
+    companionHub.setWorkspaceRoot(newPath);
+    res.json({ success: true, workspaceRoot: sandbox.getWorkspaceRoot() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/projects', (req, res) => {
+  try {
+    const projectsPath = path.resolve(process.cwd(), 'projects.json');
+    let projects = [];
+    if (fs.existsSync(projectsPath)) {
+      const content = fs.readFileSync(projectsPath, 'utf-8');
+      projects = JSON.parse(content || '[]');
+    }
+    res.json({ success: true, projects });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/create', async (req, res) => {
+  const { name, folderPath, gitUrl, description } = req.body;
+  if (!name || !folderPath) {
+    return res.status(400).json({ error: 'name and folderPath are required' });
+  }
+
+  try {
+    const resolvedPath = path.resolve(folderPath);
+    if (!fs.existsSync(resolvedPath)) {
+      fs.mkdirSync(resolvedPath, { recursive: true });
+    }
+
+    const projectsPath = path.resolve(process.cwd(), 'projects.json');
+    let projects: any[] = [];
+    if (fs.existsSync(projectsPath)) {
+      const content = fs.readFileSync(projectsPath, 'utf-8');
+      projects = JSON.parse(content || '[]');
+    }
+
+    const newProject = {
+      id: `project_${Date.now()}`,
+      name,
+      workspaceFolder: resolvedPath,
+      gitUrl: gitUrl || '',
+      description: description || ''
+    };
+
+    const finalizeProject = () => {
+      // Avoid duplicate folder paths
+      const filtered = projects.filter((p: any) => p.workspaceFolder !== resolvedPath);
+      filtered.push(newProject);
+      fs.writeFileSync(projectsPath, JSON.stringify(filtered, null, 2), 'utf-8');
+      sandbox.setWorkspaceRoot(resolvedPath);
+      activeProjectId = newProject.id;
+      res.json({ success: true, project: newProject, workspaceRoot: resolvedPath });
+    };
+
+    if (gitUrl && gitUrl.trim()) {
+      if (!fs.existsSync(path.join(resolvedPath, '.git'))) {
+        execFile('git', ['clone', gitUrl, '.'], { cwd: resolvedPath }, (err, stdout, stderr) => {
+          if (err) {
+            console.error('Git clone failed:', stderr || err.message);
+            newProject.description = `${newProject.description} (Git clone failed: ${err.message})`.trim();
+          }
+          finalizeProject();
+        });
+        return;
+      }
+    }
+
+    finalizeProject();
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/projects/active', (req, res) => {
+  const { id } = req.body;
+  try {
+    const projectsPath = path.resolve(process.cwd(), 'projects.json');
+    let projects = [];
+    if (fs.existsSync(projectsPath)) {
+      const content = fs.readFileSync(projectsPath, 'utf-8');
+      projects = JSON.parse(content || '[]');
+    }
+    const project = projects.find((p: any) => p.id === id);
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    sandbox.setWorkspaceRoot(project.workspaceFolder);
+    activeProjectId = project.id;
+    res.json({ success: true, project, workspaceRoot: project.workspaceFolder });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/projects/:id', (req, res) => {
+  try {
+    const projectsPath = path.resolve(process.cwd(), 'projects.json');
+    let projects = [];
+    if (fs.existsSync(projectsPath)) {
+      const content = fs.readFileSync(projectsPath, 'utf-8');
+      projects = JSON.parse(content || '[]');
+    }
+    const updated = projects.filter((p: any) => p.id !== req.params.id);
+    fs.writeFileSync(projectsPath, JSON.stringify(updated, null, 2), 'utf-8');
+    if (activeProjectId === req.params.id) activeProjectId = null;
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/revert', async (req, res) => {
+  const { path: filePath } = req.body;
+  if (!filePath) {
+    return res.status(400).json({ error: 'path is required' });
+  }
+  try {
+    const success = await sandbox.revertFile(filePath);
+    res.json({ success, message: success ? `Reverted ${path.basename(filePath)} to snapshot state` : 'No snapshot available for this file' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/git/status', async (_req, res) => {
+  try {
+    const status = await sandbox.gitStatus();
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/git/stage', async (req, res) => {
+  const { path: filePath } = req.body;
+  if (!filePath) {
+    return res.status(400).json({ error: 'path is required' });
+  }
+  try {
+    const success = await sandbox.gitStage(filePath);
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/review/current', async (_req, res) => {
+  try {
+    const state = await sandbox.gitReviewCurrent();
+    res.json(state);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/review/status', async (req, res) => {
+  const { path: filePath, status } = req.body as { path?: string; status?: ReviewStatus };
+  const validStatuses: ReviewStatus[] = ['pending', 'accepted', 'rejected', 'reverted', 'staged'];
+  if (!filePath) {
+    return res.status(400).json({ error: 'path is required' });
+  }
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({ error: 'valid status is required' });
+  }
+  try {
+    const result = await sandbox.setReviewStatus(filePath, status);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/review/stage', async (req, res) => {
+  const { path: filePath, staged } = req.body as { path?: string; staged?: boolean };
+  if (!filePath) {
+    return res.status(400).json({ error: 'path is required' });
+  }
+  try {
+    const result = await sandbox.gitReviewStage(filePath, staged !== false);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/review/revert', async (req, res) => {
+  const { path: filePath } = req.body as { path?: string };
+  if (!filePath) {
+    return res.status(400).json({ error: 'path is required' });
+  }
+  try {
+    const result = await sandbox.gitReviewRevert(filePath);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/git/commit', async (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'message is required' });
+  }
+  try {
+    const result = await sandbox.gitCommit(message);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/git/remote', async (req, res) => {
+  const { url, token } = req.body;
+  if (!url) {
+    return res.status(400).json({ error: 'url is required' });
+  }
+  try {
+    const result = await sandbox.gitSetRemote(url, token);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/git/push', async (req, res) => {
+  const { branch } = req.body;
+  try {
+    const result = await sandbox.gitPush(branch || 'main');
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/git/pull', async (req, res) => {
+  const { branch } = req.body;
+  try {
+    const result = await sandbox.gitPull(branch || 'main');
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/files', async (req, res) => {
+  const dirPath = (req.query.path as string) || '.';
+  try {
+    const list = await sandbox.listDir(dirPath);
+    res.json(list);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/workspace/graph', async (req, res) => {
+  try {
+    const rootPath = sandbox.resolvePath('.');
+    const graphData = await generateWorkspaceGraph(rootPath);
+    res.json(graphData);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/register', sensitiveLimiter, async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'email and password are required' });
+  }
+  if (email.includes('\x00') || password.includes('\x00')) {
+    return res.status(400).json({ error: 'Invalid input' });
+  }
+  try {
+    const user = await syncController.register(email, password);
+    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token } });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/login', sensitiveLimiter, async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'email and password are required' });
+  }
+  if (email.includes('\x00') || password.includes('\x00')) {
+    return res.status(400).json({ error: 'Invalid input' });
+  }
+  try {
+    const user = await syncController.login(email, password);
+    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token } });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/subscribe', sensitiveLimiter, async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    // SEC-M3: this route may only ever downgrade to 'free' (cancel/self-serve
+    // downgrade). Upgrades MUST go through a verified Stripe/Razorpay checkout
+    // (which set the tier via the payment-provider webhook) or a signed
+    // license key (/api/license/activate). Accepting an arbitrary `tier` here
+    // let any authenticated user self-grant any paid tier.
+    const { tier } = req.body;
+    if (tier !== undefined && tier !== 'free') {
+      return res.status(400).json({ error: 'Upgrades must go through checkout or license activation.' });
+    }
+    const user = await syncController.subscribe(token, 'free');
+    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token } });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/billing/create-checkout-session', sensitiveLimiter, async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { tier } = req.body;
+  if (!tier) return res.status(400).json({ error: 'tier is required' });
+
+  try {
+    const user = await syncController.getUserByToken(token);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+
+    if (!BUYABLE_TIER_IDS.includes(tier as TierId)) {
+      return res.status(400).json({ error: `tier '${tier}' is not purchasable` });
+    }
+    const amount = Math.round((TIER_PRICES[tier as TierId] ?? 0) * 100);
+
+    if (stripeSecretKey === 'sk_test_mock_key') {
+      return res.json({
+        success: true,
+        url: `http://localhost:5173/?mock_checkout=true&email=${encodeURIComponent(user.email)}&tier=${encodeURIComponent(tier)}`
+      });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      customer_email: user.email,
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `Kryleos Forge ${tier.toUpperCase()} Plan`,
+              description: `Upgrade to Kryleos Forge ${tier.toUpperCase()}`,
+            },
+            unit_amount: amount,
+            recurring: { interval: 'month' },
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: 'http://localhost:5173/?checkout=success',
+      cancel_url: 'http://localhost:5173/?checkout=cancel',
+      metadata: {
+        email: user.email,
+        tier
+      }
+    });
+
+    res.json({ success: true, url: session.url });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Razorpay order creation for India. Mirrors create-checkout-session's
+// auth/tier validation; amount is computed server-side from TIER_PRICES_INR
+// (never trusted from the client).
+app.post('/api/billing/razorpay/create-order', sensitiveLimiter, async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  const { tier } = req.body;
+  if (!tier) return res.status(400).json({ error: 'tier is required' });
+
+  try {
+    const user = await syncController.getUserByToken(token);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+
+    if (!BUYABLE_TIER_IDS.includes(tier as TierId)) {
+      return res.status(400).json({ error: `tier '${tier}' is not purchasable` });
+    }
+    const priceInr = TIER_PRICES_INR[tier as TierId];
+    if (!priceInr) {
+      return res.status(400).json({ error: `tier '${tier}' is not available in INR` });
+    }
+    const amountPaise = Math.round(priceInr * 100);
+
+    const order = await createRazorpayOrder({ amountPaise, tier, email: user.email });
+    res.json({ success: true, orderId: order.orderId, amount: order.amount, currency: order.currency, keyId: order.keyId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/billing/create-portal-session', sensitiveLimiter, async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const user = await syncController.getUserByToken(token);
+    if (!user) return res.status(401).json({ error: 'User not found' });
+
+    if (stripeSecretKey === 'sk_test_mock_key') {
+      return res.json({
+        success: true,
+        url: `http://localhost:5173/?mock_portal=true&email=${encodeURIComponent(user.email)}`
+      });
+    }
+
+    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+    let customerId = customers.data[0]?.id;
+    if (!customerId) {
+      const customer = await stripe.customers.create({ email: user.email });
+      customerId = customer.id;
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: 'http://localhost:5173/',
+    });
+
+    res.json({ success: true, url: session.url });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// SEC-M3: license activation is offline-signature-based (Ed25519, see
+// license.ts). The tier is applied to the AUTHENTICATED caller's own account
+// only — never to a client-supplied email — and only if the key's signature
+// verifies against our embedded public key and it has not expired.
+app.post('/api/license/activate', sensitiveLimiter, async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ success: false, error: 'Unauthorized' });
+  }
+
+  const { licenseKey } = req.body;
+  if (!licenseKey || typeof licenseKey !== 'string') {
+    return res.status(400).json({ success: false, error: 'licenseKey is required' });
+  }
+
+  try {
+    const user = await syncController.getUserByToken(token);
+    if (!user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const result = verifyLicenseKey(licenseKey);
+    if (!result.ok) {
+      const message = result.reason === 'expired'
+        ? `This license expired on ${result.expiry}.`
+        : result.reason === 'hwid_mismatch'
+          ? 'This license is bound to a different device.'
+          : 'Invalid license key.';
+      return res.status(400).json({ success: false, error: message });
+    }
+
+    const updated = await syncController.subscribeByEmail(user.email, result.tier);
+    res.json({ success: true, user: { email: updated.email, isPremium: updated.isPremium, tier: updated.tier, token: updated.token } });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/sync/push', async (req, res) => {
+  if (globalPrivacyMode) {
+    return res.status(400).json({ error: 'Sync is disabled when Privacy Mode is active.' });
+  }
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const { bypassSecrets, ...rest } = req.body;
+  if (!bypassSecrets) {
+    const payloadStr = JSON.stringify(rest);
+    const foundSecrets = scanSecrets(payloadStr);
+    if (foundSecrets.length > 0) {
+      return res.status(400).json({
+        error: 'Secrets detected in synchronization payload. Please review and remove secrets or bypass to proceed.',
+        secrets: foundSecrets,
+        requiresBypass: true
+      });
+    }
+  }
+
+  try {
+    const lastUpdated = await syncController.pushSync(token, req.body);
+    broadcastSyncUpdate(token, req.body, lastUpdated);
+    res.json({ success: true, lastUpdated });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/sync/pull', async (req, res) => {
+  if (globalPrivacyMode) {
+    return res.status(400).json({ error: 'Sync is disabled when Privacy Mode is active.' });
+  }
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const syncData = await syncController.pullSync(token);
+    res.json({ success: true, syncData });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/files/content', async (req, res) => {
+  const filePath = (req.query.path as string);
+  if (!filePath) {
+    return res.status(400).json({ error: 'path query parameter is required' });
+  }
+  try {
+    const content = await sandbox.readFile(filePath);
+    const resolvedPath = sandbox.resolvePath(filePath);
+    let lastModified = '';
+    if (fs.existsSync(resolvedPath)) {
+      const stats = fs.statSync(resolvedPath);
+      lastModified = stats.mtime.toISOString();
+    }
+    res.json({ content, lastModified });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/files/create', async (req, res) => {
+  const { path: filePath, isDirectory, content } = req.body;
+  if (!filePath) {
+    return res.status(400).json({ error: 'path is required' });
+  }
+  try {
+    const resolved = sandbox.resolvePath(filePath);
+    if (isDirectory) {
+      await fs.promises.mkdir(resolved, { recursive: true });
+    } else {
+      await sandbox.writeFile(filePath, content || '');
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/files/save', async (req, res) => {
+  const { path: filePath, content } = req.body;
+  if (!filePath) {
+    return res.status(400).json({ error: 'path is required' });
+  }
+  try {
+    await sandbox.writeFile(filePath, content || '');
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/files', async (req, res) => {
+  const { path: filePath } = req.query;
+  if (!filePath) {
+    return res.status(400).json({ error: 'path query parameter is required' });
+  }
+  try {
+    const resolved = sandbox.resolvePath(filePath as string);
+    await fs.promises.unlink(resolved);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
+app.get('/api/credentials', async (_req, res) => {
+  try {
+    if (fs.existsSync(secretsFilePath)) {
+      const content = await fs.promises.readFile(secretsFilePath, 'utf-8');
+      res.json(JSON.parse(content));
+    } else {
+      res.json({});
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/credentials', async (req, res) => {
+  try {
+    let existing = {};
+    if (fs.existsSync(secretsFilePath)) {
+      const content = await fs.promises.readFile(secretsFilePath, 'utf-8');
+      existing = JSON.parse(content);
+    }
+    const updated = { ...existing, ...req.body };
+    await fs.promises.writeFile(secretsFilePath, JSON.stringify(updated, null, 2), 'utf-8');
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/security/scan', (req, res) => {
+  try {
+    const { text } = req.body;
+    const secrets = scanSecrets(text || '');
+    res.json({ success: true, secrets });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/companion/pairing-code', requireLoopback, (req, res) => {
+  try {
+    const code = companionHub.generatePairingCode();
+    res.json({ success: true, code });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/companion/status', requireLoopback, (req, res) => {
+  try {
+    const code = companionHub.getPairingCode();
+    const pairingSecret = companionHub.getPairingSecret();
+    const pairingExpiresAt = companionHub.getPairingExpiry();
+    const connectedCount = companionHub.getConnectedCount();
+    res.json({ success: true, code, pairingSecret, pairingExpiresAt, connectedCount });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/companion/devices', (req, res) => {
+  try {
+    const devices = companionHub.listDevices();
+    res.json({ success: true, devices });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/companion/devices/:deviceId', (req, res) => {
+  try {
+    const revoked = companionHub.revokeDevice(req.params.deviceId);
+    if (!revoked) {
+      res.status(404).json({ success: false, error: 'Device not found.' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const activeSockets = new Map<WebSocket, string>();
+const collabRooms = new Map<string, Set<WebSocket>>();
+
+function broadcastSyncUpdate(token: string, payload: any, lastUpdated: string) {
+  for (const [socket, socketToken] of activeSockets.entries()) {
+    if (socketToken === token && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'sync_update',
+        lastUpdated,
+        payload
+      }));
+    }
+  }
+}
+
+wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
+  const url = req?.url || '';
+  if (url.includes('/api/companion/ws')) {
+    companionHub.handleConnection(ws, req);
+    return;
+  }
+
+  console.log('Client connected to Kryleos Forge WS server');
+
+  // Hook ws.send to track bytes sent
+  const originalSend = ws.send;
+  ws.send = function(data: any, ...args: any[]) {
+    try {
+      const dataSize = typeof data === 'string' ? data.length : (data instanceof Buffer ? data.length : JSON.stringify(data).length);
+      totalBytesSent += dataSize;
+    } catch (e) {}
+    return (originalSend as any).apply(this, [data, ...args]);
+  };
+  let currentModel = 'deepseek-chat';
+  let customInstructions = '';
+  let responseMode: ResponseMode = 'balanced';
+  let chatAbortRequested = false;
+  let projectName = '';
+  let zeroEgressMode = false;
+  let privacyMode = false;
+  let overrideHostedActive = false;
+  let currentSessionId = 'global_session';
+
+  const modelProxy: ChatClient = {
+    async chatStream(messages, callbacks) {
+      if ((zeroEgressMode || privacyMode) && !isOllamaModel(currentModel)) {
+        if (privacyMode && overrideHostedActive) {
+          // Allow manually overridden hosted model calls
+        } else {
+          const modeName = privacyMode ? 'Privacy Mode' : 'Zero Egress Mode';
+          const err = new Error(`${modeName} is active. External API calls to hosted models are blocked at the server layer.`);
+          callbacks.onError?.(err);
+          return;
+        }
+      }
+
+      // Pre-calculate input tokens and cost estimation
+      const inputText = messages.map(m => m.content).join('\n');
+      const inputTokens = estimateTokens(inputText);
+      const inputCost = estimateCost(inputText, currentModel, false);
+      let tokenSavings = 0;
+      if (responseMode === 'concise' || responseMode === 'minimal_context') {
+        const savingRate = responseMode === 'minimal_context' ? 0.5 : 0.2;
+        tokenSavings = Math.ceil(inputTokens * savingRate);
+      }
+
+      const adaptedCallbacks = {
+        onContentChunk: callbacks.onContentChunk,
+        onComplete: async (content: string, reasoning?: string) => {
+          const outputTokens = estimateTokens(content);
+          const outputCost = estimateCost(content, currentModel, true);
+          const totalCost = inputCost + outputCost;
+
+          // Save cost record to CostGuard
+          try {
+            const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
+            const tier = sandbox.getUserTier() || 'free';
+            const tierLadder = ['free', 'solo', 'solo_plus', 'founder', 'agency'];
+            if (tierLadder.indexOf(tier) >= 2) { // solo_plus or higher
+              await costGuard.addRecord({
+                sessionId: currentSessionId,
+                model: currentModel,
+                provider: getProviderForModel(currentModel),
+                inputTokens,
+                outputTokens,
+                cost: totalCost,
+                tokenSavings
+              });
+            }
+          } catch (err) {
+            console.error('Failed to log cost record in chatStream completion:', err);
+          }
+
+          // Send cost_update update message to client
+          try {
+            ws.send(JSON.stringify({
+              type: 'cost_update',
+              cost: totalCost,
+              inputTokens,
+              outputTokens,
+              model: currentModel,
+              provider: getProviderForModel(currentModel),
+              tokenSavings
+            }));
+          } catch (e) {}
+
+          callbacks.onComplete?.(content, reasoning || '');
+        },
+        onError: callbacks.onError
+      };
+
+      if (currentModel.startsWith('gemini')) {
+        return geminiClient.chatStream(messages, adaptedCallbacks);
+      }
+      if (currentModel.startsWith('gpt')) {
+        return openaiClient.chatStream(messages, adaptedCallbacks);
+      } else if (currentModel.startsWith('claude')) {
+        return anthropicClient.chatStream(messages, adaptedCallbacks);
+      } else if (isOllamaModel(currentModel)) {
+        ollamaClient.setModel(normalizeOllamaModel(currentModel));
+        return ollamaClient.chatStream(messages, adaptedCallbacks);
+      } else if (currentModel.includes('/') || currentModel.startsWith('meta-') || currentModel.startsWith('qwen/')) {
+        return openrouterClient.chatStream(messages, adaptedCallbacks);
+      } else {
+        return deepseekClient.chatStream(messages, adaptedCallbacks);
+      }
+    }
+  };
+
+  let orchestrator = new AgentOrchestrator(sandbox, modelProxy, (update) => {
+    ws.send(JSON.stringify({
+      type: 'update',
+      ...update
+    }));
+    try {
+      companionHub.broadcastToCompanions({
+        type: 'update',
+        ...update
+      });
+    } catch (e) {}
+  });
+  companionHub.registerOrchestrator(currentSessionId, orchestrator);
+
+  // Phase 5.4: lets a paired companion launch a FORGE run for a plan item via
+  // START_FORGE_RUN, reusing this connection's orchestrator/modelProxy/mode
+  // closures. Re-registered under the new sessionId wherever currentSessionId
+  // changes (case 'query', case 'load_session'), mirroring registerOrchestrator.
+  const remoteForgeRunner = async (planItemId: string, send: (payload: any) => void, deviceId?: string) => {
+    const task = await findTaskById(planItemId);
+    if (!task) {
+      send({ type: 'error', code: 'plan_item_not_found', message: `Plan item ${planItemId} not found.` });
+      return;
+    }
+    const blockers = await findUnresolvedBlockers(planItemId);
+    if (blockers.length > 0) {
+      send({
+        type: 'error',
+        code: 'blocked',
+        message: `BLOCKED PLAN ITEM REJECTED: plan item ${planItemId} has unresolved blockers (${blockers.join(', ')}). Complete its dependencies before sending it to FORGE.`
+      });
+      return;
+    }
+    const queryText = optimizePromptForMode(await resolveQueryMentions(task.title, sandbox), responseMode);
+    await startForgeRun({
+      orchestrator,
+      queryText,
+      originalText: task.title,
+      sessionId: currentSessionId,
+      space: 'code',
+      planItemId,
+      zeroEgressMode,
+      modelProxy,
+      send,
+      deviceId,
+      source: 'remote'
+    });
+  };
+  companionHub.registerForgeRunner(currentSessionId, remoteForgeRunner);
+
+  orchestrator.onCommandApprovalRequired = (tool, command) => {
+    const commandId = `cmd_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
+    orchestrator.pendingCommandId = commandId;
+    orchestrator.pendingCommandText = command;
+
+    ws.send(JSON.stringify({
+      type: 'command_approval_required',
+      tool,
+      command,
+      commandId
+    }));
+    
+    companionHub.broadcastCommandApprovalRequired(currentSessionId, commandId, tool, command, classifyCommand(command).destructive);
+  };
+
+  ws.on('message', async (message: any) => {
+    try {
+      const messageStr = typeof message === 'string' ? message : message.toString();
+      totalBytesReceived += messageStr.length;
+      const data = JSON.parse(messageStr);
+      
+      switch (data.type) {
+        case 'config':
+          if (data.projectName !== undefined) {
+            projectName = data.projectName;
+          }
+          if (data.customInstructions !== undefined) {
+            customInstructions = data.customInstructions;
+            orchestrator.setCustomInstructions(data.customInstructions);
+          }
+          if (data.responseMode !== undefined) {
+            responseMode = data.responseMode;
+            orchestrator.setResponseMode(responseMode);
+          }
+          if (data.apiKey) {
+            deepseekClient.setApiKey(data.apiKey);
+          }
+          if (data.geminiApiKey) {
+            geminiClient.setApiKey(data.geminiApiKey);
+          }
+          if (data.openaiApiKey) {
+            openaiClient.setApiKey(data.openaiApiKey);
+          }
+          if (data.anthropicApiKey) {
+            anthropicClient.setApiKey(data.anthropicApiKey);
+          }
+          if (data.openrouterApiKey) {
+            openrouterClient.setApiKey(data.openrouterApiKey);
+          }
+          if (data.ollamaUrl) {
+            ollamaClient.setBaseUrl(data.ollamaUrl);
+          }
+          if (data.useSearch !== undefined) {
+            geminiClient.setUseSearch(data.useSearch);
+          }
+          if (data.model) {
+            currentModel = data.model;
+            activeModel = data.model;
+            if (currentModel.startsWith('gemini')) {
+              geminiClient.setModel(currentModel as any);
+            } else if (currentModel.startsWith('gpt')) {
+              openaiClient.setModel(currentModel as any);
+            } else if (currentModel.startsWith('claude')) {
+              anthropicClient.setModel(currentModel as any);
+            } else if (isOllamaModel(currentModel)) {
+              ollamaClient.setModel(normalizeOllamaModel(currentModel));
+            } else if (currentModel.includes('/') || currentModel.startsWith('meta-') || currentModel.startsWith('qwen/')) {
+              openrouterClient.setModel(currentModel as any);
+            } else {
+              deepseekClient.setModel(currentModel as any);
+            }
+            orchestrator.setLocalModel(isOllamaModel(currentModel));
+          }
+          if (data.thinkingCapability) {
+            openaiClient.setThinkingCapability(data.thinkingCapability);
+            deepseekClient.setThinkingCapability(data.thinkingCapability);
+            // We could also set it on the orchestrator if needed for system prompt verbosity
+            // orchestrator.setThinkingCapability(data.thinkingCapability);
+          }
+          if (data.workspaceRoot) {
+            sandbox.setWorkspaceRoot(data.workspaceRoot);
+          }
+          if (data.token) {
+            activeSockets.set(ws, data.token);
+            syncController.getUserTier(data.token).then(tier => {
+              sandbox.setUserTier(tier);
+            }).catch(() => {
+              sandbox.setUserTier('free');
+            });
+          } else {
+            activeSockets.delete(ws);
+            sandbox.setUserTier('free');
+          }
+          if (data.zeroEgressMode !== undefined) {
+            zeroEgressMode = data.zeroEgressMode;
+            globalZeroEgressMode = data.zeroEgressMode;
+          }
+          if (data.privacyMode !== undefined) {
+            privacyMode = data.privacyMode;
+            globalPrivacyMode = data.privacyMode;
+            if (data.privacyMode) {
+              zeroEgressMode = true;
+              globalZeroEgressMode = true;
+            }
+          }
+          if (data.overrideHostedActive !== undefined) {
+            overrideHostedActive = data.overrideHostedActive;
+          }
+          ws.send(JSON.stringify({
+            type: 'status',
+            message: 'Configuration updated successfully',
+            workspaceRoot: sandbox.getWorkspaceRoot()
+          }));
+          break;
+
+        case 'query':
+          if (!data.text) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Query text is required' }));
+            break;
+          }
+          if (data.sessionId) {
+            currentSessionId = data.sessionId;
+            companionHub.registerOrchestrator(currentSessionId, orchestrator);
+            companionHub.registerForgeRunner(currentSessionId, remoteForgeRunner);
+          }
+          chatAbortRequested = false;
+          try {
+            if (data.planItemId) {
+              const blockers = await findUnresolvedBlockers(String(data.planItemId));
+              if (blockers.length > 0) {
+                ws.send(JSON.stringify({
+                  type: 'error',
+                  message: `BLOCKED PLAN ITEM REJECTED: plan item ${data.planItemId} has unresolved blockers (${blockers.join(', ')}). Complete its dependencies before sending it to FORGE.`
+                }));
+                break;
+              }
+            }
+            const queryText = optimizePromptForMode(await resolveQueryMentions(data.text, sandbox), responseMode);
+            if (data.space === 'chat') {
+              ws.send(JSON.stringify({ type: 'status', message: `Connecting to ${currentModel}...` }));
+              const activeId = data.sessionId || `session_${Date.now()}`;
+              let existing = await chatDb.getSession(activeId);
+
+              let workspaceInstructions = '';
+              const ruleFiles = ['.kryleosrc.json', '.matrixcode.json', 'CLAUDE.md', '.clauderc', 'INSTRUCTIONS.md'];
+              for (const file of ruleFiles) {
+                try {
+                  const content = await sandbox.readFile(file);
+                  if (content && content.trim()) {
+                    workspaceInstructions += `\n[INSTRUCTIONS FROM LOCAL WORKSPACE FILE ${file}]:\n${content}\n`;
+                  }
+                } catch {
+                  // ignore
+                }
+              }
+
+              // PLAN Scratchbook sessions get ideation discipline: the
+              // Scratchbook is for scoping, not implementation — code is
+              // written later in FORGE. Without this, models dump full
+              // component implementations during brainstorming.
+              const isScratchbook = typeof data.sessionId === 'string' &&
+                (data.sessionId.startsWith('session_plan_') || data.sessionId === 'planning_session');
+              const scratchbookGuidance = isScratchbook ? `
+You are the PLAN Scratchbook ideation partner. Your job is to help the user scope
+features and requirements — NOT to implement them. Rules:
+- Discuss goals, scope, trade-offs, edge cases, and acceptance criteria.
+- Do NOT write implementation code. At most, name the files/components/symbols involved.
+- Keep replies short and conversational. End by checking whether the idea is
+  ready to stage ("Ready to summarize this into a plan item?") when it sounds settled.
+- Execution happens later in FORGE; criteria are drafted in FLOW.
+` : '';
+
+              const systemContent = `You are a helpful assistant in the Kryleos Forge workspace environment.
+Current Project: ${projectName || 'Unnamed Project'}
+Workspace Root: ${sandbox.getWorkspaceRoot()}
+${scratchbookGuidance}${customInstructions ? `\nUSER SPECIFIC CUSTOM INSTRUCTIONS:\n${customInstructions}\n` : ''}
+${workspaceInstructions ? `\nWORKSPACE SPECIFIC INSTRUCTIONS:\n${workspaceInstructions}\n` : ''}
+${getResponseModeInstructions(responseMode)}`;
+
+              let chatHistory = existing?.messages || [
+                { role: 'system', content: systemContent }
+              ];
+              
+              const userLog = {
+                timestamp: new Date().toLocaleTimeString(),
+                sender: 'user',
+                recipient: 'assistant',
+                message: data.text,
+                type: 'info' as const
+              };
+              
+              const currentLogs = existing ? [...existing.logs, userLog] : [userLog];
+              if (zeroEgressMode) {
+                currentLogs.push({
+                  timestamp: new Date().toLocaleTimeString(),
+                  sender: 'system',
+                  recipient: 'user',
+                  message: 'All model calls are local — no data sent to external providers',
+                  type: 'info' as const
+                });
+              }
+              chatHistory.push({ role: 'user', content: queryText });
+              
+              ws.send(JSON.stringify({
+                type: 'update',
+                logs: currentLogs,
+                checklist: [],
+                activeAgent: 'system',
+                isStreaming: true,
+                streamingContent: ''
+              }));
+              
+              let replyContent = '';
+              await modelProxy.chatStream(chatHistory, {
+                onContentChunk: (chunk) => {
+                  if (chatAbortRequested) return;
+                  replyContent += chunk;
+                  ws.send(JSON.stringify({
+                    type: 'update',
+                    logs: currentLogs,
+                    checklist: [],
+                    activeAgent: 'system',
+                    isStreaming: true,
+                    streamingContent: replyContent
+                  }));
+                },
+                onComplete: async (content) => {
+                  if (chatAbortRequested) {
+                    ws.send(JSON.stringify({
+                      type: 'update',
+                      logs: [
+                        ...currentLogs,
+                        {
+                          timestamp: new Date().toLocaleTimeString(),
+                          sender: 'system',
+                          recipient: 'user',
+                          message: 'Chat response stopped by user.',
+                          type: 'info' as const
+                        }
+                      ],
+                      checklist: [],
+                      activeAgent: 'system',
+                      isStreaming: false
+                    }));
+                    return;
+                  }
+                  chatHistory.push({ role: 'assistant', content });
+                  const assistantLog = {
+                    timestamp: new Date().toLocaleTimeString(),
+                    sender: 'assistant',
+                    recipient: 'user',
+                    message: content,
+                    type: 'info' as const
+                  };
+                  const finalLogs = [...currentLogs, assistantLog];
+                  
+                  await chatDb.saveSession({
+                    id: activeId,
+                    title: data.text.slice(0, 50),
+                    createdAt: new Date().toISOString(),
+                    logs: finalLogs,
+                    checklist: [],
+                    messages: chatHistory,
+                    space: 'chat'
+                  });
+                  
+                  ws.send(JSON.stringify({
+                    type: 'update',
+                    logs: finalLogs,
+                    checklist: [],
+                    activeAgent: 'system',
+                    isStreaming: false
+                  }));
+                },
+                onError: (err) => {
+                  if (chatAbortRequested) return;
+                  ws.send(JSON.stringify({ type: 'error', message: `Chat Error: ${err.message}` }));
+                }
+              });
+            } else {
+              await startForgeRun({
+                orchestrator,
+                queryText,
+                originalText: data.text,
+                sessionId: data.sessionId,
+                space: data.space || 'code',
+                planItemId: data.planItemId,
+                zeroEgressMode,
+                modelProxy,
+                send: (payload) => ws.send(JSON.stringify(payload))
+              });
+            }
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', message: `Execution Error: ${err.message}` }));
+          }
+          break;
+
+        case 'load_session':
+          if (!data.sessionId) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Session ID is required' }));
+            break;
+          }
+          currentSessionId = data.sessionId;
+          companionHub.registerOrchestrator(currentSessionId, orchestrator);
+          companionHub.registerForgeRunner(currentSessionId, remoteForgeRunner);
+          try {
+            const session = await chatDb.getSession(data.sessionId);
+            if (session) {
+              if (session.customAgents) {
+                orchestrator.setCustomAgents(session.customAgents);
+              } else {
+                orchestrator.setCustomAgents([]);
+              }
+              ws.send(JSON.stringify({
+                type: 'update',
+                logs: session.logs,
+                checklist: session.checklist,
+                tasks: session.tasks || [],
+                customAgents: session.customAgents || [],
+                activeAgent: 'system',
+                isStreaming: false
+              }));
+            } else {
+              ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+            }
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', message: `Load Session Error: ${err.message}` }));
+          }
+          break;
+
+        case 'save_tasks':
+          if (!data.sessionId || !data.tasks) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Session ID and tasks are required' }));
+            break;
+          }
+          try {
+            const existingSession = await chatDb.getSession(data.sessionId);
+            const session: ChatSession = existingSession || {
+              id: data.sessionId,
+              title: data.sessionId === 'flow_board' ? 'FLOW Board' : 'Project Tasks',
+              createdAt: new Date().toISOString(),
+              logs: [],
+              checklist: [],
+              space: 'project' as const,
+              tasks: []
+            };
+            session.tasks = data.tasks;
+            await chatDb.saveSession(session);
+            ws.send(JSON.stringify({
+              type: 'update',
+              logs: session.logs,
+              checklist: session.checklist,
+              tasks: session.tasks,
+              customAgents: session.customAgents || [],
+              activeAgent: 'system',
+              isStreaming: false
+            }));
+            companionHub.broadcastSessionUpdate({ tasks: session.tasks });
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', message: `Save Tasks Error: ${err.message}` }));
+          }
+          break;
+
+        case 'save_agents':
+          if (!data.sessionId || !data.customAgents) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Session ID and custom agents are required' }));
+            break;
+          }
+          try {
+            const session = await chatDb.getSession(data.sessionId);
+            if (session) {
+              session.customAgents = data.customAgents;
+              await chatDb.saveSession(session);
+              orchestrator.setCustomAgents(session.customAgents || []);
+              ws.send(JSON.stringify({
+                type: 'update',
+                logs: session.logs,
+                checklist: session.checklist,
+                tasks: session.tasks || [],
+                customAgents: session.customAgents,
+                activeAgent: 'system',
+                isStreaming: false
+              }));
+            } else {
+              ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+            }
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', message: `Save Agents Error: ${err.message}` }));
+          }
+          break;
+
+        case 'approve_command':
+          if (orchestrator.commandPendingApproval) {
+            orchestrator.pendingApprovalSource = { source: 'local' };
+            if (data.approved) {
+              const pendingId = orchestrator.pendingCommandId;
+              if (data.commandId && data.commandId !== pendingId) {
+                ws.send(JSON.stringify({
+                  type: 'error',
+                  message: 'STALE COMMAND APPROVAL BLOCKED: approval did not match the active command.'
+                }));
+                orchestrator.commandPendingApproval.resolve('stale');
+              } else {
+                ws.send(JSON.stringify({
+                  type: 'status',
+                  message: `COMMAND APPROVED: ${orchestrator.pendingCommandText || 'pending command'}`
+                }));
+                orchestrator.commandPendingApproval.resolve('approved');
+              }
+            } else {
+              ws.send(JSON.stringify({
+                type: 'status',
+                message: `COMMAND REJECTED BY USER: ${orchestrator.pendingCommandText || 'pending command'}`
+              }));
+              orchestrator.commandPendingApproval.resolve('rejected');
+            }
+            orchestrator.pendingCommandId = null;
+            orchestrator.pendingCommandText = null;
+          } else {
+            ws.send(JSON.stringify({
+              type: 'status',
+              message: 'No pending command approval is active.'
+            }));
+          }
+          break;
+
+        case 'smoke_command': {
+          // Deterministic approval-modal QA: drives the real approval + exec flow
+          // for a fixed command, no model/agent. Approve via the normal approve_command.
+          const smokeCommand = (data.command && String(data.command)) || 'node -v';
+          ws.send(JSON.stringify({ type: 'status', message: `SMOKE: requesting approval for "${smokeCommand}"` }));
+          try {
+            const output = await orchestrator.runCommandWithApproval(smokeCommand);
+            ws.send(JSON.stringify({ type: 'smoke_result', command: smokeCommand, output }));
+          } catch (smokeErr: any) {
+            ws.send(JSON.stringify({ type: 'error', message: `Smoke command failed: ${smokeErr.message}` }));
+          }
+          break;
+        }
+
+        case 'join_collab_room':
+          if (!data.token) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Token is required to join collaboration room' }));
+            break;
+          }
+          const roomToken = data.token;
+          if (!collabRooms.has(roomToken)) {
+            collabRooms.set(roomToken, new Set());
+          }
+          collabRooms.get(roomToken)!.add(ws);
+          (ws as any).collabRoomToken = roomToken;
+          
+          for (const socket of collabRooms.get(roomToken)!) {
+            if (socket !== ws && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ type: 'collab_peer_joined', message: 'A pair programmer joined the session' }));
+            }
+          }
+          ws.send(JSON.stringify({ type: 'collab_room_joined', message: 'Successfully joined co-coding WebRTC room' }));
+          break;
+
+        case 'leave_collab_room':
+          const rToken = (ws as any).collabRoomToken;
+          if (rToken && collabRooms.has(rToken)) {
+            collabRooms.get(rToken)!.delete(ws);
+            delete (ws as any).collabRoomToken;
+            if (collabRooms.get(rToken)!.size === 0) {
+              collabRooms.delete(rToken);
+            } else {
+              for (const socket of collabRooms.get(rToken)!) {
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({ type: 'collab_peer_left', message: 'Pair programmer left the session' }));
+                }
+              }
+            }
+          }
+          ws.send(JSON.stringify({ type: 'collab_room_left', message: 'Successfully left co-coding WebRTC room' }));
+          break;
+
+        case 'collab_signal':
+          const senderRoomToken = (ws as any).collabRoomToken;
+          if (!senderRoomToken || !collabRooms.has(senderRoomToken)) {
+            ws.send(JSON.stringify({ type: 'error', message: 'You are not in a collaboration room' }));
+            break;
+          }
+          for (const socket of collabRooms.get(senderRoomToken)!) {
+            if (socket !== ws && socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: 'collab_signal',
+                signal: data.signal,
+                sender: data.sender || 'peer'
+              }));
+            }
+          }
+          break;
+
+        case 'abort_execution':
+          chatAbortRequested = true;
+          orchestrator.pendingApprovalSource = { source: 'local' };
+          const killedProcessCount = orchestrator.abortExecution();
+          orchestrator.pendingCommandId = null;
+          orchestrator.pendingCommandText = null;
+          ws.send(JSON.stringify({
+            type: 'status',
+            message: killedProcessCount > 0
+              ? `WORKFLOW ABORTED BY USER: terminated ${killedProcessCount} active command process(es).`
+              : 'WORKFLOW ABORTED BY USER: no active command process was running.'
+          }));
+          break;
+
+        default:
+          ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${data.type}` }));
+      }
+    } catch (err: any) {
+      ws.send(JSON.stringify({ type: 'error', message: `Message Parse Error: ${err.message}` }));
+    }
+  });
+
+  ws.on('close', () => {
+    companionHub.unregisterOrchestrator(currentSessionId);
+    companionHub.unregisterForgeRunner(currentSessionId);
+    console.log('Client disconnected');
+    activeSockets.delete(ws);
+    const roomToken = (ws as any).collabRoomToken;
+    if (roomToken && collabRooms.has(roomToken)) {
+      collabRooms.get(roomToken)!.delete(ws);
+      if (collabRooms.get(roomToken)!.size === 0) {
+        collabRooms.delete(roomToken);
+      } else {
+        for (const socket of collabRooms.get(roomToken)!) {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'collab_peer_left', message: 'Pair programmer left the session' }));
+          }
+        }
+      }
+    }
+  });
+});
+
+app.get('/api/google/auth-url', (req, res) => {
+  const redirectUri = `http://localhost:${PORT}/api/google/callback`;
+  const url = googleClient.getAuthUrl(redirectUri);
+  res.json({ url });
+});
+
+app.get('/api/google/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) {
+    return res.status(400).send('Authorization code is missing');
+  }
+  try {
+    const redirectUri = `http://localhost:${PORT}/api/google/callback`;
+    const tokens = await googleClient.exchangeCodeForTokens(code as string, redirectUri);
+    
+    // Save tokens in credentials file
+    let credentials = {};
+    if (fs.existsSync(secretsFilePath)) {
+      try {
+        credentials = JSON.parse(fs.readFileSync(secretsFilePath, 'utf-8'));
+      } catch {}
+    }
+    const updated = { ...credentials, googleTokens: tokens };
+    fs.writeFileSync(secretsFilePath, JSON.stringify(updated, null, 2), 'utf-8');
+    
+    res.send(`
+      <html>
+        <body style="font-family: monospace; background: #000; color: #0f0; display: flex; justify-content: center; align-items: center; height: 100vh; flex-direction: column;">
+          <h2>LINK ESTABLISHED SUCCESSFULLY</h2>
+          <p>Google Apps authentication complete. You can close this window now.</p>
+        </body>
+      </html>
+    `);
+  } catch (err: any) {
+    res.status(500).send(`Authentication failed: ${err.message}`);
+  }
+});
+
+app.get('/api/google/status', (req, res) => {
+  res.json({ linked: googleClient.hasAuth() });
+});
+
+app.post('/api/google/sync', async (req, res) => {
+  if (globalPrivacyMode) {
+    return res.status(400).json({ error: 'Google Sync is disabled when Privacy Mode is active.' });
+  }
+  if (!googleClient.hasAuth()) {
+    return res.status(401).json({ error: 'Google account is not linked' });
+  }
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const folderId = await googleClient.getOrCreateFolder('Kryleos-Forge-Workspace');
+    
+    // 1. Sync Agents Cards (Export customAgents from the session database as custom_agents.json)
+    const activeSessions = await chatDb.listSessions('code');
+    const customAgentsSet = new Map<string, any>();
+    for (const sessionSummary of activeSessions) {
+      const fullSession = await chatDb.getSession(sessionSummary.id);
+      if (fullSession && fullSession.customAgents) {
+        for (const agent of fullSession.customAgents) {
+          customAgentsSet.set(agent.role, agent);
+        }
+      }
+    }
+    
+    if (customAgentsSet.size > 0) {
+      const agentsList = Array.from(customAgentsSet.values());
+      const agentsPath = path.join(root, 'kryleos_specialists.json');
+      fs.writeFileSync(agentsPath, JSON.stringify(agentsList, null, 2), 'utf-8');
+      await googleClient.uploadOrUpdateFile(agentsPath, folderId);
+    }
+
+    // 2. Sync all files in workspace directory
+    const entries = await sandbox.listDir('.');
+    for (const file of entries) {
+      if (file.isDirectory) continue;
+      if (file.name === 'package-lock.json' || file.name.startsWith('.kryleos') || file.name.startsWith('.matrix') || file.name.startsWith('.env')) continue;
+      
+      const filePath = path.join(root, file.name);
+      await googleClient.uploadOrUpdateFile(filePath, folderId);
+    }
+
+    res.json({ success: true, message: 'Google Apps Sync Complete!' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/google/import-folder', async (req, res) => {
+  if (!googleClient.hasAuth()) {
+    return res.status(401).json({ error: 'Google account is not linked' });
+  }
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const folderId = await googleClient.getOrCreateFolder('Kryleos-Forge-Workspace');
+    const files = await googleClient.listFiles(folderId);
+    
+    for (const file of files) {
+      let ext = '';
+      if (file.mimeType.includes('vnd.google-apps.document')) ext = '.md';
+      else if (file.mimeType.includes('vnd.google-apps.spreadsheet')) ext = '.csv';
+
+      const fileName = file.name.endsWith(ext) ? file.name : (file.name + ext);
+      const content = await googleClient.downloadFile(file.id, file.mimeType);
+      
+      await sandbox.writeFile(fileName, content);
+    }
+    
+    res.json({ success: true, message: `Successfully imported ${files.length} files from Google Drive` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/artifacts', (req, res) => {
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const allowedExt = new Set(['.md', '.txt', '.html', '.htm', '.json', '.csv']);
+    // Artifacts are GENERATED outputs, not the whole repo. Sources:
+    //   1. .kryleos/ (traces, reviews, generated docs, plan workspace)
+    //   2. Conventional output dirs (artifacts/, docs/, reports/, exports/)
+    //   3. Root-level generated docs (README excluded — it's source, not output)
+    // Lockfiles, configs, and app-internal state files are noise, not artifacts.
+    const sourceDirs = ['.kryleos', 'artifacts', 'docs', 'reports', 'exports'];
+    const ignoredNames = new Set([
+      'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.app.json',
+      'tsconfig.node.json', 'projects.json', 'chat_history.json',
+      'chat_history.test.json', 'chat_history.performance.json',
+      'cost_history.json', 'command_approvals.json'
+    ]);
+    const artifacts: Array<{ path: string; name: string; type: string; size: number }> = [];
+
+    const pushFile = (abs: string, name: string) => {
+      const ext = path.extname(name).toLowerCase();
+      if (!allowedExt.has(ext) || ignoredNames.has(name)) return;
+      const stats = fs.statSync(abs);
+      if (stats.size > 1024 * 1024) return;
+      artifacts.push({
+        path: path.relative(root, abs).replace(/\\/g, '/'),
+        name,
+        type: ext.replace('.', '') || 'text',
+        size: stats.size
+      });
+    };
+
+    const walk = (dir: string, depth: number) => {
+      if (depth > 4 || artifacts.length >= 80 || !fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const abs = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(abs, depth + 1);
+          continue;
+        }
+        pushFile(abs, entry.name);
+      }
+    };
+
+    for (const sub of sourceDirs) walk(path.join(root, sub), 0);
+    res.json({ success: true, artifacts });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/artifacts/content', async (req, res) => {
+  const filePath = req.query.path;
+  if (typeof filePath !== 'string') return res.status(400).json({ error: 'path query parameter is required' });
+  try {
+    const content = await sandbox.readFile(filePath);
+    res.json({ success: true, content });
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.post('/api/artifacts/publish', async (req, res) => {
+  const { path: filePath, bypassSecrets } = req.body;
+  if (!filePath) return res.status(400).json({ error: 'path is required' });
+  try {
+    const content = await sandbox.readFile(filePath);
+    
+    if (!bypassSecrets) {
+      const foundSecrets = scanSecrets(content);
+      if (foundSecrets.length > 0) {
+        return res.status(400).json({
+          error: 'Secrets detected in the file content. Publishing public gists with secrets is blocked.',
+          secrets: foundSecrets,
+          requiresBypass: true
+        });
+      }
+    }
+
+    const fileName = path.basename(filePath);
+    
+    const response = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Kryleos-Forge'
+      },
+      body: JSON.stringify({
+        description: `Shared via Kryleos Forge`,
+        public: true,
+        files: {
+          [fileName]: { content }
+        }
+      })
+    });
+    
+    if (response.ok) {
+      const data = await response.json() as any;
+      res.json({ success: true, url: data.html_url });
+    } else {
+      const errText = await response.text();
+      res.status(500).json({ error: `Gist API failed: ${errText}` });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/artifacts/deploy', async (req, res) => {
+  const { provider } = req.body;
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const command = provider === 'netlify' ? 'npx netlify deploy --dir=.' : 'npx vercel --confirm --yes';
+    
+    exec(command, { cwd: root }, (error, stdout, stderr) => {
+      if (error) {
+        return res.json({ success: false, log: stderr || error.message });
+      }
+      const urlMatch = stdout.match(/https:\/\/[a-zA-Z0-9-_\.]+\.(?:vercel\.app|netlify\.app)/);
+      const url = urlMatch ? urlMatch[0] : 'Deployment completed successfully';
+      res.json({ success: true, url, log: stdout });
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/telemetry', (req, res) => {
+  res.json({
+    bytesSent: totalBytesSent,
+    bytesReceived: totalBytesReceived,
+    compressionSavingsRatio: 0.68
+  });
+});
+
+app.get('/api/ollama/models', async (req, res) => {
+  try {
+    const baseUrl = typeof req.query.baseUrl === 'string' && req.query.baseUrl.trim()
+      ? req.query.baseUrl.trim()
+      : undefined;
+    const models = await ollamaClient.listModels(baseUrl);
+    res.json({ success: true, models });
+  } catch (err: any) {
+    res.status(503).json({ success: false, error: err.message, models: [] });
+  }
+});
+
+app.get('/api/security/approval-pubkey', (req, res) => {
+  res.json({ publicKey: getPublicKey() });
+});
+
+app.get('/api/workspace/semantic-cache', async (req, res) => {
+  const { query } = req.query;
+  if (typeof query !== 'string') return res.status(400).json({ error: 'query string parameter is required' });
+  try {
+    const results = await sandbox.querySemanticCache(query);
+    res.json({ success: true, results });
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/semantic-cache/rebuild', async (req, res) => {
+  try {
+    const result = await sandbox.buildSemanticCache();
+    res.json(result);
+  } catch (err: any) {
+    res.status(403).json({ error: err.message });
+  }
+});
+
+app.post('/api/workspace/command-policy', (req, res) => {
+  const { allowedPrefixes, blockedPrefixes, userRole } = req.body;
+  try {
+    if (userRole) {
+      sandbox.setUserRole(userRole);
+    }
+    if (allowedPrefixes || blockedPrefixes) {
+      sandbox.setCommandPolicies({ allowedPrefixes, blockedPrefixes });
+    }
+    res.json({ success: true, message: 'Sandbox command policies updated successfully.' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/plan/items/:id/criteria', async (req, res) => {
+  try {
+    const result = await planningV2().getCriteria(req.params.id);
+    res.json({ success: true, task: result.task, criteria: result.criteria });
+  } catch (err: any) {
+    res.status(404).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/plan/items/:id/criteria', async (req, res) => {
+  try {
+    const task = await planningV2().saveCriteria(req.params.id, req.body.criteria);
+    res.json({ success: true, task, criteria: task.acceptanceCriteria || [] });
+  } catch (err: any) {
+    res.status(404).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/plan/bootstrap', (_req, res) => {
+  try {
+    res.json({ success: true, fingerprint: planningV2().bootstrapFingerprint() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/plan/bootstrap/evaluate', async (_req, res) => {
+  try {
+    const result = await planningV2().bootstrapEvaluate(getModelClient());
+    res.json({ success: true, result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/plan/items/:id/criteria/generate', async (req, res) => {
+  try {
+    const result = await planningV2().generateCriteria(getModelClient(), req.params.id);
+    res.json({ success: true, task: result.task, criteria: result.criteria, usedLlm: result.usedLlm });
+  } catch (err: any) {
+    res.status(404).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/plan/items/:id/criteria/enrich', async (req, res) => {
+  try {
+    const result = await planningV2().enrichCriteria(req.params.id);
+    res.json({
+      success: true,
+      task: result.task,
+      criteria: result.task.acceptanceCriteria || [],
+      added: result.added,
+      candidates: result.candidates
+    });
+  } catch (err: any) {
+    res.status(404).json({ success: false, error: err.message });
+  }
+});
+
+app.patch('/api/plan/items/:id/criteria', async (req, res) => {
+  try {
+    const task = await planningV2().patchCriteria(req.params.id, req.body.criteria || []);
+    res.json({ success: true, task, criteria: task.acceptanceCriteria || [] });
+  } catch (err: any) {
+    res.status(404).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/traces/:itemId', (req, res) => {
+  try {
+    res.json({ success: true, traces: planningV2().listTraces(req.params.itemId) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/traces', async (req, res) => {
+  try {
+    const trace = await planningV2().saveTrace(req.body);
+    res.json({ success: true, trace });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Tier → "What's Left" item cap. Legacy tier names map to the new ladder:
+// free=5, basic(Solo)=25, pro(Solo Plus)=50, enterprise(Founder)=unlimited.
+const whatsLeftLimitForTier = (tier: string): number | null => {
+  switch ((tier || 'free').toLowerCase()) {
+    case 'basic':
+    case 'solo':
+      return 25;
+    case 'pro':
+    case 'solo_plus':
+      return 50;
+    case 'enterprise':
+    case 'founder':
+    case 'agency':
+    case 'team':
+      return null;
+    default:
+      return 5;
+  }
+};
+const whatsLeftExportAllowed = (tier: string): boolean => whatsLeftLimitForTier(tier) === null;
+
+app.get('/api/plan/whats-left', async (req, res) => {
+  try {
+    // SEC: tier must come from the server-validated session
+    // (sandbox.getUserTier(), set via the WS auth handshake from a real
+    // license/subscription), never from a client-supplied query param.
+    const tier = sandbox.getUserTier() || 'free';
+    // Bootstrap grants one free unlimited run regardless of tier.
+    const limit = req.query.bootstrap === '1' ? null : whatsLeftLimitForTier(tier);
+    const report = await planningV2().whatsLeft(getModelClient(), limit);
+    res.json({ success: true, report, tier, exportAllowed: whatsLeftExportAllowed(tier) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/plan/drift', async (_req, res) => {
+  try {
+    const report = await planningV2().checkDrift(getModelClient());
+    res.json({ success: true, report });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/plan/workspace', (req, res) => {
+  try {
+    res.json({ success: true, items: planningV2().getWorkspaceItems() });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/plan/workspace', (req, res) => {
+  try {
+    planningV2().saveWorkspaceItems(req.body.items || []);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/plan/workspace/extract', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: 'sessionId is required' });
+    }
+    const session = await chatDb.getSession(sessionId);
+    if (!session) {
+      return res.status(404).json({ success: false, error: 'Session not found' });
+    }
+    const items = await planningV2().extractWorkspaceItems(getModelClient(), session.messages || []);
+    res.json({ success: true, items });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/plan/workspace/feasibility', async (req, res) => {
+  try {
+    const { projectDescription, title, description, category } = req.body;
+    if (!title || !description) {
+      return res.status(400).json({ success: false, error: 'title and description are required' });
+    }
+    const result = await planningV2().checkFeasibility(
+      getModelClient(),
+      projectDescription || '',
+      title,
+      description,
+      category || 'frontend'
+    );
+    res.json({ success: true, feasibility: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/crew/sync', async (req, res) => {
+  if (globalPrivacyMode) {
+    return res.status(400).json({ error: 'PLAN->CREW Sync is disabled when Privacy Mode is active.' });
+  }
+  // SEC: tier must come from the server-validated session
+  // (sandbox.getUserTier(), set via the WS auth handshake from a real
+  // license/subscription), never from a client-supplied request body field.
+  const { items } = req.body;
+  const tier = sandbox.getUserTier() || 'free';
+  if (tier.toLowerCase() === 'free') {
+    return res.status(403).json({ success: false, error: 'PLAN->CREW direct sync is only available on paid tiers. Please upgrade.' });
+  }
+  try {
+    const service = planningV2();
+    const currentItems = service.getWorkspaceItems();
+    const pushedIds = new Set((items || []).map((it: any) => it.id));
+    const updated = currentItems.map(item => {
+      if (pushedIds.has(item.id)) {
+        return { ...item, status: 'ready_for_crew' as const };
+      }
+      return item;
+    });
+    service.saveWorkspaceItems(updated);
+    res.json({ success: true, message: 'Plan successfully synced to CREW context.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- GitHub & Docs Autopilot Integrations ---
+const templates = [
+  { id: 'project_brief', name: 'Project Brief', requiredTier: 'free', description: 'High-level project goals, features, and non-goals.' },
+  { id: 'user_guide', name: 'User Guide', requiredTier: 'free', description: 'Step-by-step user onboarding and workflow instructions.' },
+  { id: 'architecture', name: 'System Architecture', requiredTier: 'solo', description: 'Core components, data flow, and directory layout.' },
+  { id: 'release_checklist', name: 'Release Checklist', requiredTier: 'solo', description: 'Sanity checks, build steps, and verification commands.' },
+  { id: 'api_integrations', name: 'API & Integrations', requiredTier: 'solo_plus', description: 'REST endpoints, payload models, and integration specs.' },
+  { id: 'data_storage', name: 'Data & Storage', requiredTier: 'solo_plus', description: 'Database schema, caching layout, and persistency rules.' },
+  { id: 'security_privacy', name: 'Security & Privacy', requiredTier: 'solo_plus', description: 'Threat modeling, access control, and credential handling.' },
+  { id: 'test_plan', name: 'Test Plan', requiredTier: 'solo_plus', description: 'Unit/integration testing strategy and coverage targets.' },
+  { id: 'prd', name: 'Product Requirements (PRD)', requiredTier: 'founder', description: 'Product goals, user personas, roadmap, and edge cases.' },
+  { id: 'technical_design', name: 'Technical Design Document', requiredTier: 'founder', description: 'Detailed technical specs, algorithmic loops, and tradeoffs.' },
+  { id: 'founder_summary', name: 'Founder Summary', requiredTier: 'founder', description: 'Elevator pitch, MRR prospects, and investor readiness status.' },
+  { id: 'project_brochure', name: 'Project Brochure', requiredTier: 'agency', description: 'Sales copy, premium value proposition, and branding overview.' },
+  { id: 'client_handoff', name: 'Client Handoff Pack', requiredTier: 'agency', description: 'Branded deliverable details, system credentials, and maintenance guide.' }
+];
+
+const tierLadder = ['free', 'solo', 'solo_plus', 'founder', 'agency'];
+function isTierAllowed(userTier: string, requiredTier: string): boolean {
+  const userIndex = tierLadder.indexOf(userTier.toLowerCase());
+  const reqIndex = tierLadder.indexOf(requiredTier.toLowerCase());
+  if (userIndex === -1 || reqIndex === -1) return false;
+  return userIndex >= reqIndex;
+}
+
+function parseGithubRepo(url: string): { owner: string; repo: string } | null {
+  if (!url) return null;
+  const cleanUrl = url.trim().replace(/\.git$/, '');
+  const match = cleanUrl.match(/(?:github\.com[:\/])([^\/]+)\/([^\/]+)$/);
+  if (match) {
+    return { owner: match[1], repo: match[2] };
+  }
+  return null;
+}
+
+function localInferCategory(title: string): string {
+  const lower = title.toLowerCase();
+  if (/\b(test|spec|vitest|jest|qa|coverage)\b/.test(lower)) return 'testing';
+  if (/\b(auth|security|permission|rbac|secret|sandbox)\b/.test(lower)) return 'security';
+  if (/\b(doc|readme|guide|copy|brochure|changelog)\b/.test(lower)) return 'docs';
+  if (/\b(docker|ci|deploy|infra|pipeline|release|build)\b/.test(lower)) return 'infra';
+  if (/\b(api|server|backend|db|database|route|sync)\b/.test(lower)) return 'backend';
+  return 'frontend';
+}
+
+app.post('/api/integrations/github/fetch-issues', async (req, res) => {
+  const { token, repoUrl } = req.body;
+  if (!repoUrl) return res.status(400).json({ success: false, error: 'Repository URL is required.' });
+  
+  const repoInfo = parseGithubRepo(repoUrl);
+  if (!repoInfo) return res.status(400).json({ success: false, error: 'Invalid GitHub repository URL.' });
+
+  const { owner, repo } = repoInfo;
+  try {
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'Kryleos-Forge'
+    };
+    if (token) {
+      headers['Authorization'] = `token ${token}`;
+    }
+
+    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=open&per_page=100`, { headers });
+    if (!response.ok) {
+      const errText = await response.text();
+      return res.status(response.status).json({ success: false, error: `GitHub API error: ${errText || response.statusText}` });
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      return res.json({ success: true, issues: [] });
+    }
+
+    const issues = data
+      .filter((issue: any) => !issue.pull_request)
+      .map((issue: any) => ({
+        id: issue.id,
+        number: issue.number,
+        title: issue.title,
+        body: issue.body || '',
+        html_url: issue.html_url
+      }));
+
+    res.json({ success: true, issues });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/integrations/github/import-issues', async (req, res) => {
+  const { token, repoUrl, issues } = req.body;
+  if (!repoUrl) return res.status(400).json({ success: false, error: 'Repository URL is required.' });
+  if (!Array.isArray(issues) || issues.length === 0) return res.status(400).json({ success: false, error: 'No issues specified for import.' });
+
+  const repoInfo = parseGithubRepo(repoUrl);
+  if (!repoInfo) return res.status(400).json({ success: false, error: 'Invalid GitHub repository URL.' });
+
+  const { owner, repo } = repoInfo;
+  try {
+    const service = planningV2();
+    const currentItems = service.getWorkspaceItems();
+    const client = getModelClient();
+
+    const importedItems: any[] = [];
+
+    for (const issue of issues) {
+      const itemId = `git_issue_${owner}_${repo}_${issue.number}`;
+      if (currentItems.some(item => item.id === itemId)) continue;
+
+      const { criteria } = await service.generateCriteriaForIssue(client, issue.title, issue.body, itemId);
+
+      const newItem = {
+        id: itemId,
+        title: issue.title,
+        description: issue.body || 'No description provided.',
+        category: localInferCategory(issue.title),
+        status: 'draft',
+        context: `Imported from GitHub Issue #${issue.number}`,
+        githubIssueNumber: issue.number,
+        githubRepo: `${owner}/${repo}`,
+        htmlUrl: issue.html_url,
+        acceptanceCriteria: criteria
+      };
+      importedItems.push(newItem);
+    }
+
+    if (importedItems.length > 0) {
+      service.saveWorkspaceItems([...currentItems, ...importedItems]);
+    }
+
+    res.json({ success: true, count: importedItems.length });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/docs/templates', (req, res) => {
+  res.json({ success: true, templates });
+});
+
+app.post('/api/docs/generate', async (req, res) => {
+  const { templateId } = req.body;
+  if (!templateId) return res.status(400).json({ success: false, error: 'templateId is required' });
+
+  const selectedTemplate = templates.find(t => t.id === templateId);
+  if (!selectedTemplate) return res.status(404).json({ success: false, error: 'Template not found' });
+
+  // SEC: tier must come from the server-validated session, never from a
+  // client-supplied request body field.
+  const userTier = String(sandbox.getUserTier() || 'free');
+  if (!isTierAllowed(userTier, selectedTemplate.requiredTier)) {
+    return res.status(403).json({ success: false, error: `This template is gated to ${selectedTemplate.requiredTier} tier. Your tier is ${userTier}.` });
+  }
+
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const service = planningV2();
+    const scan = service.scanDocsContext();
+    const client = getModelClient();
+
+    const userPrompt = [
+      `You are Kryleos Docs Autopilot. Your task is to generate a professional, production-grade documentation document for this codebase.`,
+      `The document to generate is a: **${selectedTemplate.name}**`,
+      `Description: ${selectedTemplate.description}`,
+      ``,
+      `=== CODEBASE CONTEXT ===`,
+      `Workspace Directory: ${root}`,
+      scan.packageJson ? `Package Manifest: ${JSON.stringify(scan.packageJson, null, 2)}` : '',
+      scan.readmeExcerpt ? `README Excerpt:\n${scan.readmeExcerpt}` : '',
+      scan.sourceTree ? `Source Tree:\n${scan.sourceTree}` : '',
+      `Test Files Found: ${scan.testFilesCount}`,
+      scan.recentGitChanges ? `Recent Commits:\n${scan.recentGitChanges}` : '',
+      scan.gitStatus ? `Git Status:\n${scan.gitStatus}` : '',
+      ``,
+      `Write a comprehensive, professional Markdown document for this ${selectedTemplate.name}. Make sure it is detailed, accurate to the codebase details, and complete. Avoid generic placeholders.`
+    ].filter(Boolean).join('\n\n');
+
+    const messages: Message[] = [
+      { role: 'system', content: 'You generate high-quality technical documentation for codebases. Respond with ONLY the markdown content. Do not write chat intro or outro.' },
+      { role: 'user', content: userPrompt }
+    ];
+
+    let generatedContent = '';
+    await client.chatStream(messages, {
+      onContentChunk: (chunk) => { generatedContent += chunk; },
+      onComplete: (content) => { generatedContent = content; }
+    });
+
+    if (!generatedContent) {
+      throw new Error('LLM generated empty response.');
+    }
+
+    const { bypassSecrets } = req.body;
+    if (!bypassSecrets) {
+      const foundSecrets = scanSecrets(generatedContent);
+      if (foundSecrets.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Secrets detected in the generated documentation. Document generation blocked.',
+          secrets: foundSecrets,
+          requiresBypass: true,
+          content: generatedContent
+        });
+      }
+    }
+
+    res.json({ success: true, content: generatedContent, defaultPath: `.kryleos/docs/${templateId}.md` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/docs/patch', async (req, res) => {
+  const { docPath } = req.body;
+  if (!docPath) return res.status(400).json({ success: false, error: 'docPath is required' });
+
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const absPath = path.isAbsolute(docPath) ? docPath : path.resolve(root, docPath);
+    if (!fs.existsSync(absPath)) {
+      return res.status(404).json({ success: false, error: 'Documentation file not found.' });
+    }
+
+    const currentDocContent = fs.readFileSync(absPath, 'utf-8');
+
+    let gitDiff = '';
+    try {
+      gitDiff = execSync('git diff HEAD~1 HEAD', { cwd: root, encoding: 'utf-8' }).trim();
+    } catch {
+      try {
+        gitDiff = execSync('git diff', { cwd: root, encoding: 'utf-8' }).trim();
+      } catch {}
+    }
+
+    if (!gitDiff) {
+      return res.json({ success: true, content: currentDocContent, message: 'No modifications found in git history.' });
+    }
+
+    const client = getModelClient();
+
+    const userPrompt = [
+      `You are Kryleos Docs Autopilot. Your task is to update this existing technical document based on the recent code changes (git diff).`,
+      ``,
+      `=== EXISTING DOCUMENT ===`,
+      currentDocContent,
+      ``,
+      `=== RECENT CHANGES (GIT DIFF) ===`,
+      gitDiff,
+      ``,
+      `Review the changes and update the document content to accurately reflect them. Keep the formatting and structure. Return the FULL updated Markdown document. Do not include chat intros/outros.`
+    ].join('\n\n');
+
+    const messages: Message[] = [
+      { role: 'system', content: 'You update technical documentation files based on git diffs. Return the complete updated markdown document only.' },
+      { role: 'user', content: userPrompt }
+    ];
+
+    let updatedContent = '';
+    await client.chatStream(messages, {
+      onContentChunk: (chunk) => { updatedContent += chunk; },
+      onComplete: (content) => { updatedContent = content; }
+    });
+
+    if (!updatedContent) {
+      throw new Error('LLM generated empty response.');
+    }
+
+    res.json({ success: true, content: updatedContent });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/docs/write', async (req, res) => {
+  const { docPath, content } = req.body;
+  if (!docPath) return res.status(400).json({ success: false, error: 'docPath is required' });
+  if (!content) return res.status(400).json({ success: false, error: 'content is required' });
+
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const absPath = path.isAbsolute(docPath) ? docPath : path.resolve(root, docPath);
+    
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.writeFileSync(absPath, content, 'utf-8');
+
+    res.json({ success: true, path: path.relative(root, absPath).replace(/\\/g, '/') });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/workflows/founder/generate', async (req, res) => {
+  const { workflowId, customPrompt, bypassSecrets } = req.body;
+  if (!workflowId) return res.status(400).json({ success: false, error: 'workflowId is required' });
+
+  // SEC: tier must come from the server-validated session, never from a
+  // client-supplied request body field.
+  const userTier = String(sandbox.getUserTier() || 'free');
+  if (!isTierAllowed(userTier, 'founder')) {
+    return res.status(403).json({ success: false, error: `This utility is gated to FOUNDER tier. Your tier is ${userTier}.` });
+  }
+
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const service = planningV2();
+    const scan = service.scanDocsContext();
+    const client = getModelClient();
+
+    const content = await generateFounderWorkflow(workflowId, { root, scan, customPrompt }, client);
+
+    if (!bypassSecrets) {
+      const foundSecrets = scanSecrets(content);
+      if (foundSecrets.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Secrets detected in the generated document. Document generation blocked.',
+          secrets: foundSecrets,
+          requiresBypass: true,
+          content
+        });
+      }
+    }
+
+    res.json({ success: true, content, defaultPath: `.kryleos/founder/${workflowId}.md` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/workflows/agency/export', async (req, res) => {
+  const { workflowId, customPrompt, branding, bypassSecrets } = req.body;
+  if (!workflowId) return res.status(400).json({ success: false, error: 'workflowId is required' });
+
+  // SEC: tier must come from the server-validated session, never from a
+  // client-supplied request body field.
+  const userTier = String(sandbox.getUserTier() || 'free');
+  if (!isTierAllowed(userTier, 'agency')) {
+    return res.status(403).json({ success: false, error: `This utility is gated to AGENCY tier. Your tier is ${userTier}.` });
+  }
+
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const service = planningV2();
+    const scan = service.scanDocsContext();
+    const client = getModelClient();
+
+    const content = await generateAgencyWorkflow(workflowId, { root, scan, customPrompt, branding }, client);
+
+    if (!bypassSecrets) {
+      const foundSecrets = scanSecrets(content);
+      if (foundSecrets.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Secrets detected in the generated export. Export generation blocked.',
+          secrets: foundSecrets,
+          requiresBypass: true,
+          content
+        });
+      }
+    }
+
+    const ext = workflowId === 'branded_doc' ? 'html' : 'md';
+    res.json({ success: true, content, defaultPath: `.kryleos/agency/${workflowId}.${ext}` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+function isPathInside(parent: string, child: string): boolean {
+  const relative = path.relative(parent, child);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+app.post('/api/planning/import', async (req, res) => {
+  const { plan, basePlan, baseLastModified, workspacePaths } = req.body;
+  if (!plan) return res.status(400).json({ error: 'plan is required' });
+  try {
+    const root = sandbox.getWorkspaceRoot();
+    const targets = Array.isArray(workspacePaths) && workspacePaths.length > 0 ? workspacePaths : [root];
+    
+    let finalPlan = plan;
+    let conflictDetected = false;
+
+    // 1. Process files and write plans
+    for (const targetPath of targets) {
+      const resolvedTarget = path.isAbsolute(targetPath) ? path.resolve(targetPath) : path.resolve(root, targetPath);
+      if (!isPathInside(root, resolvedTarget)) {
+        return res.status(403).json({ error: `Access Denied: Path "${targetPath}" is outside the active workspace root.` });
+      }
+      sandbox.whitelistDirectory(resolvedTarget);
+      if (fs.existsSync(resolvedTarget)) {
+        const planPath = path.join(resolvedTarget, 'implementation_plan.md');
+        
+        let shouldMerge = false;
+        let currentDiskContent = '';
+        
+        if (fs.existsSync(planPath) && baseLastModified && basePlan !== undefined) {
+          const stats = fs.statSync(planPath);
+          const currentLastModified = stats.mtime.toISOString();
+          if (currentLastModified !== baseLastModified) {
+            shouldMerge = true;
+            currentDiskContent = fs.readFileSync(planPath, 'utf-8');
+          }
+        }
+
+        if (shouldMerge) {
+          const mergeResult = threeWayMerge(basePlan, plan, currentDiskContent);
+          finalPlan = mergeResult.merged;
+          if (mergeResult.hasConflicts) {
+            conflictDetected = true;
+          }
+        }
+
+        fs.writeFileSync(planPath, finalPlan, 'utf-8');
+      }
+    }
+
+    // Dependency reconciliation scan across package.json targets
+    const pkgDataMap = new Map<string, any>();
+    for (const targetPath of targets) {
+      const resolvedTarget = path.isAbsolute(targetPath) ? targetPath : path.resolve(root, targetPath);
+      const pkgPath = path.join(resolvedTarget, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        try {
+          const content = fs.readFileSync(pkgPath, 'utf-8');
+          pkgDataMap.set(resolvedTarget, JSON.parse(content));
+        } catch {}
+      }
+    }
+
+    const depConflicts: Array<{ package: string; targetA: string; versionA: string; targetB: string; versionB: string }> = [];
+    if (pkgDataMap.size > 1) {
+      const workspaces = Array.from(pkgDataMap.keys());
+      const allDeps = new Map<string, Map<string, string>>();
+
+      for (const [targetPath, pkgJson] of pkgDataMap.entries()) {
+        const combine = { ...(pkgJson.dependencies || {}), ...(pkgJson.devDependencies || {}) };
+        for (const [name, version] of Object.entries(combine)) {
+          if (!allDeps.has(name)) allDeps.set(name, new Map());
+          allDeps.get(name)!.set(targetPath, version as string);
+        }
+      }
+
+      for (const [name, versionMap] of allDeps.entries()) {
+        if (versionMap.size > 1) {
+          const versions = Array.from(versionMap.entries());
+          const firstVal = versions[0][1];
+          for (let i = 1; i < versions.length; i++) {
+            if (versions[i][1] !== firstVal) {
+              depConflicts.push({
+                package: name,
+                targetA: path.basename(versions[0][0]),
+                versionA: firstVal,
+                targetB: path.basename(versions[i][0]),
+                versionB: versions[i][1]
+              });
+            }
+          }
+        }
+      }
+
+      if (depConflicts.length > 0) {
+        let reportContent = '# Dependency Reconciliation Report\n\n';
+        reportContent += 'The following dependency conflicts were detected across your target microservices/repositories:\n\n';
+        reportContent += '| Package | Workspace A | Version A | Workspace B | Version B |\n';
+        reportContent += '| :--- | :--- | :--- | :--- | :--- |\n';
+        for (const conflict of depConflicts) {
+          reportContent += `| \`${conflict.package}\` | \`${conflict.targetA}\` | \`${conflict.versionA}\` | \`${conflict.targetB}\` | \`${conflict.versionB}\` |\n`;
+        }
+        reportContent += '\n*Action Recommended: Resolve these mismatches to ensure library compatibility.*';
+
+        for (const targetPath of targets) {
+          const resolvedTarget = path.isAbsolute(targetPath) ? targetPath : path.resolve(root, targetPath);
+          if (fs.existsSync(resolvedTarget)) {
+            fs.writeFileSync(path.join(resolvedTarget, 'reconciliation_report.md'), reportContent, 'utf-8');
+          }
+        }
+      }
+    }
+
+    // 2. Parse checklist items from the final plan
+    const lines = finalPlan.split('\n');
+    const tasks: string[] = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('- [ ]') || trimmed.startsWith('- [x]') || trimmed.startsWith('- [/]')) {
+        const cleanTask = trimmed.replace(/^-\s+\[[ x/]\]\s*/i, '').trim();
+        if (cleanTask) tasks.push(cleanTask);
+      }
+    }
+    
+    let taskContent = '# Checklist: Imported Planning Tasks\n\n';
+    if (tasks.length > 0) {
+      taskContent += tasks.map(task => `- [ ] ${task}`).join('\n') + '\n';
+    } else {
+      taskContent += '- [ ] Complete imported plan implementation\n';
+    }
+
+    let newLastModified = '';
+    for (const targetPath of targets) {
+      const resolvedTarget = path.isAbsolute(targetPath) ? targetPath : path.resolve(root, targetPath);
+      if (fs.existsSync(resolvedTarget)) {
+        const taskPath = path.join(resolvedTarget, 'task.md');
+        fs.writeFileSync(taskPath, taskContent, 'utf-8');
+
+        const planPath = path.join(resolvedTarget, 'implementation_plan.md');
+        if (fs.existsSync(planPath)) {
+          const stats = fs.statSync(planPath);
+          newLastModified = stats.mtime.toISOString();
+        }
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      conflict: conflictDetected,
+      depConflicts: depConflicts.length > 0 ? depConflicts : null,
+      tasks,
+      plan: finalPlan,
+      lastModified: newLastModified,
+      message: conflictDetected
+        ? 'Sync conflict detected! Merge conflict markers have been injected into the plan.'
+        : `Plan imported successfully. Files updated in ${targets.length} workspace(s).` 
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/cost/history', async (_req, res) => {
+  try {
+    // SEC: tier must come from the server-validated session, never from a
+    // client-supplied query param.
+    const tier = String(sandbox.getUserTier() || 'free').toLowerCase();
+    const tierLadder = ['free', 'solo', 'solo_plus', 'founder', 'agency'];
+    const userIndex = tierLadder.indexOf(tier);
+    if (userIndex < 2) { // Less than solo_plus
+      return res.json({ success: true, history: [], restricted: true });
+    }
+    const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
+    const history = await costGuard.getHistory();
+    res.json({ success: true, history, restricted: false });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/cost/estimate', async (req, res) => {
+  try {
+    const { prompt, model } = req.body;
+    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
+    const activeM = model || activeModel;
+    const inputTokens = estimateTokens(prompt);
+    const inputCost = estimateCost(prompt, activeM, false);
+    res.json({
+      success: true,
+      inputTokens,
+      inputCost,
+      model: activeM,
+      provider: getProviderForModel(activeM)
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/providers/detect', async (req, res) => {
+  try {
+    const baseUrl = String(req.query.baseUrl || 'http://localhost:11434');
+    const client = new OllamaClient({ model: 'llama3', baseUrl });
+    const models = await client.listModels(baseUrl).catch(() => null);
+    res.json({
+      success: true,
+      ollamaAvailable: models !== null,
+      models: models || []
+    });
+  } catch (err: any) {
+    res.json({ success: true, ollamaAvailable: false, models: [], error: err.message });
+  }
+});
+
+app.post('/api/providers/health-check', async (req, res) => {
+  try {
+    const { provider, apiKey, model, baseUrl } = req.body;
+    if (!provider) return res.status(400).json({ error: 'Provider is required' });
+    
+    let client: ChatClient | null = null;
+    const testMessages: Message[] = [{ role: 'user', content: 'Say OK' }];
+    
+    if (provider === 'openai') {
+      client = new OpenAIClient({ apiKey, model: model || 'gpt-4o-mini' });
+    } else if (provider === 'gemini') {
+      client = new GeminiClient({ apiKey, model: model || 'gemini-2.5-flash', useSearch: false });
+    } else if (provider === 'anthropic') {
+      client = new AnthropicClient({ apiKey, model: model || 'claude-3-5-haiku-latest' });
+    } else if (provider === 'deepseek') {
+      client = new DeepSeekClient({ apiKey, model: model || 'deepseek-chat' });
+    } else if (provider === 'openrouter') {
+      client = new OpenRouterClient({ apiKey, model: model || 'meta-llama/llama-3.3-70b-instruct' });
+    } else if (provider === 'ollama') {
+      client = new OllamaClient({ model: model || 'llama3', baseUrl: baseUrl || 'http://localhost:11434' });
+    }
+
+    if (!client) {
+      return res.status(400).json({ error: `Unsupported provider: ${provider}` });
+    }
+
+    let chunkCount = 0;
+    await client.chatStream(testMessages, {
+      onContentChunk: () => { chunkCount++; },
+      onComplete: () => {},
+      onError: (err) => { throw err; }
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/providers/test', async (req, res) => {
+  try {
+    const { provider, apiKey, model, message, baseUrl } = req.body;
+    if (!provider) return res.status(400).json({ error: 'Provider is required' });
+    const prompt = message || 'Hello, are you online? Respond in under 10 words.';
+    const testMessages: Message[] = [{ role: 'user', content: prompt }];
+    
+    let client: ChatClient | null = null;
+    if (provider === 'openai') client = new OpenAIClient({ apiKey, model: model || 'gpt-4o-mini' });
+    else if (provider === 'gemini') client = new GeminiClient({ apiKey, model: model || 'gemini-2.5-flash', useSearch: false });
+    else if (provider === 'anthropic') client = new AnthropicClient({ apiKey, model: model || 'claude-3-5-haiku-latest' });
+    else if (provider === 'deepseek') client = new DeepSeekClient({ apiKey, model: model || 'deepseek-chat' });
+    else if (provider === 'openrouter') client = new OpenRouterClient({ apiKey, model: model || 'meta-llama/llama-3.3-70b-instruct' });
+    else if (provider === 'ollama') client = new OllamaClient({ model: model || 'llama3', baseUrl: baseUrl || 'http://localhost:11434' });
+
+    if (!client) return res.status(400).json({ error: `Unsupported provider: ${provider}` });
+
+    let fullResponse = '';
+    await client.chatStream(testMessages, {
+      onContentChunk: (chunk) => { fullResponse += chunk; },
+      onComplete: () => {},
+      onError: (err) => { throw err; }
+    });
+
+    res.json({ success: true, response: fullResponse });
+  } catch (err: any) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
+// SEC-6: Return a clean 400 for malformed JSON bodies instead of letting
+// the default Express handler emit a 500 with a full stack trace.
+app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Invalid JSON body' });
+  }
+  next(err);
+});
+
+const PORT = process.env.PORT || 3001;
+// SEC-B5: bind to loopback by default so the command-executing backend is not
+// reachable from the LAN. Companion-over-network users can opt in explicitly by
+// setting KRYLEOS_BIND_HOST=0.0.0.0 (only safe together with the hardened,
+// rate-limited pairing in companionHub).
+const BIND_HOST = process.env.KRYLEOS_BIND_HOST || '127.0.0.1';
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(Number(PORT), BIND_HOST, () => {
+    console.log(`Kryleos Forge backend running on http://${BIND_HOST}:${PORT}`);
+  });
+}
+
+export { app, server };

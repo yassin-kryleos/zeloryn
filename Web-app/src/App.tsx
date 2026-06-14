@@ -6,7 +6,7 @@ import {
   LogIn, LogOut, User, CreditCard, Lock, ExternalLink
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
-import { TIER_LABELS, type TierId } from './pricing.generated';
+import { TIER_LABELS, TIER_PRICES, type TierId } from './pricing.generated';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -62,7 +62,7 @@ interface PricingRow {
 
 const PRICING_MATRIX: PricingRow[] = [
   { label: 'Pricing', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Monthly price', values: { free: '$0', solo: '$5', solo_plus: '$9', founder: '$15' } },
+  { label: 'Monthly price', values: { free: `$${TIER_PRICES.free}`, solo: `$${TIER_PRICES.solo}`, solo_plus: `$${TIER_PRICES.solo_plus}`, founder: `$${TIER_PRICES.founder}` } },
   { label: 'Paired devices', values: { free: '1', solo: '3', solo_plus: '10', founder: 'Unlimited' } },
   { label: 'Support', values: { free: 'Community', solo: 'Email', solo_plus: 'Priority', founder: 'Dedicated + SLA' } },
 
@@ -1825,8 +1825,8 @@ export default function App() {
                 {[
                   ['Is my code ever uploaded?', 'No. On every tier, source code and system instructions stay on your machine. Zero-egress execution routes through local Ollama models; cloud features only sync settings and plan metadata you opt into.'],
                   ['Can I bring my own API keys?', 'Yes — BYOK is available from the Free tier. Add DeepSeek, Gemini, or OpenAI keys in Settings, or run fully offline with Ollama.'],
-                  ['What counts as a paired device?', 'Any desktop or mobile companion linked to your workspace via a pairing code. Free includes 1, Basic 3, Pro 10, and Enterprise is unlimited.'],
-                  ['Can I change or cancel anytime?', 'Plans are month-to-month (Enterprise is billed annually per seat). Switch tiers instantly here — downgrades take effect at the end of the current cycle.'],
+                  ['What counts as a paired device?', 'Any desktop or mobile companion linked to your workspace via a pairing code. Free includes 1, Solo 3, Solo Plus 10, and Founder is unlimited.'],
+                  ['Can I change or cancel anytime?', 'Plans are month-to-month. Switch tiers instantly here — downgrades take effect at the end of the current cycle.'],
                 ].map(([q, a]) => (
                   <div key={q} className="glass-panel p-5 rounded space-y-2">
                     <h3 className="text-[12px] font-bold text-[var(--text-strong)] uppercase tracking-wide">{q}</h3>
@@ -2479,7 +2479,7 @@ export default function App() {
                     <RefreshCw size={11} className="text-[var(--accent)]" />
                     <span>Enable Settings Cloud Sync</span>
                   </label>
-                  <span className="text-[10px] bg-[var(--line)] text-[var(--accent)] border border-[var(--accent)] px-1.5 rounded font-bold shrink-0">BASIC+</span>
+                  <span className="text-[10px] bg-[var(--line)] text-[var(--accent)] border border-[var(--accent)] px-1.5 rounded font-bold shrink-0">SOLO+</span>
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Syncs model settings and active project checklists across devices.</p>
@@ -2488,7 +2488,7 @@ export default function App() {
                   <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
                     <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
                       <ShieldAlert size={14} />
-                      <span>Sync locked: Upgrade to Basic Plan ($2.99/mo)</span>
+                      <span>{`Sync locked: Upgrade to Solo Plan ($${TIER_PRICES.solo}/mo)`}</span>
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setUserTier('solo'); setShowSyncOverlay(false); setIsSyncEnabled(true); }} className="text-[9px] bg-amber-800 text-white px-3 py-1 rounded font-bold hover:bg-amber-900 transition-all">UPGRADE</button>
@@ -2518,7 +2518,7 @@ export default function App() {
                     <Laptop size={11} className="text-[var(--accent)]" />
                     <span>WebRTC Collaboration Room</span>
                   </label>
-                  <span className="text-[10px] bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] px-1.5 rounded font-extrabold shrink-0">ENTERPRISE</span>
+                  <span className="text-[10px] bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] px-1.5 rounded font-extrabold shrink-0">FOUNDER</span>
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Preview real-time co-coding indicators, terminal stream status, and active agent pairing sessions.</p>
@@ -2532,7 +2532,7 @@ export default function App() {
                   <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
                     <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
                       <ShieldAlert size={14} />
-                      <span>Collab locked: Upgrade to Enterprise ($25/mo)</span>
+                      <span>{`Collab locked: Upgrade to Founder ($${TIER_PRICES.founder}/mo)`}</span>
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setUserTier('founder'); setShowCollabOverlay(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
@@ -2547,7 +2547,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <Database size={11} className="text-[var(--accent)]" />
                   <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">Semantic Cache Query</span>
-                  <span className="text-[10px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">PRO+</span>
+                  <span className="text-[10px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">SOLO PLUS+</span>
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Index and query workspace symbols, functions, and type definitions from a local semantic cache.</p>
@@ -2621,7 +2621,7 @@ export default function App() {
                   <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
                     <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
                       <ShieldAlert size={14} />
-                      <span>Semantic Cache locked: Upgrade to Pro ($9.99/mo)</span>
+                      <span>{`Semantic Cache locked: Upgrade to Solo Plus ($${TIER_PRICES.solo_plus}/mo)`}</span>
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setUserTier('solo_plus'); setShowSemanticLock(false); }} className="text-[9px] bg-blue-900 border border-blue-500 text-blue-200 px-3 py-1 rounded font-bold hover:bg-blue-800 transition-all">UPGRADE</button>
@@ -2636,7 +2636,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <RefreshCw size={11} className="text-[var(--accent)]" />
                   <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">Self-Healing Rollback Monitor</span>
-                  <span className="text-[10px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">PRO+</span>
+                  <span className="text-[10px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">SOLO PLUS+</span>
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Automatically reverts destructive file operations and monitors workspace integrity in real-time.</p>
@@ -2663,7 +2663,7 @@ export default function App() {
                   </>
                 ) : (
                   <div className="text-[10px] text-[var(--text-muted)] border border-[var(--line)] bg-[var(--surface-overlay)] p-2.5 rounded">
-                    🔒 Upgrade to Pro or Enterprise to enable self-healing rollback monitoring.
+                    🔒 Upgrade to Solo Plus or Founder to enable self-healing rollback monitoring.
                   </div>
                 )}
               </div>
@@ -2673,7 +2673,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={11} className="text-[var(--accent)]" />
                   <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">RBAC Command Policy Simulator</span>
-                  <span className="text-[10px] bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] px-1.5 rounded font-extrabold shrink-0">ENTERPRISE</span>
+                  <span className="text-[10px] bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] px-1.5 rounded font-extrabold shrink-0">FOUNDER</span>
                   <FeatureBadge status="simulator" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Define role-based access controls and blocked command prefixes for organization workspaces.</p>
@@ -2704,7 +2704,7 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="text-[10px] text-[var(--text-muted)] border border-[var(--line)] bg-[var(--surface-overlay)] p-2.5 rounded cursor-pointer" onClick={() => setShowRbacLock(true)}>
-                    RBAC simulator policies require Enterprise tier. Click to upgrade.
+                    RBAC simulator policies require Founder tier. Click to upgrade.
                   </div>
                 )}
 
@@ -2712,7 +2712,7 @@ export default function App() {
                   <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
                     <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
                       <ShieldAlert size={14} />
-                      <span>RBAC simulator locked: Upgrade to Enterprise ($25/mo)</span>
+                      <span>{`RBAC simulator locked: Upgrade to Founder ($${TIER_PRICES.founder}/mo)`}</span>
                     </div>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => { setUserTier('founder'); setShowRbacLock(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
@@ -2763,7 +2763,7 @@ export default function App() {
             <div className="space-y-1.5">
               <h3 className="text-[var(--text-strong)] font-bold text-sm uppercase">Cloud Sync Required</h3>
               <p className="text-[11px] text-[var(--warn-soft)] leading-relaxed">
-                {renderMd('To sync your mobile planning session draft directly to your desktop workspace, you must enable **Cloud Sync** (Basic Tier or higher).')}
+                {renderMd('To sync your mobile planning session draft directly to your desktop workspace, you must enable **Cloud Sync** (Solo Tier or higher).')}
               </p>
             </div>
             <div className="flex flex-col gap-2 pt-2">
@@ -2771,11 +2771,11 @@ export default function App() {
                 onClick={() => {
                   setUserTier('solo');
                   setShowSyncLockModal(false);
-                  pushToast('Upgraded to Basic tier successfully.', 'success');
+                  pushToast('Upgraded to Solo tier successfully.', 'success');
                 }}
                 className="bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold py-2 rounded uppercase transition-all"
               >
-                Upgrade to Basic ($2.99/mo)
+                {`Upgrade to Solo ($${TIER_PRICES.solo}/mo)`}
               </button>
               <button
                 onClick={() => {

@@ -19,7 +19,7 @@ For developers working with sensitive proprietary assets or under strict NDA cov
 * **Privacy Mode**: When active, cloud synchronization is blocked entirely. 
 * **Zero-Egress Mode**: Blocks all external LLM provider requests. All agent task executions, code analyses, and criteria evaluations are routed to local model instances (e.g., via Ollama running on your local machine).
 
-## 4. Gumroad Billing & License Keys
-Purchases of paid tiers are processed by Gumroad, acting as Merchant of Record. Kryleos Forge does not collect, store, or transmit your credit card numbers — Gumroad handles all payment data under its own privacy policy.
-* **Local license storage**: Kryleos Forge stores only your license key, plan tier, and expiry date on your device, used to validate your subscription offline.
-* **Billing email**: Your billing email is known only to Gumroad. It is not synced to or stored on any Kryleos Forge server.
+## 4. Billing & License Keys
+Recurring subscriptions are processed by **Stripe** or **Razorpay** (India). Kryleos Forge does not collect, store, or transmit your credit card numbers — Stripe/Razorpay handle all payment data under their own privacy policies. Our server stores your email, subscription tier, and Stripe/Razorpay customer reference, used to keep your account entitlements in sync.
+* **Founder lifetime key**: If you purchase a one-time Founder lifetime key instead, Kryleos Forge stores only the signed license key, plan tier, and expiry date (if any) on your device, used to validate your entitlement offline.
+* **Billing email**: Your billing email may be shared with Stripe/Razorpay to process payment and is stored on our server only to associate your subscription with your account.
