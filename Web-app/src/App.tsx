@@ -56,6 +56,7 @@ const APP_TABS: ActiveTab[] = ['marketing', 'pricing', 'planning', 'chat', 'down
 interface PricingRow {
   label: string;
   group?: boolean;
+  status?: FeatureStatus;
   values: Record<UserTier, boolean | string>;
 }
 
@@ -72,20 +73,20 @@ const PRICING_MATRIX: PricingRow[] = [
   { label: 'Voice scoping & planning', values: { free: true, solo: true, solo_plus: true, founder: true } },
 
   { label: 'Sync & backup', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Settings cloud sync', values: { free: false, solo: true, solo_plus: true, founder: true } },
-  { label: 'Automatic cloud backups', values: { free: false, solo: true, solo_plus: true, founder: true } },
+  { label: 'Settings cloud sync', status: 'preview', values: { free: false, solo: true, solo_plus: true, founder: true } },
+  { label: 'Automatic cloud backups', status: 'preview', values: { free: false, solo: true, solo_plus: true, founder: true } },
 
   { label: 'Remote compute', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Remote containers', values: { free: false, solo: false, solo_plus: true, founder: true } },
-  { label: 'Cloud sandbox builds', values: { free: false, solo: false, solo_plus: true, founder: true } },
-  { label: 'Semantic cache query', values: { free: false, solo: false, solo_plus: true, founder: true } },
-  { label: 'Self-healing rollback', values: { free: false, solo: false, solo_plus: true, founder: true } },
+  { label: 'Remote containers', status: 'simulator', values: { free: false, solo: false, solo_plus: true, founder: true } },
+  { label: 'Cloud sandbox builds', status: 'simulator', values: { free: false, solo: false, solo_plus: true, founder: true } },
+  { label: 'Semantic cache query', status: 'preview', values: { free: false, solo: false, solo_plus: true, founder: true } },
+  { label: 'Self-healing rollback', status: 'preview', values: { free: false, solo: false, solo_plus: true, founder: true } },
 
   { label: 'Organization', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Team workspaces', values: { free: false, solo: false, solo_plus: false, founder: true } },
-  { label: 'Audit log & RBAC', values: { free: false, solo: false, solo_plus: false, founder: true } },
-  { label: 'WebRTC co-coding rooms', values: { free: false, solo: false, solo_plus: false, founder: true } },
-  { label: 'SSO / SAML', values: { free: false, solo: false, solo_plus: false, founder: true } },
+  { label: 'Team workspaces', status: 'preview', values: { free: false, solo: false, solo_plus: false, founder: true } },
+  { label: 'Audit log & RBAC', status: 'simulator', values: { free: false, solo: false, solo_plus: false, founder: true } },
+  { label: 'WebRTC co-coding rooms', status: 'preview', values: { free: false, solo: false, solo_plus: false, founder: true } },
+  { label: 'SSO / SAML', status: 'planned', values: { free: false, solo: false, solo_plus: false, founder: true } },
 ];
 
 function readStoredTier(): UserTier {
@@ -1760,7 +1761,7 @@ export default function App() {
                     {PRICING_MATRIX.map((row, i) => (
                       <tr key={i} className={`border-b border-[var(--line-faint)] ${row.group ? 'bg-[var(--surface-accent)]' : ''}`}>
                         <th scope="row" className={`p-3 font-medium text-left ${row.group ? 'text-[var(--accent)] uppercase text-[10px] font-bold tracking-wider' : 'text-[var(--accent-soft)]'}`}>
-                          {row.label}
+                          {row.label}{row.status && <FeatureBadge status={row.status} />}
                         </th>
                         {USER_TIERS.map(tier => (
                           <td key={tier} className={`p-3 text-center ${userTier === tier ? 'bg-[var(--surface-active)]' : ''}`}>
