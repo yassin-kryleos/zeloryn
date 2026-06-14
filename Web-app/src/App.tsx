@@ -1126,7 +1126,7 @@ export default function App() {
                 // AUTONOMOUS DEVELOPER PLANNER
               </div>
               <p className="text-sm text-[var(--accent-dim)] max-w-2xl mx-auto uppercase tracking-wider leading-relaxed">
-                Kryleos Forge is a next-generation developer workbench designed to orchestrate local and remote multi-agent AI teams. It functions as both a public landing companion and an interactive scoper, letting you plan, audit, and execute tasks across devices.
+                Kryleos Forge is a local-first developer workbench. Your code and agent runs never leave your machine, every plan-to-code step is captured as an inspectable trace, and you can approve or stop a running agent from your phone.
               </p>
               <div className="flex justify-center gap-4 pt-4">
                 <button onClick={() => setActiveTab('planning')} className="forge-btn forge-btn-primary px-5 py-2.5 font-bold uppercase rounded">
@@ -1575,31 +1575,31 @@ export default function App() {
                 <Sparkles size={20} className="text-[var(--accent)]" /> App Overview & Core Principles
               </h2>
               <p className="text-[13px] text-[var(--accent-dim)] text-center max-w-2xl mx-auto leading-relaxed">
-                Kryleos Forge is a next-generation developer workbench designed to orchestrate local and remote multi-agent AI teams. It functions as both a public landing companion and an interactive scoper, letting you plan, audit, and execute tasks across devices.
+                Kryleos Forge plans, executes, and verifies development work without your code ever leaving your machine — and gives you a structured trace of what each agent did, plus the ability to supervise a local run from your phone.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                 <div className="glass-panel p-6 rounded flex flex-col gap-3">
                   <div className="text-[var(--accent)] font-bold text-[12px] uppercase tracking-wider">
-                    01 // Zero-Egress Privacy
+                    01 // Local-First Execution
                   </div>
                   <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">
-                    Source code and system instructions never leave your local environment. Run offline LLMs using native Ollama nodes with strict sandbox boundaries and execution filters.
+                    Source code, system instructions, and agent runs never leave your machine. Use offline LLMs via native Ollama nodes with strict sandbox boundaries and execution filters.
                   </p>
                 </div>
                 <div className="glass-panel p-6 rounded flex flex-col gap-3">
                   <div className="text-[var(--accent)] font-bold text-[12px] uppercase tracking-wider">
-                    02 // Multi-Device Sync
+                    02 // Inspectable Trace
                   </div>
                   <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">
-                    Bridge desktop terminals, web interfaces, and mobile watch/phone attachments using secure pairing codes over persistent, real-time WebSockets.
+                    Every plan item moves through PLAN → CREW → FLOW → FORGE with structured acceptance criteria, so you can see what each agent did and why — not just a chat transcript.
                   </p>
                 </div>
                 <div className="glass-panel p-6 rounded flex flex-col gap-3">
                   <div className="text-[var(--accent)] font-bold text-[12px] uppercase tracking-wider">
-                    03 // Prompt Cost Guard
+                    03 // Remote Supervision
                   </div>
                   <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">
-                    Track input and output tokens. Predict api costs, compress context loads, and configure BYOK token limits to optimize resource usage.
+                    Pair your phone or browser to your desktop over secure WebSockets to approve terminal commands, pause a run, or stop an agent — while everything still runs locally.
                   </p>
                 </div>
               </div>

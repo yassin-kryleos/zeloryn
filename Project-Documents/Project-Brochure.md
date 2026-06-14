@@ -1,6 +1,6 @@
 # Kryleos Forge
 
-## The only AI coding tool that manages your project — from plan to board to execution.
+## Local-first AI project execution — from plan to board to verified code, with an inspectable trace and remote approval from your phone.
 
 Most AI coding tools help you with your current file. Kryleos Forge manages your entire project.
 
