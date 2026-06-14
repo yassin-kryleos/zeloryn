@@ -23,6 +23,7 @@ web-build/
 .kryleos/
 chat_history.json
 .kryleos_forge_secrets.json
+.release-score-tmp/
 
 # Environment and secrets
 .env

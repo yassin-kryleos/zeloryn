@@ -70,3 +70,45 @@ Linux runners, to produce the real installer + `app-update.yml`.
   just pinned for Phase 1. Build-tooling-only exposure (never shipped to
   users) — accepted as-is. Revisit if electron-builder ships a non-breaking
   fix upstream.
+
+## Phase 1 T2 status — hardened `qa/scripts/release-score.mjs`
+
+Rewrote the scorer per the IMPLEMENTATION_PLAN line 57 exit gate
+("hardened scorer reflects real pass/fail and cannot read ≥ 8.5 on
+scaffolding"):
+
+- **E2E (15%)** now runs `npx playwright test --reporter=line` per app and
+  scores by exit code, not by config-file presence. `SKIP_E2E=1` reports the
+  category as unproven (0%) instead of skipping silently.
+- **Phase-gate assertions (20%)**, 4 automated sub-checks: (a) grep public
+  surfaces (`Web-app/src`, `Desktop-app/src/components`,
+  `Mobile-app/src`, `README.md`) for `Matrix-Coding`/"the only ... app/tool"
+  overclaims, (b) `PreviewDeck.tsx` has no canned-reply string, (c) the
+  packaged backend (`dist-backend/server.cjs`) self-starts standalone via
+  `ELECTRON_RUN_AS_NODE=1` and answers on `127.0.0.1:34577`, (d) a forged
+  `tier: 'founder'` in the `/api/crew/sync` request body is rejected with
+  `403`.
+- Removed the old hardcoded `openHighFindings = 1` constant and its
+  weight entirely.
+
+**Rebalanced weights** so these two categories carry enough weight to keep
+the score below the 8.5 target while either has open failures:
+`security 0.15→0.10`, `qaReports 0.10→0.05`, `phaseGates 0.10→0.20` (sum
+still 1.00).
+
+**Current honest baseline (2026-06-14, `SKIP_E2E=1`): 7.5 / 10, BELOW
+TARGET.** Two phase-gate sub-checks currently fail and are real, open
+issues for Phase 2/3:
+- ✘ `PreviewDeck.tsx` still sends the canned "Context note queued locally
+  ..." reply instead of a live response.
+- ✘ `POST /api/crew/sync` accepts a forged `tier: 'founder'` in the
+  request body and returns `200` (only `tier: 'free'` is rejected) — a
+  real entitlement-bypass vulnerability, to be closed in Phase 3
+  alongside tier/license validation.
+
+With E2E included (last full run, 1/3 apps pass — Web-app only;
+Desktop-app and Mobile-app fail, not yet investigated), the score is
+8.0 / 10 — still below target. Phase 1 T2 is complete: the scorer now
+measures real state and correctly refuses to call this release-ready
+until Phases 2-3 close the two phase-gate items above (and Desktop/Mobile
+E2E failures are investigated).

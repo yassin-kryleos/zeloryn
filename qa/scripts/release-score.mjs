@@ -5,19 +5,28 @@
  *   - npm test exit codes and counts (Desktop + Web + Mobile)
  *   - TypeScript noEmit exit codes
  *   - ESLint exit codes
- *   - npm audit results
- *   - Playwright E2E existence and configured test count
+ *   - npm audit results (production deps only)
+ *   - Playwright E2E suites — pass/fail by exit code, not file presence
  *   - Security and performance findings from QA reports
+ *   - Phase-gate assertions: public-surface honesty grep, PreviewDeck
+ *     canned-reply check, and a live backend smoke test (self-start +
+ *     forged-tier rejection)
  *
- * Produces a weighted score from 0–10 and prints a summary table.
+ * Produces a weighted score from 0-10 and prints a summary table.
  *
  * Usage: node qa/scripts/release-score.mjs
  * Run from the project root (Kryleos-Forge/).
+ *
+ * The E2E and phase-gate checks spawn real processes (Playwright browsers,
+ * a backend server instance) and can take several minutes. Set SKIP_E2E=1
+ * to skip the Playwright run for a faster local iteration — this scores
+ * E2E as 0 (not run = not proven), it never inflates the result.
  */
 
-import { execSync } from 'child_process';
-import { existsSync, readFileSync } from 'fs';
+import { execSync, spawn } from 'child_process';
+import { existsSync, readFileSync, readdirSync, mkdirSync, rmSync } from 'fs';
 import path from 'path';
+import http from 'http';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,21 +38,22 @@ const WEIGHTS = {
   unitTests:       0.20,  // Desktop + Web + Mobile unit test suites
   typecheck:       0.10,  // TypeScript noEmit on all 3 apps
   lint:            0.05,  // ESLint on Desktop + Web
-  security:        0.15,  // npm audit + no high CVEs
-  e2eExists:       0.15,  // E2E test files present and configured
+  security:        0.10,  // npm audit + no high CVEs
+  e2eTests:        0.15,  // E2E suites pass by exit code (Playwright)
   errorBoundary:   0.05,  // ErrorBoundary in Desktop + Mobile
   bodyLimit:       0.05,  // express.json({ limit }) applied
   perfScripts:     0.05,  // Performance test scripts runnable
-  qaReports:       0.10,  // QA audit report + test strategy present
-  openFindings:    0.10,  // Deductions for open HIGH/CRITICAL findings
+  qaReports:       0.05,  // QA audit report + test strategy present
+  phaseGates:      0.20,  // Honesty + security phase-gate assertions (forged-tier 403, no canned replies, backend self-start)
 };
 
-function run(cmd, cwd) {
+function run(cmd, cwd, timeoutMs = 120_000) {
   try {
-    execSync(cmd, { cwd, stdio: 'pipe', timeout: 60_000 });
-    return { ok: true, output: '' };
+    const output = execSync(cmd, { cwd, stdio: 'pipe', timeout: timeoutMs }).toString();
+    return { ok: true, output };
   } catch (err) {
-    return { ok: false, output: err.stdout?.toString() ?? '' };
+    const out = (err.stdout?.toString() ?? '') + (err.stderr?.toString() ?? '');
+    return { ok: false, output: out };
   }
 }
 
@@ -113,22 +123,33 @@ checks.push(check(
   `${auditPassing}/3 clean (production runtime)`
 ));
 
-// 5. E2E test files present
-const e2eFiles = [
-  path.join(ROOT, 'Web-app', 'e2e'),
-  path.join(ROOT, 'Desktop-app', 'e2e'),
-  path.join(ROOT, 'Mobile-app', 'e2e'),
-  path.join(ROOT, 'Web-app', 'playwright.config.ts'),
-  path.join(ROOT, 'Desktop-app', 'playwright.config.ts'),
-  path.join(ROOT, 'Mobile-app', 'playwright.config.ts'),
+// 5. E2E suites — pass by exit code, not file presence
+console.log('Checking E2E suites (Playwright, pass/fail by exit code)...');
+const e2eApps = [
+  { name: 'Web-app', dir: path.join(ROOT, 'Web-app') },
+  { name: 'Desktop-app', dir: path.join(ROOT, 'Desktop-app') },
+  { name: 'Mobile-app', dir: path.join(ROOT, 'Mobile-app') },
 ];
-const e2ePresent = e2eFiles.filter(f => existsSync(f)).length;
-const e2eScore = e2ePresent / e2eFiles.length;
+const e2eConfigured = e2eApps.filter(a => existsSync(path.join(a.dir, 'playwright.config.ts')));
+
+let e2eScore = 0;
+let e2eNotes = 'no Playwright config found';
+if (process.env.SKIP_E2E === '1') {
+  e2eNotes = `skipped (SKIP_E2E=1) — counts as not proven, ${e2eConfigured.length} app(s) configured`;
+} else if (e2eConfigured.length > 0) {
+  const e2eResults = e2eConfigured.map(a => {
+    const r = run('npx playwright test --reporter=line', a.dir, 240_000);
+    return { ...a, ok: r.ok };
+  });
+  const e2ePassing = e2eResults.filter(r => r.ok).length;
+  e2eScore = e2ePassing / e2eConfigured.length;
+  e2eNotes = `${e2ePassing}/${e2eConfigured.length} apps pass (${e2eResults.map(r => `${r.name}=${r.ok ? 'PASS' : 'FAIL'}`).join(', ')})`;
+}
 checks.push(check(
-  'E2E test files + Playwright configs present',
+  'E2E suites passing (Playwright, exit code)',
   e2eScore,
-  WEIGHTS.e2eExists,
-  `${e2ePresent}/${e2eFiles.length} present`
+  WEIGHTS.e2eTests,
+  e2eNotes
 ));
 
 // 6. ErrorBoundary in Desktop + Mobile
@@ -190,21 +211,153 @@ checks.push(check(
   `${reportsPresent}/${qaReports.length} present`
 ));
 
-// 10. Open findings deduction
-// Known HIGH open findings: TEST-GAP-01, TEST-GAP-02, TEST-GAP-03, A11Y-NEW-01
-// After Phase 1+2: TEST-GAP-03 resolved (integration tests), A11Y-NEW-01 partially resolved (E2E axe)
-// After Phase 3: cross-platform CI resolved (.github/workflows/ci.yml runs the full
-//   suite + Electron backend on ubuntu/windows/macos). SEC-6/SEC-7/SEC-INPUT-01 closed.
-// Remaining deduction: no physical-device Mobile test (Expo web E2E covers render logic,
-//   but no real iOS/Android hardware run) — requires device lab / EAS, out of CI scope.
-const openHighFindings = 1; // physical-device mobile test only
-const findingDeduction = Math.min(openHighFindings * 0.05, 0.10); // max 0.10 deduction
-const findingScore = 1 - findingDeduction / WEIGHTS.openFindings;
+// 10. Phase-gate assertions — honesty + security, automated
+console.log('Checking phase-gate assertions...');
+
+// 10a. Public surfaces clean of "only"/"Matrix-Coding" overclaims
+function collectFiles(dir, exts, out) {
+  if (!existsSync(dir)) return;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) collectFiles(full, exts, out);
+    else if (exts.some(ext => entry.name.endsWith(ext))) out.push(full);
+  }
+}
+const publicSurfaceFiles = [];
+collectFiles(path.join(ROOT, 'Web-app', 'src'), ['.ts', '.tsx'], publicSurfaceFiles);
+collectFiles(path.join(ROOT, 'Desktop-app', 'src', 'components'), ['.ts', '.tsx'], publicSurfaceFiles);
+collectFiles(path.join(ROOT, 'Mobile-app', 'src'), ['.ts', '.tsx'], publicSurfaceFiles);
+if (existsSync(path.join(ROOT, 'README.md'))) publicSurfaceFiles.push(path.join(ROOT, 'README.md'));
+
+const overclaimPattern = /matrix-coding|\bthe only\b[^.]{0,40}\b(app|tool|platform|ai|coding)\b/i;
+const overclaimHits = publicSurfaceFiles
+  .filter(f => overclaimPattern.test(readFileSync(f, 'utf8')))
+  .map(f => path.relative(ROOT, f));
+const honestyOk = overclaimHits.length === 0;
+
+// 10b. PreviewDeck has no canned-reply string (Side Chat must call a real
+// model or be removed — a hardcoded "AI" response is exactly what this
+// gate exists to catch).
+const previewDeckPath = path.join(ROOT, 'Desktop-app', 'src', 'components', 'PreviewDeck.tsx');
+const previewDeckHasCanned = existsSync(previewDeckPath) &&
+  readFileSync(previewDeckPath, 'utf8').includes('Context note queued');
+const previewDeckOk = !previewDeckHasCanned;
+
+// 10c/10d. Live backend smoke test: packaged backend self-starts standalone,
+// and a forged `tier` in a request body is rejected (403) rather than
+// trusted.
+function postJson(url, body) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const req = http.request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+    }, res => {
+      res.resume();
+      resolve(res.statusCode);
+    });
+    req.on('error', reject);
+    req.setTimeout(5000, () => req.destroy(new Error('request timed out')));
+    req.write(data);
+    req.end();
+  });
+}
+
+function waitForServer(port, attempts = 30) {
+  return new Promise(resolve => {
+    let tries = 0;
+    const attempt = () => {
+      const req = http.get(`http://127.0.0.1:${port}/`, res => { res.resume(); resolve(true); });
+      req.on('error', () => {
+        tries += 1;
+        if (tries >= attempts) resolve(false);
+        else setTimeout(attempt, 300);
+      });
+      req.setTimeout(1000, () => req.destroy());
+    };
+    attempt();
+  });
+}
+
+async function checkBackendGates() {
+  const desktopDir = path.join(ROOT, 'Desktop-app');
+  const serverBundle = path.join(desktopDir, 'dist-backend', 'server.cjs');
+  if (!existsSync(serverBundle)) {
+    const build = run('npm run build:backend', desktopDir, 180_000);
+    if (!build.ok || !existsSync(serverBundle)) {
+      return { smokeOk: false, tierOk: false, tierNote: 'backend bundle build failed' };
+    }
+  }
+
+  const PORT = 34577;
+  const tmpWorkspace = path.join(ROOT, '.release-score-tmp');
+  mkdirSync(tmpWorkspace, { recursive: true });
+
+  const child = spawn(process.execPath, [serverBundle], {
+    cwd: tmpWorkspace,
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT) },
+    stdio: 'ignore',
+  });
+
+  let smokeOk = false;
+  let tierOk = false;
+  let tierNote = 'backend did not respond';
+  try {
+    smokeOk = await waitForServer(PORT);
+    if (smokeOk) {
+      try {
+        const status = await postJson(`http://127.0.0.1:${PORT}/api/crew/sync`, { tier: 'founder', items: [] });
+        tierOk = status === 403;
+        tierNote = `forged tier='founder' on /api/crew/sync -> HTTP ${status}`;
+      } catch (err) {
+        tierNote = `request failed: ${err.message}`;
+      }
+    }
+  } finally {
+    child.kill();
+    // Give Windows a moment to release file handles before cleanup; a failed
+    // cleanup of the scratch dir is not a release-blocking condition.
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      rmSync(tmpWorkspace, { recursive: true, force: true });
+    } catch {
+      // best-effort; leave the scratch dir for the next run to reuse/clean
+    }
+  }
+  return { smokeOk, tierOk, tierNote };
+}
+
+const { smokeOk, tierOk, tierNote } = await checkBackendGates();
+
+const phaseGateChecks = [
+  {
+    ok: honestyOk,
+    label: 'public surfaces clean of "only"/"Matrix-Coding" overclaims',
+    note: honestyOk ? 'clean' : `found in: ${overclaimHits.join(', ')}`,
+  },
+  {
+    ok: previewDeckOk,
+    label: 'PreviewDeck has no canned-reply string',
+    note: previewDeckOk ? 'clean' : '"Context note queued" canned string still present (PreviewDeck.tsx)',
+  },
+  {
+    ok: smokeOk,
+    label: 'packaged backend self-starts standalone',
+    note: smokeOk ? `reachable on 127.0.0.1:${34577}` : 'backend did not come up',
+  },
+  {
+    ok: tierOk,
+    label: 'forged tier in request body is rejected (403)',
+    note: tierNote,
+  },
+];
+const phaseGatePassing = phaseGateChecks.filter(c => c.ok).length;
 checks.push(check(
-  'Open HIGH findings (deduction)',
-  Math.max(0, findingScore),
-  WEIGHTS.openFindings,
-  `${openHighFindings} HIGH finding remains (physical-device mobile test only)`
+  'Phase-gate assertions (honesty + security)',
+  phaseGatePassing / phaseGateChecks.length,
+  WEIGHTS.phaseGates,
+  phaseGateChecks.map(c => `${c.ok ? '✔' : '✘'} ${c.label} (${c.note})`).join(' | ')
 ));
 
 // ─── Calculate weighted score ─────────────────────────────────────────────────
