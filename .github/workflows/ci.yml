@@ -84,6 +84,49 @@ jobs:
       - name: ESLint
         run: npm run lint
 
+  ollama-e2e:
+    name: Ollama FORGE end-to-end
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Desktop-app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Desktop-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Ollama
+        run: curl -fsSL https://ollama.com/install.sh | sh
+
+      - name: Start Ollama server
+        run: |
+          ollama serve &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:11434/api/tags > /dev/null && exit 0
+            sleep 1
+          done
+          echo "Ollama server did not become ready in time" >&2
+          exit 1
+
+      - name: Pull model
+        run: ollama pull qwen2.5-coder:1.5b
+
+      - name: Run Ollama FORGE e2e test
+        run: npx vitest run src/backend/forge_ollama_e2e.test.ts
+        env:
+          NODE_ENV: test
+          OLLAMA_E2E: '1'
+          OLLAMA_E2E_MODEL: qwen2.5-coder:1.5b
+
   release-score:
     name: Release readiness score
     runs-on: ubuntu-latest
