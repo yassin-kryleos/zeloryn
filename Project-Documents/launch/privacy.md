@@ -19,5 +19,7 @@ For developers working with sensitive proprietary assets or under strict NDA cov
 * **Privacy Mode**: When active, cloud synchronization is blocked entirely. 
 * **Zero-Egress Mode**: Blocks all external LLM provider requests. All agent task executions, code analyses, and criteria evaluations are routed to local model instances (e.g., via Ollama running on your local machine).
 
-## 4. Stripe Subscription Billing
-Subscription transactions are handled entirely by Stripe. Kryleos Forge does not collect, store, or transmit your credit card numbers. Your billing email and subscription plan status are synchronized to enable cloud services.
+## 4. Gumroad Billing & License Keys
+Purchases of paid tiers are processed by Gumroad, acting as Merchant of Record. Kryleos Forge does not collect, store, or transmit your credit card numbers — Gumroad handles all payment data under its own privacy policy.
+* **Local license storage**: Kryleos Forge stores only your license key, plan tier, and expiry date on your device, used to validate your subscription offline.
+* **Billing email**: Your billing email is known only to Gumroad. It is not synced to or stored on any Kryleos Forge server.

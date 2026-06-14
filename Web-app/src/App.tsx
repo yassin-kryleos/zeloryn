@@ -2698,9 +2698,17 @@ export default function App() {
 
       {/* Global footer — Kryleos group callout */}
       <footer className="border-t border-[var(--line)] bg-[var(--surface-header)] px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 relative z-20">
-        <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider">
-          © Kryleos Group · Kryleos Forge Companion
-        </span>
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider">
+            © Kryleos Group · Kryleos Forge Companion
+          </span>
+          <a href="https://kryleos.com/privacy" target="_blank" rel="noopener noreferrer" className="text-[10px] uppercase tracking-wider text-[var(--accent-dim)] hover:text-[var(--accent)] transition-all">
+            Privacy Policy
+          </a>
+          <a href="https://kryleos.com/terms" target="_blank" rel="noopener noreferrer" className="text-[10px] uppercase tracking-wider text-[var(--accent-dim)] hover:text-[var(--accent)] transition-all">
+            Terms of Service
+          </a>
+        </div>
         <a
           href="https://www.kryleos.com"
           target="_blank"
