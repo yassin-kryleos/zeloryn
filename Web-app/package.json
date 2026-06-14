@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "generate:pricing": "node ../scripts/generate-pricing.mjs",
+    "predev": "npm run generate:pricing",
+    "prebuild": "npm run generate:pricing",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

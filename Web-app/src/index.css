@@ -550,9 +550,9 @@ body.theme-light .pricing-card {
 }
 
 .pricing-card-free::before { background: linear-gradient(90deg, #64748b, #cbd5e1); }
-.pricing-card-basic::before { background: linear-gradient(90deg, #d97706, #fbbf24); }
-.pricing-card-pro::before { background: linear-gradient(90deg, #2563eb, #60a5fa); }
-.pricing-card-enterprise::before { background: linear-gradient(90deg, #059669, #34d399); }
+.pricing-card-solo::before { background: linear-gradient(90deg, #d97706, #fbbf24); }
+.pricing-card-solo_plus::before { background: linear-gradient(90deg, #2563eb, #60a5fa); }
+.pricing-card-founder::before { background: linear-gradient(90deg, #059669, #34d399); }
 
 .pricing-card:hover {
   transform: translateY(-4px);

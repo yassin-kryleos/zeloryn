@@ -6,6 +6,7 @@ import {
   LogIn, LogOut, User, CreditCard, Lock, ExternalLink
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
+import { TIER_LABELS, TIER_PRICES, type TierId } from './pricing.generated';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -14,7 +15,7 @@ interface Message {
 
 type ResponseMode = 'balanced' | 'concise' | 'critical' | 'brutal_audit';
 type FeatureStatus = 'production' | 'preview' | 'simulator' | 'mock' | 'planned';
-type UserTier = 'free' | 'basic' | 'pro' | 'enterprise';
+type UserTier = Exclude<TierId, 'agency'>;
 type ActiveTab = 'marketing' | 'pricing' | 'planning' | 'chat' | 'downloads' | 'settings';
 type BackendLog = { sender?: string; message?: string };
 type ToastKind = 'success' | 'error' | 'info';
@@ -38,9 +39,7 @@ function FeatureBadge({ status, label }: { status: FeatureStatus; label?: string
   );
 }
 
-const USER_TIERS: UserTier[] = ['free', 'basic', 'pro', 'enterprise'];
-const TIER_LABELS: Record<UserTier, string> = { free: 'Free', basic: 'Basic', pro: 'Pro', enterprise: 'Enterprise' };
-const TIER_PRICES: Record<UserTier, number> = { free: 0, basic: 2.99, pro: 9.99, enterprise: 25 };
+const USER_TIERS: UserTier[] = ['free', 'solo', 'solo_plus', 'founder'];
 
 function readStoredUser(): AuthUser | null {
   try {
@@ -61,32 +60,32 @@ interface PricingRow {
 }
 
 const PRICING_MATRIX: PricingRow[] = [
-  { label: 'Pricing', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
-  { label: 'Monthly price', values: { free: '$0', basic: '$2.99', pro: '$9.99', enterprise: '$25/seat' } },
-  { label: 'Paired devices', values: { free: '1', basic: '3', pro: '10', enterprise: 'Unlimited' } },
-  { label: 'Support', values: { free: 'Community', basic: 'Email', pro: 'Priority', enterprise: 'Dedicated + SLA' } },
+  { label: 'Pricing', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
+  { label: 'Monthly price', values: { free: '$0', solo: '$5', solo_plus: '$9', founder: '$15' } },
+  { label: 'Paired devices', values: { free: '1', solo: '3', solo_plus: '10', founder: 'Unlimited' } },
+  { label: 'Support', values: { free: 'Community', solo: 'Email', solo_plus: 'Priority', founder: 'Dedicated + SLA' } },
 
-  { label: 'Core (local-first)', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
-  { label: 'Local agent workspace', values: { free: true, basic: true, pro: true, enterprise: true } },
-  { label: 'BYOK model access', values: { free: true, basic: true, pro: true, enterprise: true } },
-  { label: 'Zero-egress execution', values: { free: true, basic: true, pro: true, enterprise: true } },
-  { label: 'Voice scoping & planning', values: { free: true, basic: true, pro: true, enterprise: true } },
+  { label: 'Core (local-first)', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
+  { label: 'Local agent workspace', values: { free: true, solo: true, solo_plus: true, founder: true } },
+  { label: 'BYOK model access', values: { free: true, solo: true, solo_plus: true, founder: true } },
+  { label: 'Zero-egress execution', values: { free: true, solo: true, solo_plus: true, founder: true } },
+  { label: 'Voice scoping & planning', values: { free: true, solo: true, solo_plus: true, founder: true } },
 
-  { label: 'Sync & backup', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
-  { label: 'Settings cloud sync', values: { free: false, basic: true, pro: true, enterprise: true } },
-  { label: 'Automatic cloud backups', values: { free: false, basic: true, pro: true, enterprise: true } },
+  { label: 'Sync & backup', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
+  { label: 'Settings cloud sync', values: { free: false, solo: true, solo_plus: true, founder: true } },
+  { label: 'Automatic cloud backups', values: { free: false, solo: true, solo_plus: true, founder: true } },
 
-  { label: 'Remote compute', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
-  { label: 'Remote containers', values: { free: false, basic: false, pro: true, enterprise: true } },
-  { label: 'Cloud sandbox builds', values: { free: false, basic: false, pro: true, enterprise: true } },
-  { label: 'Semantic cache query', values: { free: false, basic: false, pro: true, enterprise: true } },
-  { label: 'Self-healing rollback', values: { free: false, basic: false, pro: true, enterprise: true } },
+  { label: 'Remote compute', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
+  { label: 'Remote containers', values: { free: false, solo: false, solo_plus: true, founder: true } },
+  { label: 'Cloud sandbox builds', values: { free: false, solo: false, solo_plus: true, founder: true } },
+  { label: 'Semantic cache query', values: { free: false, solo: false, solo_plus: true, founder: true } },
+  { label: 'Self-healing rollback', values: { free: false, solo: false, solo_plus: true, founder: true } },
 
-  { label: 'Organization', group: true, values: { free: '', basic: '', pro: '', enterprise: '' } },
-  { label: 'Team workspaces', values: { free: false, basic: false, pro: false, enterprise: true } },
-  { label: 'Audit log & RBAC', values: { free: false, basic: false, pro: false, enterprise: true } },
-  { label: 'WebRTC co-coding rooms', values: { free: false, basic: false, pro: false, enterprise: true } },
-  { label: 'SSO / SAML', values: { free: false, basic: false, pro: false, enterprise: true } },
+  { label: 'Organization', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
+  { label: 'Team workspaces', values: { free: false, solo: false, solo_plus: false, founder: true } },
+  { label: 'Audit log & RBAC', values: { free: false, solo: false, solo_plus: false, founder: true } },
+  { label: 'WebRTC co-coding rooms', values: { free: false, solo: false, solo_plus: false, founder: true } },
+  { label: 'SSO / SAML', values: { free: false, solo: false, solo_plus: false, founder: true } },
 ];
 
 function readStoredTier(): UserTier {
@@ -353,7 +352,7 @@ export default function App() {
 
   // Checkout (mock payment) flow
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [checkoutTier, setCheckoutTier] = useState<UserTier>('pro');
+  const [checkoutTier, setCheckoutTier] = useState<UserTier>('solo_plus');
   const [pendingTier, setPendingTier] = useState<UserTier | null>(null);
   const [cardName, setCardName] = useState('');
   const [cardNumber, setCardNumber] = useState('');
@@ -1612,13 +1611,13 @@ export default function App() {
                 <Gem size={20} className="text-[var(--accent)]" /> Plans for Every Workflow
               </h2>
               <p className="text-[13px] text-[var(--accent-dim)] max-w-2xl mx-auto leading-relaxed">
-                From a free local-first workspace to enterprise org controls with RBAC and audit logs — compare every tier, feature by feature, on the dedicated pricing page.
+                From a free local-first workspace to the Founder plan for power users — compare every tier, feature by feature, on the dedicated pricing page.
               </p>
               <div className="flex flex-wrap justify-center items-center gap-2 text-[11px] text-[var(--accent-dim)]">
                 <span className="font-bold text-[var(--text-strong)]">Free</span><span className="opacity-50">·</span>
-                <span className="font-bold text-[var(--warn)]">Basic $2.99</span><span className="opacity-50">·</span>
-                <span className="font-bold text-[var(--info)]">Pro $9.99</span><span className="opacity-50">·</span>
-                <span className="font-bold text-[var(--accent)]">Enterprise $25</span>
+                <span className="font-bold text-[var(--warn)]">Solo $5</span><span className="opacity-50">·</span>
+                <span className="font-bold text-[var(--info)]">Solo Plus $9</span><span className="opacity-50">·</span>
+                <span className="font-bold text-[var(--accent)]">Founder $15</span>
               </div>
               <div className="pt-2">
                 <button onClick={() => setActiveTab('pricing')} className="forge-btn forge-btn-primary px-6 py-2.5 font-bold uppercase rounded inline-flex items-center gap-2">
@@ -1673,11 +1672,11 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Basic */}
-              <div className={`pricing-card pricing-card-basic ${userTier === 'basic' ? 'pricing-card-active' : ''}`}>
+              {/* Solo */}
+              <div className={`pricing-card pricing-card-solo ${userTier === 'solo' ? 'pricing-card-active' : ''}`}>
                 <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
-                  <span className="text-[10px] text-[var(--warn)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><RefreshCw size={12} /> Basic</span>
-                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$2.99<span className="text-[12px] font-normal text-[var(--warn)]">/mo</span></span>
+                  <span className="text-[10px] text-[var(--warn)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><RefreshCw size={12} /> Solo</span>
+                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$5<span className="text-[12px] font-normal text-[var(--warn)]">/mo</span></span>
                   <span className="text-[10px] text-[var(--text-muted)] uppercase">billed monthly</span>
                 </div>
                 <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for individuals who work across multiple machines and want their setup to follow them.</p>
@@ -1690,22 +1689,22 @@ export default function App() {
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
                 </ul>
-                <button onClick={() => requestPlan('basic')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'basic' ? 'forge-btn-primary' : ''}`}>
-                  {userTier === 'basic' ? '✓ Current Plan' : 'Choose Basic'}
+                <button onClick={() => requestPlan('solo')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'solo' ? 'forge-btn-primary' : ''}`}>
+                  {userTier === 'solo' ? '✓ Current Plan' : 'Choose Solo'}
                 </button>
               </div>
 
-              {/* Pro — highlighted */}
-              <div className={`pricing-card pricing-card-pro relative ${userTier === 'pro' ? 'pricing-card-active' : ''}`}>
+              {/* Solo Plus — highlighted */}
+              <div className={`pricing-card pricing-card-solo_plus relative ${userTier === 'solo_plus' ? 'pricing-card-active' : ''}`}>
                 <span className="absolute top-3 right-3 text-[9px] bg-[var(--info)] text-[#001018] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider">Popular</span>
                 <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
-                  <span className="text-[10px] text-[var(--info)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Sparkles size={12} /> Pro</span>
-                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$9.99<span className="text-[12px] font-normal text-[var(--info)]">/mo</span></span>
+                  <span className="text-[10px] text-[var(--info)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Sparkles size={12} /> Solo Plus</span>
+                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$9<span className="text-[12px] font-normal text-[var(--info)]">/mo</span></span>
                   <span className="text-[10px] text-[var(--text-muted)] uppercase">billed monthly</span>
                 </div>
                 <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for power users and freelancers who need remote compute and self-healing safeguards.</p>
                 <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1">
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Basic</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Solo</li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Remote containers <FeatureBadge status="simulator" /></li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Cloud sandbox builds <FeatureBadge status="simulator" /></li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Semantic cache query <FeatureBadge status="preview" /></li>
@@ -1713,29 +1712,29 @@ export default function App() {
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Up to 10 paired devices · Priority support</li>
                   <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
                 </ul>
-                <button onClick={() => requestPlan('pro')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'pro' ? 'forge-btn-primary' : ''}`}>
-                  {userTier === 'pro' ? '✓ Current Plan' : 'Choose Pro'}
+                <button onClick={() => requestPlan('solo_plus')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'solo_plus' ? 'forge-btn-primary' : ''}`}>
+                  {userTier === 'solo_plus' ? '✓ Current Plan' : 'Choose Solo Plus'}
                 </button>
               </div>
 
-              {/* Enterprise */}
-              <div className={`pricing-card pricing-card-enterprise ${userTier === 'enterprise' ? 'pricing-card-active' : ''}`}>
+              {/* Founder */}
+              <div className={`pricing-card pricing-card-founder ${userTier === 'founder' ? 'pricing-card-active' : ''}`}>
                 <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
-                  <span className="text-[10px] text-[var(--accent)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Building2 size={12} /> Enterprise</span>
-                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$25<span className="text-[12px] font-normal text-[var(--accent)]">/seat/mo</span></span>
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase">billed annually</span>
+                  <span className="text-[10px] text-[var(--accent)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Building2 size={12} /> Founder</span>
+                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$15<span className="text-[12px] font-normal text-[var(--accent)]">/mo</span></span>
+                  <span className="text-[10px] text-[var(--text-muted)] uppercase">billed monthly</span>
                 </div>
                 <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for teams and organizations that require governance, audit trails, and collaboration.</p>
                 <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1 font-medium">
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Pro</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Solo Plus</li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Org team workspaces <FeatureBadge status="preview" /></li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Audit log & RBAC <FeatureBadge status="simulator" /></li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> WebRTC co-coding rooms <FeatureBadge status="preview" /></li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> SSO / SAML <FeatureBadge status="planned" /></li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Unlimited devices · Dedicated support + SLA</li>
                 </ul>
-                <button onClick={() => requestPlan('enterprise')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'enterprise' ? 'forge-btn-primary' : ''}`}>
-                  {userTier === 'enterprise' ? '✓ Current Plan' : 'Choose Enterprise'}
+                <button onClick={() => requestPlan('founder')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'founder' ? 'forge-btn-primary' : ''}`}>
+                  {userTier === 'founder' ? '✓ Current Plan' : 'Choose Founder'}
                 </button>
               </div>
             </div>
@@ -1750,7 +1749,7 @@ export default function App() {
                   <thead>
                     <tr className="border-b border-[var(--line-strong)]">
                       <th scope="col" className="p-3 text-[11px] uppercase font-bold text-[var(--text-strong)] tracking-wider">Capability</th>
-                      {([['free','Free'],['basic','Basic'],['pro','Pro'],['enterprise','Enterprise']] as Array<[UserTier,string]>).map(([key, label]) => (
+                      {(USER_TIERS.map(id => [id, TIER_LABELS[id]]) as Array<[UserTier,string]>).map(([key, label]) => (
                         <th key={key} scope="col" className={`p-3 text-center text-[11px] uppercase font-bold tracking-wider ${userTier === key ? 'text-[var(--accent)]' : 'text-[var(--accent-dim)]'}`}>
                           {label}{userTier === key && <span className="block text-[8px] text-[var(--accent)] font-extrabold">● Current</span>}
                         </th>
@@ -1763,7 +1762,7 @@ export default function App() {
                         <th scope="row" className={`p-3 font-medium text-left ${row.group ? 'text-[var(--accent)] uppercase text-[10px] font-bold tracking-wider' : 'text-[var(--accent-soft)]'}`}>
                           {row.label}
                         </th>
-                        {(['free','basic','pro','enterprise'] as UserTier[]).map(tier => (
+                        {USER_TIERS.map(tier => (
                           <td key={tier} className={`p-3 text-center ${userTier === tier ? 'bg-[var(--surface-active)]' : ''}`}>
                             {row.group ? '' : typeof row.values[tier] === 'boolean'
                               ? (row.values[tier]
@@ -2457,7 +2456,7 @@ export default function App() {
                       <span>Sync locked: Upgrade to Basic Plan ($2.99/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('basic'); setShowSyncOverlay(false); setIsSyncEnabled(true); }} className="text-[9px] bg-amber-800 text-white px-3 py-1 rounded font-bold hover:bg-amber-900 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => { setUserTier('solo'); setShowSyncOverlay(false); setIsSyncEnabled(true); }} className="text-[9px] bg-amber-800 text-white px-3 py-1 rounded font-bold hover:bg-amber-900 transition-all">UPGRADE</button>
                       <button type="button" onClick={() => setShowSyncOverlay(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
                     </div>
                   </div>
@@ -2472,7 +2471,7 @@ export default function App() {
                     id="collab-chk"
                     checked={collabActive}
                     onChange={e => {
-                      if (userTier !== 'enterprise') {
+                      if (userTier !== 'founder') {
                         setShowCollabOverlay(true);
                       } else {
                         setCollabActive(e.target.checked);
@@ -2501,7 +2500,7 @@ export default function App() {
                       <span>Collab locked: Upgrade to Enterprise ($25/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('enterprise'); setShowCollabOverlay(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => { setUserTier('founder'); setShowCollabOverlay(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
                       <button type="button" onClick={() => setShowCollabOverlay(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
                     </div>
                   </div>
@@ -2524,7 +2523,7 @@ export default function App() {
                     onChange={e => {
                       const q = e.target.value;
                       setSemanticQuery(q);
-                      if (userTier !== 'pro' && userTier !== 'enterprise') {
+                      if (userTier !== 'solo_plus' && userTier !== 'founder') {
                         setShowSemanticLock(true);
                         return;
                       }
@@ -2547,7 +2546,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (userTier !== 'pro' && userTier !== 'enterprise') {
+                      if (userTier !== 'solo_plus' && userTier !== 'founder') {
                         setShowSemanticLock(true);
                         return;
                       }
@@ -2590,7 +2589,7 @@ export default function App() {
                       <span>Semantic Cache locked: Upgrade to Pro ($9.99/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('pro'); setShowSemanticLock(false); }} className="text-[9px] bg-blue-900 border border-blue-500 text-blue-200 px-3 py-1 rounded font-bold hover:bg-blue-800 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => { setUserTier('solo_plus'); setShowSemanticLock(false); }} className="text-[9px] bg-blue-900 border border-blue-500 text-blue-200 px-3 py-1 rounded font-bold hover:bg-blue-800 transition-all">UPGRADE</button>
                       <button type="button" onClick={() => setShowSemanticLock(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
                     </div>
                   </div>
@@ -2606,7 +2605,7 @@ export default function App() {
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Automatically reverts destructive file operations and monitors workspace integrity in real-time.</p>
-                {(userTier === 'pro' || userTier === 'enterprise') ? (
+                {(userTier === 'solo_plus' || userTier === 'founder') ? (
                   <>
                     <div className="text-[10px] bg-[var(--surface-accent)] border border-[var(--accent)] p-2 rounded text-[var(--accent)] animate-pulse flex items-center gap-2">
                       <ShieldCheck size={11} />
@@ -2643,7 +2642,7 @@ export default function App() {
                   <FeatureBadge status="simulator" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Define role-based access controls and blocked command prefixes for organization workspaces.</p>
-                {userTier === 'enterprise' ? (
+                {userTier === 'founder' ? (
                   <div className="space-y-3">
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Active Role</label>
@@ -2681,7 +2680,7 @@ export default function App() {
                       <span>RBAC simulator locked: Upgrade to Enterprise ($25/mo)</span>
                     </div>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('enterprise'); setShowRbacLock(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
+                      <button type="button" onClick={() => { setUserTier('founder'); setShowRbacLock(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
                       <button type="button" onClick={() => setShowRbacLock(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
                     </div>
                   </div>
@@ -2727,7 +2726,7 @@ export default function App() {
             <div className="flex flex-col gap-2 pt-2">
               <button
                 onClick={() => {
-                  setUserTier('basic');
+                  setUserTier('solo');
                   setShowSyncLockModal(false);
                   pushToast('Upgraded to Basic tier successfully.', 'success');
                 }}
@@ -2892,9 +2891,9 @@ export default function App() {
             <div className="flex items-center justify-between bg-[var(--surface-accent)] border border-[var(--line)] rounded p-3">
               <div className="flex flex-col">
                 <span className="text-[10px] uppercase text-[var(--accent-dim)] font-bold tracking-wider">{TIER_LABELS[checkoutTier]} Plan</span>
-                <span className="text-[9px] text-[var(--text-muted)]">{checkoutTier === 'enterprise' ? 'Billed annually, per seat' : 'Billed monthly · cancel anytime'}</span>
+                <span className="text-[9px] text-[var(--text-muted)]">Billed monthly · cancel anytime</span>
               </div>
-              <span className="text-xl font-extrabold text-[var(--text-strong)]">${TIER_PRICES[checkoutTier].toFixed(2)}<span className="text-[10px] font-normal text-[var(--accent-dim)]">{checkoutTier === 'enterprise' ? '/seat/mo' : '/mo'}</span></span>
+              <span className="text-xl font-extrabold text-[var(--text-strong)]">${(TIER_PRICES[checkoutTier] ?? 0).toFixed(2)}<span className="text-[10px] font-normal text-[var(--accent-dim)]">/mo</span></span>
             </div>
 
             <div className="flex flex-col gap-1.5">
