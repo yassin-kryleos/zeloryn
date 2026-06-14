@@ -7,6 +7,7 @@ export interface PricingTier {
   id: TierId;
   label: string;
   priceUsd: number | null;
+  priceInr: number | null;
   status: 'production' | 'preview';
 }
 
@@ -15,30 +16,35 @@ export const PRICING_TIERS: PricingTier[] = [
     "id": "free",
     "label": "Free",
     "priceUsd": 0,
+    "priceInr": 0,
     "status": "production"
   },
   {
     "id": "solo",
     "label": "Solo",
     "priceUsd": 5,
+    "priceInr": 399,
     "status": "production"
   },
   {
     "id": "solo_plus",
     "label": "Solo Plus",
     "priceUsd": 9,
+    "priceInr": 699,
     "status": "production"
   },
   {
     "id": "founder",
     "label": "Founder",
     "priceUsd": 15,
+    "priceInr": 1199,
     "status": "production"
   },
   {
     "id": "agency",
     "label": "Agency",
     "priceUsd": null,
+    "priceInr": null,
     "status": "preview"
   }
 ];
@@ -56,6 +62,14 @@ export const TIER_PRICES: Record<TierId, number | null> = {
   "solo": 5,
   "solo_plus": 9,
   "founder": 15,
+  "agency": null
+};
+
+export const TIER_PRICES_INR: Record<TierId, number | null> = {
+  "free": 0,
+  "solo": 399,
+  "solo_plus": 699,
+  "founder": 1199,
   "agency": null
 };
 

@@ -8,12 +8,12 @@
 /** @typedef {'free'|'solo'|'solo_plus'|'founder'|'agency'} TierId */
 
 export const PRICING_TIERS = [
-  { id: 'free', label: 'Free', priceUsd: 0, status: 'production' },
-  { id: 'solo', label: 'Solo', priceUsd: 5, status: 'production' },
-  { id: 'solo_plus', label: 'Solo Plus', priceUsd: 9, status: 'production' },
-  { id: 'founder', label: 'Founder', priceUsd: 15, status: 'production' },
+  { id: 'free', label: 'Free', priceUsd: 0, priceInr: 0, status: 'production' },
+  { id: 'solo', label: 'Solo', priceUsd: 5, priceInr: 399, status: 'production' },
+  { id: 'solo_plus', label: 'Solo Plus', priceUsd: 9, priceInr: 699, status: 'production' },
+  { id: 'founder', label: 'Founder', priceUsd: 15, priceInr: 1199, status: 'production' },
   // Agency has no real multi-tenant infra yet — preview only, not purchasable.
-  { id: 'agency', label: 'Agency', priceUsd: null, status: 'preview' },
+  { id: 'agency', label: 'Agency', priceUsd: null, priceInr: null, status: 'preview' },
 ];
 
 // Tiers that can actually be checked out (drives Gumroad product list / priceMap).

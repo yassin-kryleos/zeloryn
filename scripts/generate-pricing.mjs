@@ -25,6 +25,7 @@ export interface PricingTier {
   id: TierId;
   label: string;
   priceUsd: number | null;
+  priceInr: number | null;
   status: 'production' | 'preview';
 }
 
@@ -38,6 +39,12 @@ export const TIER_LABELS: Record<TierId, string> = ${JSON.stringify(
 
 export const TIER_PRICES: Record<TierId, number | null> = ${JSON.stringify(
   Object.fromEntries(PRICING_TIERS.map(t => [t.id, t.priceUsd])),
+  null,
+  2
+)};
+
+export const TIER_PRICES_INR: Record<TierId, number | null> = ${JSON.stringify(
+  Object.fromEntries(PRICING_TIERS.map(t => [t.id, t.priceInr])),
   null,
   2
 )};
