@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
 import { TIER_LABELS, TIER_PRICES, type TierId } from './pricing.generated';
+import { redactSensitiveData } from './shared/redact';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -368,24 +369,6 @@ export default function App() {
   const [piiFilterEnabled, setPiiFilterEnabled] = useState(() => localStorage.getItem('web_pii_filter_enabled') === 'true');
   const [telemetry, setTelemetry] = useState({ bytesSent: 12450, bytesReceived: 38920, compressionSavingsRatio: 0.68 });
 
-  const redactSensitiveData = (text: string): string => {
-    let result = text;
-    // 1. Redact Emails
-    result = result.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]');
-    // 2. Redact Phone numbers
-    result = result.replace(/\+?\d{1,4}?[-.\s]?\(?\d{1,3}?\)?[-.\s]?\d{1,4}[-.\s]?\d{1,4}[-.\s]?\d{1,9}/g, (match) => {
-      const digits = match.replace(/\D/g, '');
-      if (digits.length >= 7) return '[REDACTED_PHONE]';
-      return match;
-    });
-    // 3. Redact API Keys
-    result = result.replace(/sk-[a-zA-Z0-9]{20,}/g, '[REDACTED_API_KEY]');
-    result = result.replace(/sk-proj-[a-zA-Z0-9-]{20,}/g, '[REDACTED_API_KEY]');
-    result = result.replace(/sk-ant-[a-zA-Z0-9-]{20,}/g, '[REDACTED_API_KEY]');
-    result = result.replace(/AIzaSy[a-zA-Z0-9-_]{20,}/g, '[REDACTED_API_KEY]');
-    return result;
-  };
-  
   // Billing status (Simulated local user)
   const [userTier, setUserTier] = useState<UserTier>(readStoredTier);
 
