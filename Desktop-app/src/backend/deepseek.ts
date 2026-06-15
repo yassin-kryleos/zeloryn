@@ -1,5 +1,6 @@
 import { IncomingMessage } from 'http';
 import * as https from 'https';
+import { handleHttpStreamError, streamSseLines } from './providerStream';
 
 export interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -89,67 +90,34 @@ export class DeepSeekClient {
       let fullReasoning = '';
 
       const req = https.request(options, (res: IncomingMessage) => {
-        if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-          let errorData = '';
-          res.on('data', (chunk) => { errorData += chunk; });
-          res.on('end', () => {
-            let errorMsg = `HTTP Error ${res.statusCode}`;
+        if (handleHttpStreamError(res, 'HTTP Error', callbacks.onError, reject)) return;
+
+        streamSseLines(res, (cleanedLine) => {
+          if (cleanedLine === 'data: [DONE]') return;
+
+          if (cleanedLine.startsWith('data: ')) {
             try {
-              const parsed = JSON.parse(errorData);
-              if (parsed.error?.message) errorMsg += `: ${parsed.error.message}`;
-            } catch {
-              errorMsg += `: ${errorData}`;
-            }
-            const err = new Error(errorMsg);
-            callbacks.onError?.(err);
-            reject(err);
-          });
-          return;
-        }
+              const jsonStr = cleanedLine.slice(6);
+              const data = JSON.parse(jsonStr);
+              const delta = data.choices?.[0]?.delta;
 
-        res.setEncoding('utf8');
-        
-        let buffer = '';
-
-        res.on('data', (chunk: string) => {
-          buffer += chunk;
-          
-          const lines = buffer.split('\n');
-          // Keep the last partial line in the buffer
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const cleanedLine = line.trim();
-            if (!cleanedLine) continue;
-            if (cleanedLine === 'data: [DONE]') continue;
-            
-            if (cleanedLine.startsWith('data: ')) {
-              try {
-                const jsonStr = cleanedLine.slice(6);
-                const data = JSON.parse(jsonStr);
-                const delta = data.choices?.[0]?.delta;
-
-                if (delta) {
-                  // R1 reasoning tokens
-                  if (delta.reasoning_content) {
-                    fullReasoning += delta.reasoning_content;
-                    callbacks.onReasoningChunk?.(delta.reasoning_content);
-                  }
-                  // V3 or R1 final content tokens
-                  if (delta.content) {
-                    fullContent += delta.content;
-                    callbacks.onContentChunk?.(delta.content);
-                  }
+              if (delta) {
+                // R1 reasoning tokens
+                if (delta.reasoning_content) {
+                  fullReasoning += delta.reasoning_content;
+                  callbacks.onReasoningChunk?.(delta.reasoning_content);
                 }
-              } catch (err) {
-                // Sometimes chunks are cut off, ignore parse errors if we're streaming
+                // V3 or R1 final content tokens
+                if (delta.content) {
+                  fullContent += delta.content;
+                  callbacks.onContentChunk?.(delta.content);
+                }
               }
+            } catch {
+              // Sometimes chunks are cut off, ignore parse errors if we're streaming
             }
           }
-        });
-
-        res.on('end', () => {
-          // Process any remaining buffer
+        }, (buffer) => {
           if (buffer && buffer.startsWith('data: ')) {
             try {
               const data = JSON.parse(buffer.slice(6));

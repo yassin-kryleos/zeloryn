@@ -1,6 +1,7 @@
 import { IncomingMessage } from 'http';
 import * as https from 'https';
 import type { Message } from './deepseek';
+import { handleHttpStreamError, streamSseLines } from './providerStream';
 
 export interface AnthropicConfig {
   apiKey: string;
@@ -75,55 +76,25 @@ export class AnthropicClient {
       let fullContent = '';
 
       const req = https.request(options, (res: IncomingMessage) => {
-        if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) {
-          let errorData = '';
-          res.on('data', (chunk) => { errorData += chunk; });
-          res.on('end', () => {
-            let errorMsg = `Anthropic API Error ${res.statusCode}`;
+        if (handleHttpStreamError(res, 'Anthropic API Error', callbacks.onError, reject)) return;
+
+        streamSseLines(res, (cleanedLine) => {
+          if (cleanedLine.startsWith('event: ')) return;
+
+          if (cleanedLine.startsWith('data: ')) {
             try {
-              const parsed = JSON.parse(errorData);
-              if (parsed.error?.message) errorMsg += `: ${parsed.error.message}`;
-            } catch {
-              errorMsg += `: ${errorData}`;
-            }
-            const err = new Error(errorMsg);
-            callbacks.onError?.(err);
-            reject(err);
-          });
-          return;
-        }
+              const jsonStr = cleanedLine.slice(6);
+              const data = JSON.parse(jsonStr);
 
-        res.setEncoding('utf8');
-        let buffer = '';
-
-        res.on('data', (chunk: string) => {
-          buffer += chunk;
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const cleanedLine = line.trim();
-            if (!cleanedLine) continue;
-
-            if (cleanedLine.startsWith('event: ')) continue;
-            
-            if (cleanedLine.startsWith('data: ')) {
-              try {
-                const jsonStr = cleanedLine.slice(6);
-                const data = JSON.parse(jsonStr);
-                
-                // Anthropic SSE events include content_block_delta or message_delta
-                if (data.type === 'content_block_delta' && data.delta?.text) {
-                  const content = data.delta.text;
-                  fullContent += content;
-                  callbacks.onContentChunk?.(content);
-                }
-              } catch {}
-            }
+              // Anthropic SSE events include content_block_delta or message_delta
+              if (data.type === 'content_block_delta' && data.delta?.text) {
+                const content = data.delta.text;
+                fullContent += content;
+                callbacks.onContentChunk?.(content);
+              }
+            } catch {}
           }
-        });
-
-        res.on('end', () => {
+        }, () => {
           callbacks.onComplete?.(fullContent);
           resolve();
         });
