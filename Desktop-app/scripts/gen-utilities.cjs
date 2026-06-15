@@ -8,6 +8,11 @@
  *
  * Re-runnable: it replaces the block between the GEN markers in index.css.
  * Run: node scripts/gen-utilities.cjs
+ *
+ * NOTE: the GEN:UTILITIES block in index.css has since been hand-edited and
+ * no longer matches this generator's output 1:1 (re-running it would revert
+ * those hand edits). Treat the block as hand-maintained; do not wire this
+ * into the build until the generator and the committed CSS are reconciled.
  */
 const fs = require('fs');
 const path = require('path');

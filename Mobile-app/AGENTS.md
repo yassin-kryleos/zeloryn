@@ -2,6 +2,13 @@
 
 Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing any code.
 
+# Build/test contracts
+
+- `npm run prestart` and `npm run pretest` regenerate `src/pricing.generated.ts` via
+  `generate:pricing` (runs `../scripts/generate-pricing.mjs`), mirroring the
+  `predev`/`prebuild` hooks in Desktop-app and Web-app. Do not hand-edit
+  `pricing.generated.ts`.
+
 # DOX framework
 
 - DOX is highly performant AGENTS.md hierarchy installed here

@@ -23,6 +23,9 @@
     "vitest": "^4.1.8"
   },
   "scripts": {
+    "generate:pricing": "node ../scripts/generate-pricing.mjs",
+    "prestart": "npm run generate:pricing",
+    "pretest": "npm run generate:pricing",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
