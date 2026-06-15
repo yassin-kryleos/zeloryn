@@ -8,6 +8,8 @@ import { AgentDashboard } from './AgentDashboard';
 import { CodebaseGraph } from './CodebaseGraph';
 import { FeatureBadge } from './FeatureBadge';
 import { parseCrewItems, type RefinedPlanItem } from '../shared/crewParser';
+import { agentFileName } from '../shared/crewPersonas';
+import { getAssigneeColor } from '../shared/assigneeColor';
 
 interface CustomAgent {
   name: string;
@@ -95,8 +97,6 @@ const starterAgents: Array<CustomAgent & { description: string; persona?: boolea
     prompt: 'You are the Risk Identifier persona. Flag security, dependency, operational, compliance, and delivery risks before execution begins.'
   }
 ];
-
-const agentFileName = (role: string) => role.toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
 
 interface CoworkSpaceProps {
   logs: AgentLog[];
@@ -478,15 +478,6 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
     setCustomPrompt(`${action === 'analyze' ? 'Analyze' : 'Debug'} the code file: @${filePath} and report any compile or logic issues.`);
   };
 
-  const getAssigneeColor = (assignee?: string) => {
-    switch (assignee?.toLowerCase()) {
-      case 'coordinator': return 'text-forge-neon';
-      case 'developer': return 'text-cyan-400';
-      case 'researcher': return 'text-purple-400';
-      case 'debugger': return 'neon-amber';
-      default: return 'text-forge-text';
-    }
-  };
 
   const handleOpenGraphFile = (filePath: string) => {
     setCustomPrompt(`Read and preview the file: @${filePath}`);

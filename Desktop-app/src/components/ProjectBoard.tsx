@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square } from 'lucide-react';
-import type { AcceptanceCriterion, AcceptanceCriterionType, CriterionPhase, DriftClassification, ProjectTask } from '../backend/db';
+import type { AcceptanceCriterion, AcceptanceCriterionType, CriterionPhase, ProjectTask } from '../backend/db';
 import { scoreTodayTasks } from '../shared/todayScore';
+import { driftClass } from '../shared/driftClassification';
+import { getAssigneeColor } from '../shared/assigneeColor';
 import { wouldCreateDependencyCycle } from '../shared/dependencies';
 import { resolveAgentForCategory, type InstalledAgent, type ItemCategory } from '../shared/agentCapabilities';
 import { FileBrowser } from './FileBrowser';
@@ -34,21 +36,6 @@ function inferCategory(title: string): string {
   return 'frontend';
 }
 
-function driftClass(status?: DriftClassification) {
-  switch (status) {
-    case 'complete':
-      return 'border-forge-neon text-forge-neon';
-    case 'in_progress':
-      return 'border-cyan-600 text-cyan-300';
-    case 'blocked':
-      return 'border-red-700 text-red-300';
-    case 'needs_review':
-    case 'diverged':
-      return 'border-amber-600 text-amber-300';
-    default:
-      return 'border-forge-dark text-forge-dim';
-  }
-}
 
 export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   tasks,
@@ -455,21 +442,6 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
       onNotify?.(`Plan drift check failed: ${err.message}`, 'error');
     } finally {
       setDriftChecking(false);
-    }
-  };
-
-  const getAssigneeColor = (assignee?: string) => {
-    switch (assignee?.toLowerCase()) {
-      case 'planner':
-        return 'text-forge-neon';
-      case 'builder':
-        return 'text-cyan-400';
-      case 'analyst':
-        return 'text-purple-400';
-      case 'reviewer':
-        return 'neon-amber';
-      default:
-        return 'text-forge-text';
     }
   };
 

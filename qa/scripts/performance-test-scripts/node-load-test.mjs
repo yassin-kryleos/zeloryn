@@ -83,8 +83,8 @@ function makeGetRequest(endpoint) {
   });
 }
 
-// Helper: POST request promise
-function makePostRequest(endpoint, payload, token = null) {
+// Helper: POST/PUT request promise (with optional auth token)
+function makeRequest(endpoint, method, payload, token = null) {
   return new Promise((resolve) => {
     const start = Date.now();
     const data = JSON.stringify(payload);
@@ -98,49 +98,7 @@ function makePostRequest(endpoint, payload, token = null) {
       hostname: 'localhost',
       port: PORT,
       path: endpoint,
-      method: 'POST',
-      headers
-    }, (res) => {
-      let body = '';
-      res.on('data', (chunk) => { body += chunk; });
-      res.on('end', () => {
-        resolve({
-          latency: Date.now() - start,
-          status: res.statusCode,
-          body
-        });
-      });
-    });
-
-    req.on('error', (err) => {
-      resolve({
-        latency: Date.now() - start,
-        status: 500,
-        error: err.message
-      });
-    });
-
-    req.write(data);
-    req.end();
-  });
-}
-
-// Helper: PUT request promise (with optional auth token)
-function makePutRequest(endpoint, payload, token = null) {
-  return new Promise((resolve) => {
-    const start = Date.now();
-    const data = JSON.stringify(payload);
-    const headers = {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(data)
-    };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const req = http.request({
-      hostname: 'localhost',
-      port: PORT,
-      path: endpoint,
-      method: 'PUT',
+      method,
       headers
     }, (res) => {
       let body = '';
@@ -240,7 +198,7 @@ async function runPerformancePipeline(startupMs) {
   console.log('\n--- 2. DATABASE WRITE PERFORMANCE (ENCRYPTED) ---');
   // Register a test user to obtain a Bearer token, then use PUT /api/sessions/:id/tasks
   const testEmail = `perf_test_${Date.now()}@test.local`;
-  const regRes = await makePostRequest('/api/auth/register', {
+  const regRes = await makeRequest('/api/auth/register', 'POST', {
     name: 'PerfTestUser', email: testEmail, password: 'PerfTest123!'
   });
   let authToken = null;
@@ -268,7 +226,7 @@ async function runPerformancePipeline(startupMs) {
       const sessionId = sessionIds[i % sessionIds.length];
       const tasks = [{ id: `task_${i}`, content: `Perf task ${i}`, done: false }];
       const startWrite = Date.now();
-      const res = await makePutRequest(`/api/sessions/${sessionId}/tasks`, { tasks }, authToken);
+      const res = await makeRequest(`/api/sessions/${sessionId}/tasks`, 'PUT', { tasks }, authToken);
       totalDbWriteTime += (Date.now() - startWrite);
       if (res.status !== 200) dbErrorCount++;
     }

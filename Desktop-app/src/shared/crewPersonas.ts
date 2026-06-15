@@ -31,7 +31,7 @@ export const crewPersonas: CrewPersona[] = [
   }
 ];
 
-const agentFileName = (role: string) => role.toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
+export const agentFileName = (role: string) => role.toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
 
 // Install a persona into the workspace .kryleos/agents directory via the
 // existing file-create route. Returns nothing; throws on failure.

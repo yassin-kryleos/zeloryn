@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Send, Download, FileText, Sparkles, Edit, Eye, CheckCircle, Mic, MicOff, GitBranch, Layers, RefreshCw, X, FileCode, Terminal, Pencil, Square, Check, AlertTriangle, AlertCircle, Trash2, Plus, ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { crewPersonas, installCrewPersona } from '../shared/crewPersonas';
+import { driftClass } from '../shared/driftClassification';
 import type { AcceptanceCriterion, CriterionResult, DriftClassification, ExecutionTrace, ProjectTask, PlanWorkspaceItem } from '../backend/db';
 
 interface DriftItem {
@@ -68,22 +69,6 @@ interface WhatsLeftReport {
   limit: number | null;
   truncated: boolean;
   usedLlm: boolean;
-}
-
-function planDriftClass(status?: DriftClassification) {
-  switch (status) {
-    case 'complete':
-      return 'border-forge-neon text-forge-neon';
-    case 'in_progress':
-      return 'border-cyan-600 text-cyan-300';
-    case 'blocked':
-      return 'border-red-700 text-red-300';
-    case 'needs_review':
-    case 'diverged':
-      return 'border-amber-600 text-amber-300';
-    default:
-      return 'border-forge-dark text-forge-dim';
-  }
 }
 
 function criterionStatusClass(status?: 'pass' | 'fail' | 'unknown') {
@@ -1750,7 +1735,7 @@ export function PlanningScreen({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-forge-text truncate font-bold">{item.title}</span>
-                          <span className={`text-[8px] uppercase border rounded px-1 shrink-0 ${planDriftClass(item.status)}`}>{item.status.replace('_', ' ')}</span>
+                          <span className={`text-[8px] uppercase border rounded px-1 shrink-0 ${driftClass(item.status)}`}>{item.status.replace('_', ' ')}</span>
                         </div>
                         <div className="text-forge-dim">{item.reason}</div>
                       </div>
@@ -1866,7 +1851,7 @@ export function PlanningScreen({
                       {trace.mode === 'demo' && <span className="text-emerald-400 mr-2">DEMO PROOF</span>}
                       {item.title}
                     </span>
-                    <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded border shrink-0 ${planDriftClass(item.status)}`}>
+                    <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded border shrink-0 ${driftClass(item.status)}`}>
                       {item.status.replace('_', ' ')}
                     </span>
                   </div>
