@@ -41,6 +41,7 @@ interface PlanningScreenProps {
   tasks?: ProjectTask[];
   onConfirmComplete?: (taskId: string) => Promise<void> | void;
   userTier?: string;
+  authToken?: string;
   onNotify?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
   onAbort?: () => void;
   resetKey?: number;
@@ -146,6 +147,7 @@ export function PlanningScreen({
   tasks = [],
   onConfirmComplete,
   userTier = 'free',
+  authToken = '',
   onNotify,
   onAbort,
   resetKey = 0,
@@ -192,7 +194,9 @@ export function PlanningScreen({
   const loadCostHistory = useCallback(async () => {
     setCostHistoryLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/cost/history');
+      const res = await fetch('http://localhost:3001/api/cost/history', {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -205,7 +209,7 @@ export function PlanningScreen({
     } finally {
       setCostHistoryLoading(false);
     }
-  }, []);
+  }, [authToken]);
 
   useEffect(() => {
     const handleCostUpdate = (e: Event) => {
@@ -875,7 +879,10 @@ export function PlanningScreen({
     try {
       const res = await fetch('http://localhost:3001/api/crew/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
         body: JSON.stringify({
           items: selectedItemsList
         })
@@ -1066,7 +1073,9 @@ export function PlanningScreen({
   const runWhatsLeft = async () => {
     setWhatsLeftLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/plan/whats-left');
+      const res = await fetch('http://localhost:3001/api/plan/whats-left', {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'whats-left route failed');
       setWhatsLeft(data.report as WhatsLeftReport);
@@ -1220,6 +1229,19 @@ export function PlanningScreen({
 
             {/* Summarize & Push Button + Composer */}
             <div className="p-3 border-t border-forge-dark bg-forge-panel-bg flex flex-col gap-2 shrink-0">
+              {chatMessages.length <= 1 && (
+                <div className="grid grid-cols-1 gap-1">
+                  {[
+                    'Turn my rough idea into a small first release with testable acceptance criteria.',
+                    'Review this repo and suggest the safest high-impact improvement.',
+                    'Help me scope one feature into frontend, backend, and test tasks.'
+                  ].map(prompt => (
+                    <button key={prompt} type="button" onClick={() => setInputText(prompt)} className="text-left text-[9px] border border-forge-dark rounded px-2 py-1 text-forge-dim hover:text-forge-text hover:border-forge-neon">
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleSummarizeAndPush}
@@ -1563,7 +1585,7 @@ export function PlanningScreen({
             )}
 
             {/* Staging List Content */}
-            <div role="list" aria-label="Staged plan items" className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div aria-label="Staged plan items" className="flex-1 overflow-y-auto p-4 space-y-3">
               {workspaceItems.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center text-forge-dim py-20 border border-dashed border-forge-dark rounded">
                   <AlertCircle size={20} className="mb-2 text-forge-dim" />
@@ -1581,7 +1603,6 @@ export function PlanningScreen({
                   return (
                     <div
                       key={item.id}
-                      role="listitem"
                       className={`border rounded p-3 bg-black/40 transition-all ${
                         isSelected ? 'border-forge-neon' : 'border-forge-dark hover:border-forge-dim'
                       }`}
@@ -1839,9 +1860,12 @@ export function PlanningScreen({
               const results: CriterionResult[] = trace.criteriaResults?.length ? trace.criteriaResults : item.results;
               const canComplete = trace.suggestedStatus === 'done' && item.status !== 'complete';
               return (
-                <div key={item.taskId} className="border border-forge-dark rounded bg-black bg-opacity-30 text-[10px] font-mono">
+                <div key={item.taskId} className={`border rounded bg-black bg-opacity-30 text-[10px] font-mono ${trace.mode === 'demo' ? 'border-emerald-400 shadow-[0_0_18px_rgba(52,211,153,0.12)]' : 'border-forge-dark'}`}>
                   <div className="flex items-center justify-between gap-2 p-2 border-b border-forge-dark">
-                    <span className="text-forge-text font-bold truncate">{item.title}</span>
+                    <span className="text-forge-text font-bold truncate">
+                      {trace.mode === 'demo' && <span className="text-emerald-400 mr-2">DEMO PROOF</span>}
+                      {item.title}
+                    </span>
                     <span className={`text-[8px] uppercase font-bold px-1.5 py-0.5 rounded border shrink-0 ${planDriftClass(item.status)}`}>
                       {item.status.replace('_', ' ')}
                     </span>

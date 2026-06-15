@@ -20,6 +20,6 @@ For developers working with sensitive proprietary assets or under strict NDA cov
 * **Zero-Egress Mode**: Blocks all external LLM provider requests. All agent task executions, code analyses, and criteria evaluations are routed to local model instances (e.g., via Ollama running on your local machine).
 
 ## 4. Billing & License Keys
-Recurring subscriptions are processed by **Stripe** or **Razorpay** (India). Kryleos Forge does not collect, store, or transmit your credit card numbers — Stripe/Razorpay handle all payment data under their own privacy policies. Our server stores your email, subscription tier, and Stripe/Razorpay customer reference, used to keep your account entitlements in sync.
+Recurring subscriptions are processed by **Stripe** or **Razorpay** (India). Kryleos Forge does not collect, store, or transmit your credit card numbers — Stripe/Razorpay handle all payment data under their own privacy policies. Our server stores your email, subscription tier, payment processor, and processor subscription identifier, used to keep your account entitlements and cancellations in sync.
 * **Founder lifetime key**: If you purchase a one-time Founder lifetime key instead, Kryleos Forge stores only the signed license key, plan tier, and expiry date (if any) on your device, used to validate your entitlement offline.
 * **Billing email**: Your billing email may be shared with Stripe/Razorpay to process payment and is stored on our server only to associate your subscription with your account.

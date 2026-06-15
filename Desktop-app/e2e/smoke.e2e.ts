@@ -40,15 +40,21 @@ test.describe('Desktop renderer — smoke', () => {
 
   test('no console errors on initial load', async ({ page }) => {
     const errors: string[] = [];
+    const failedResponses: string[] = [];
     page.on('console', msg => {
       if (msg.type() === 'error') errors.push(msg.text());
+    });
+    page.on('response', response => {
+      if (response.status() >= 500) {
+        failedResponses.push(`${response.status()} ${response.url()}`);
+      }
     });
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     const criticalErrors = errors.filter(e =>
       !e.includes('favicon') && !e.includes('net::ERR_') && !e.includes('WebSocket')
     );
-    expect(criticalErrors).toHaveLength(0);
+    expect({ criticalErrors, failedResponses }).toEqual({ criticalErrors: [], failedResponses: [] });
   });
 
   test('CONFIG header area is visible', async ({ page }) => {

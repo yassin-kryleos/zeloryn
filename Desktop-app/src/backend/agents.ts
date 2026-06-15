@@ -51,6 +51,9 @@ export class AgentOrchestrator {
   private coordinatorHistory: Message[] = [];
   private maxSteps = 15;
   private stepCount = 0;
+  private historyCompressed = false;
+  private runFailed = false;
+  private runAborted = false;
 
   private onUpdate: (data: {
     logs: AgentLog[];
@@ -410,6 +413,9 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
   // Orchestrator entry point
   public async handleUserQuery(userQuery: string, existingSessionId?: string, space: 'code' | 'cowork' | 'project' = 'code', displayQuery?: string) {
     this.stepCount = 0;
+    this.historyCompressed = false;
+    this.runFailed = false;
+    this.runAborted = false;
     this.space = space;
 
     // Load custom local agents and skills from Kryleos workspace folders.
@@ -488,6 +494,7 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
     
     while (loop && this.stepCount < this.maxSteps) {
       if (this.isAborted) {
+        this.runAborted = true;
         this.addLog('SYSTEM', 'user', 'Workflow execution interrupted by user.', 'error');
         break;
       }
@@ -524,6 +531,7 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
           }
         });
       } catch (err: any) {
+        this.runFailed = true;
         this.addLog('coordinator', 'SYSTEM', `LLM Query Error: ${err.message}`, 'error');
         this.activeAgent = 'system';
         this.isRunning = false;
@@ -532,6 +540,7 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
       }
 
       if (this.isAborted) {
+        this.runAborted = true;
         this.addLog('SYSTEM', 'user', 'Workflow execution interrupted by user.', 'error');
         break;
       }
@@ -613,6 +622,15 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
     this.activeAgent = 'system';
     this.isRunning = false;
     this.broadcastUpdate(false);
+  }
+
+  public getRunState(): { incomplete: boolean; reason?: string } {
+    const reasons: string[] = [];
+    if (this.stepCount >= this.maxSteps) reasons.push(`maximum ${this.maxSteps} orchestration steps reached`);
+    if (this.historyCompressed) reasons.push('history compression was required');
+    if (this.runAborted) reasons.push('run was stopped before completion');
+    if (this.runFailed) reasons.push('model or orchestration error interrupted the run');
+    return reasons.length > 0 ? { incomplete: true, reason: reasons.join('; ') } : { incomplete: false };
   }
 
   // Extract the first brace-balanced JSON object containing a "type" key.
@@ -1097,6 +1115,7 @@ ${customSystemPrompt}
       });
 
       if (summaryContent) {
+        this.historyCompressed = true;
         const summaryMessage: Message = {
           role: 'user',
           content: `[HISTORICAL CONTEXT COMPRESSED SUMMARY: The following is a summary of the previous turns in this session to prevent context overflow:\n${summaryContent.trim()}\n--- END OF PREVIOUS HISTORY SUMMARY ---]`

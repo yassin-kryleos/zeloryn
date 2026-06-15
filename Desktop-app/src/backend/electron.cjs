@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, safeStorage, shell, crashReporter } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
@@ -8,6 +8,29 @@ const { spawn } = require('child_process');
 
 let mainWindow;
 let backendProcess = null;
+
+crashReporter.start({ uploadToServer: false });
+
+function writeCrashRecord(kind, error) {
+  try {
+    const dir = app.getPath('userData');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(
+      path.join(dir, 'crash.log'),
+      `${new Date().toISOString()} ${kind}: ${error && error.stack ? error.stack : String(error)}\n`,
+      'utf-8'
+    );
+  } catch {}
+}
+
+process.on('uncaughtException', (error) => {
+  writeCrashRecord('uncaughtException', error);
+  app.exit(1);
+});
+
+process.on('unhandledRejection', (error) => {
+  writeCrashRecord('unhandledRejection', error);
+});
 
 // AES-256 fallback encryption, used only when Electron safeStorage is
 // unavailable (testing / unsupported OS keychain).

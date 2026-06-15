@@ -1,7 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
 
 /**
- * Playwright E2E config for the Desktop renderer (Vite dev server on port 5173).
+ * Playwright E2E config for the Desktop renderer (Vite dev server on port 5174).
  *
  * First-time setup: `npx playwright install chromium`
  * Run all E2E:      `npx playwright test`
@@ -13,12 +14,23 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   testMatch: '**/*.e2e.ts',
+  testIgnore: '**/packaged.e2e.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:5174',
+    storageState: {
+      cookies: [],
+      origins: [{
+        origin: 'http://localhost:5174',
+        localStorage: [
+          { name: 'matrix_setup_done', value: 'true' },
+          { name: 'matrix_tutorial_completed', value: 'true' }
+        ]
+      }]
+    },
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -26,9 +38,12 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: 'npm run dev -- --mode test',
-    url: 'http://localhost:5173',
+    command: 'npm run dev:e2e',
+    url: 'http://localhost:5174',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
+    env: {
+      KRYLEOS_DATA_DIR: path.join(process.cwd(), '.tmp-e2e'),
+    },
   },
 });

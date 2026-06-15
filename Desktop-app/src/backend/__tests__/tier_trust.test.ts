@@ -26,15 +26,14 @@ import * as syncController from '../sync';
 
 describe('tier-trust: server.ts req.body.tier / req.query.tier usage is allowlisted', () => {
   // Routes allowed to read a client-supplied `tier`:
-  //  - /api/auth/subscribe: only to compare against 'free' (downgrade-only, SEC-M3)
-  //  - /api/billing/create-checkout-session, /api/billing/razorpay/create-order:
+  //  - /api/billing/create-checkout-session and
+  //    /api/billing/razorpay/create-subscription:
   //    `tier` selects the product being purchased (amount computed server-side
   //    from TIER_PRICES); entitlement is granted only via the verified
   //    payment-provider webhook, never from this value.
   const ALLOWLIST = [
-    '/api/auth/subscribe',
     '/api/billing/create-checkout-session',
-    '/api/billing/razorpay/create-order',
+    '/api/billing/razorpay/create-subscription',
   ];
 
   const serverSrc = fs.readFileSync(path.join(__dirname, '../server.ts'), 'utf-8');
@@ -90,7 +89,7 @@ describe('tier-trust: /api/auth/subscribe and /api/license/activate cannot escal
       .set('Authorization', `Bearer ${token}`)
       .send({ tier: 'agency' });
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(410);
 
     const user = await syncController.getUserByToken(token);
     expect(user?.tier).toBe('free');
@@ -183,13 +182,34 @@ describe('tier-trust: /api/auth/subscribe and /api/license/activate cannot escal
 // `tier:'free'`, so `POST /api/crew/sync {tier:'founder'}` returned 200
 // unauthenticated. Same shape existed for /api/plan/whats-left,
 // /api/cost/history, /api/docs/generate, and the founder/agency workflow
-// routes. All six now derive tier from `sandbox.getUserTier()` (the
-// server-validated session set over the WS auth handshake), which defaults
-// to 'free' and ignores any `tier` field/param the client sends.
+// routes. The HTTP routes below now resolve the caller from its bearer token
+// and read the persisted server-side tier. Guest reads stay on Free; direct
+// PLAN->CREW sync requires authentication.
 describe('tier-trust: forged tier in request body/query no longer escalates', () => {
-  it('POST /api/crew/sync ignores a forged tier:"founder" and stays gated to paid tiers', async () => {
+  const email = `tier_routes_${Date.now()}@test.local`;
+  let token: string;
+
+  beforeAll(async () => {
+    const user = await syncController.register(email, 'TierRoutes123!');
+    token = user.token;
+  });
+
+  afterAll(async () => {
+    await syncController.deleteUser(email);
+  });
+
+  it('POST /api/crew/sync requires a bearer token', async () => {
     const res = await request(app)
       .post('/api/crew/sync')
+      .send({ tier: 'founder', items: [] });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /api/crew/sync rejects forged founder tier for authenticated Free user', async () => {
+    const res = await request(app)
+      .post('/api/crew/sync')
+      .set('Authorization', `Bearer ${token}`)
       .send({ tier: 'founder', items: [] });
 
     expect(res.status).toBe(403);
@@ -197,7 +217,8 @@ describe('tier-trust: forged tier in request body/query no longer escalates', ()
 
   it('GET /api/plan/whats-left ignores a forged ?tier=founder and reports the real (free) tier', async () => {
     const res = await request(app)
-      .get('/api/plan/whats-left?tier=founder');
+      .get('/api/plan/whats-left?tier=founder')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(res.body.tier).toBe('free');
     expect(res.body.exportAllowed).toBe(false);
@@ -205,7 +226,8 @@ describe('tier-trust: forged tier in request body/query no longer escalates', ()
 
   it('GET /api/cost/history ignores a forged ?tier=agency and stays restricted', async () => {
     const res = await request(app)
-      .get('/api/cost/history?tier=agency');
+      .get('/api/cost/history?tier=agency')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(res.body.restricted).toBe(true);
     expect(res.body.history).toEqual([]);

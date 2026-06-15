@@ -5,6 +5,7 @@ import { scoreTodayTasks } from '../shared/todayScore';
 import { wouldCreateDependencyCycle } from '../shared/dependencies';
 import { resolveAgentForCategory, type InstalledAgent, type ItemCategory } from '../shared/agentCapabilities';
 import { FileBrowser } from './FileBrowser';
+import { SafeMarkdown } from './SafeMarkdown';
 
 interface ProjectBoardProps {
   tasks: ProjectTask[];
@@ -487,7 +488,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
         }`}
       >
         <div className={`text-xs break-words select-text font-bold mb-1 ${task.status === 'done' ? 'text-forge-dark line-through' : 'text-forge-text'}`}>
-          {task.title}
+          <SafeMarkdown text={task.title} />
         </div>
         <div className="flex flex-wrap gap-1 mb-1.5 text-[8px] uppercase font-bold">
           <span className={`border rounded px-1 py-0.5 ${driftClass(task.driftStatus)}`}>
@@ -655,7 +656,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                 todayItems.map((item, idx) => (
                   <div key={item.task.id} className="flex items-center gap-2 text-[9px]">
                     <span className="text-forge-dim w-3 shrink-0">{idx + 1}.</span>
-                    <span className={`flex-1 truncate ${item.blocked ? 'text-forge-dim' : 'text-forge-text'}`}>{item.task.title}</span>
+                    <SafeMarkdown text={item.task.title} className={`flex-1 truncate ${item.blocked ? 'text-forge-dim' : 'text-forge-text'}`} />
                     {item.blocked && <span className="text-[8px] uppercase border border-red-700 text-red-300 rounded px-1">blocked</span>}
                     <span className="text-[8px] uppercase border border-forge-neon border-opacity-40 text-forge-neon rounded px-1" title="Priority score">
                       {item.score}
@@ -696,6 +697,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
             className="forge-input text-xs text-forge-text px-2 py-1 placeholder:text-forge-dark font-mono rounded"
           />
           <select
+            aria-label="Task assignee"
             value={taskAssignee}
             onChange={(e) => setTaskAssignee(e.target.value)}
             className="bg-forge-very-dark border border-forge-dark text-[10px] text-forge-neon px-0.5 rounded font-mono"
@@ -706,6 +708,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
             <option value="Reviewer">Reviewer</option>
           </select>
           <select
+            aria-label="Task category"
             value={taskCategory}
             onChange={(e) => setTaskCategory(e.target.value)}
             className="bg-forge-very-dark border border-forge-dark text-xs text-forge-neon px-1 rounded font-mono"
@@ -751,7 +754,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           <span className="text-[10px] text-forge-neon font-bold uppercase tracking-widest block mb-2">
             BUILD LOOP SIGNALS
           </span>
-          <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+          <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1" tabIndex={0} aria-label="Build loop signals">
             {achievements.map(ach => (
               <div
                 key={ach.id}
@@ -811,6 +814,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                 criteriaDraft.map((criterion, idx) => (
                   <div key={criterion.id || idx} className="border border-forge-dark rounded bg-forge-very-dark bg-opacity-35 p-2.5 grid grid-cols-[112px_92px_1fr_1fr_auto] gap-2 items-start">
                     <select
+                      aria-label={`Criterion ${idx + 1} type`}
                       value={criterion.type}
                       onChange={(e) => updateCriterion(idx, { type: e.target.value as AcceptanceCriterionType })}
                       className="bg-forge-very-dark border border-forge-dark text-[10px] text-forge-neon px-1.5 py-1 rounded"
@@ -818,6 +822,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       {criterionTypes.map(type => <option key={type} value={type}>{type}</option>)}
                     </select>
                     <select
+                      aria-label={`Criterion ${idx + 1} phase`}
                       value={criterion.phase}
                       onChange={(e) => updateCriterion(idx, { phase: e.target.value as CriterionPhase })}
                       className="bg-forge-very-dark border border-forge-dark text-[10px] text-forge-neon px-1.5 py-1 rounded"

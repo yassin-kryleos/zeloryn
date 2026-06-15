@@ -16,25 +16,23 @@ test.describe('Desktop renderer — UX interactions', () => {
     await page.waitForLoadState('networkidle');
   });
 
+  async function selectTheme(page: import('@playwright/test').Page, theme: 'forge' | 'dark' | 'light') {
+    await page.getByRole('button', { name: 'CONFIG', exact: true }).click();
+    await page.getByRole('button', { name: 'Account', exact: true }).click();
+    await page.getByRole('button', { name: theme, exact: true }).click();
+    await page.getByRole('button', { name: 'Save Settings', exact: true }).click();
+  }
+
   test('theme toggle persists selection to localStorage matrix_theme key', async ({ page }) => {
-    // Find and click a theme toggle (FORGE / LIGHT)
-    const themeToggle = page.locator('button, [role="button"]').filter({ hasText: /forge|light|theme/i }).first();
-    if (!await themeToggle.isVisible()) {
-      test.skip();
-      return;
-    }
-    await themeToggle.click();
+    await selectTheme(page, 'light');
     const storedTheme = await page.evaluate(() => localStorage.getItem('matrix_theme'));
-    expect(['forge', 'light', 'dark']).toContain(storedTheme);
+    expect(storedTheme).toBe('light');
   });
 
   test('clicking theme toggle a second time switches to the alternate theme', async ({ page }) => {
-    const themeToggle = page.locator('button, [role="button"]').filter({ hasText: /forge|light|theme/i }).first();
-    if (!await themeToggle.isVisible()) { test.skip(); return; }
-
-    await themeToggle.click();
+    await selectTheme(page, 'light');
     const theme1 = await page.evaluate(() => localStorage.getItem('matrix_theme'));
-    await themeToggle.click();
+    await selectTheme(page, 'dark');
     const theme2 = await page.evaluate(() => localStorage.getItem('matrix_theme'));
     expect(theme1).not.toBe(theme2);
   });
@@ -58,8 +56,7 @@ test.describe('Desktop renderer — UX interactions', () => {
   });
 
   test('project creation button is reachable and clickable', async ({ page }) => {
-    const newPlanBtn = page.locator('button').filter({ hasText: /new plan|new project|create/i }).first();
-    if (!await newPlanBtn.isVisible()) { test.skip(); return; }
+    const newPlanBtn = page.getByRole('button', { name: '+ Add project', exact: true });
     await newPlanBtn.click();
     await page.waitForTimeout(300);
     const error = page.locator('[data-testid="error-boundary-fallback"]');

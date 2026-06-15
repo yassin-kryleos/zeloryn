@@ -51,7 +51,7 @@ interface ConfigHeaderProps {
   githubToken: string;
   githubRepoUrl: string;
   onOpenGuide: () => void;
-  user: { email: string; token: string; isPremium: boolean; tier?: string } | null;
+  user: { email: string; token: string; isPremium: boolean; tier?: string; billingProvider?: 'stripe' | 'razorpay' | 'license' } | null;
   syncStatus: string;
   lastSyncedAt: string;
   onRegister: (email: string, pass: string) => Promise<void>;
@@ -340,6 +340,19 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     setPrivacyInput(privacyMode);
   }, [privacyMode]);
 
+  const providerFailureMessage = (provider: string, raw: string) => {
+    const error = raw || 'Connection failed';
+    if (provider === 'ollama') {
+      if (/model.*not found|pull|404/i.test(error)) return `Ollama is running, but the model is missing. Run: ollama pull qwen2.5-coder`;
+      if (/timeout|loading|download/i.test(error)) return 'Ollama is still loading or downloading the model. Wait for the pull to finish, then PING again.';
+      return `Ollama was not found at ${inputOllamaUrl}. Start Ollama, confirm the URL, then click DETECT.`;
+    }
+    if (/401|403|unauthor|invalid.*key|expired/i.test(error)) {
+      return `${provider.toUpperCase()} rejected the key. Replace the invalid or expired key, then PING again.`;
+    }
+    return `${provider.toUpperCase()} connection failed: ${error}. Check the key and network, then retry.`;
+  };
+
   const testKey = async (provider: string, apiKeyVal: string) => {
     setTestingKeys(prev => ({ ...prev, [provider]: true }));
     try {
@@ -363,7 +376,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       if (isOnline) {
         onNotify?.(`${provider.toUpperCase()} connection successful!`, 'success');
       } else {
-        onNotify?.(`${provider.toUpperCase()} key validation failed: ${data.error || 'Check network/credentials'}`, 'error');
+        onNotify?.(providerFailureMessage(provider, data.error), 'error');
       }
     } catch (err: any) {
       if (provider === 'deepseek') setDeepseekStatus('error');
@@ -371,7 +384,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       else if (provider === 'openai') setOpenaiStatus('error');
       else if (provider === 'anthropic') setAnthropicStatus('error');
       else if (provider === 'openrouter') setOpenrouterStatus('error');
-      onNotify?.(`Verification error: ${err.message}`, 'error');
+      onNotify?.(providerFailureMessage(provider, err.message), 'error');
     } finally {
       setTestingKeys(prev => ({ ...prev, [provider]: false }));
     }
@@ -389,13 +402,27 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         onNotify?.('Ollama local models detected successfully.', 'success');
       } else {
         setWizardOllamaModels([]);
-        setWizardOllamaStatus('Ollama is offline (Not running on localhost:11434)');
+        setWizardOllamaStatus(`Ollama not found at ${inputOllamaUrl}. Start Ollama, confirm the URL, then DETECT again.`);
       }
     } catch (err: any) {
       setWizardOllamaModels([]);
       setWizardOllamaStatus(`Scan failed: ${err.message}`);
     } finally {
       setDetectingOllama(false);
+    }
+  };
+
+  const wipeLocalData = async () => {
+    const confirmed = window.confirm('Clear stored credentials and Kryleos app data? Workspace files and repository .kryleos folders will remain.');
+    if (!confirmed) return;
+    try {
+      const res = await fetch('http://localhost:3001/api/local-data', { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+      localStorage.clear();
+      onNotify?.(`${data.note} Restart Forge to finish clearing the current UI session.`, 'success');
+    } catch (err: any) {
+      onNotify?.(`Could not clear local data: ${err.message}`, 'error');
     }
   };
 
@@ -520,6 +547,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       {/* Model Selector Dropdown */}
       <div className="flex items-center border border-forge-dark rounded p-0.5">
         <select
+          aria-label="AI model"
           value={model}
           onChange={(e) => onUpdateConfig({ model: e.target.value })}
           className="bg-transparent border-0 text-[11px] text-forge-text font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
@@ -1300,6 +1328,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-forge-dim">Workspace Role:</span>
                     <select
+                      aria-label="Workspace role"
                       value={userRole}
                       onChange={(e) => {
                         const nextRole = e.target.value as 'admin' | 'developer';
@@ -1594,7 +1623,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                           <span>PREVIEW</span>
                         </div>
                       )}
-                      {user.tier && user.tier !== 'free' && onOpenBillingPortal && (
+                      {user.tier && user.tier !== 'free' && user.billingProvider === 'stripe' && onOpenBillingPortal && (
                         <button
                           type="button"
                           onClick={onOpenBillingPortal}
@@ -1603,7 +1632,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                           MANAGE SUBSCRIPTION (STRIPE PORTAL)
                         </button>
                       )}
-                      {user.tier && user.tier !== 'free' && (
+                      {user.tier && user.tier !== 'free' && user.billingProvider !== 'license' && (
                         <button
                           type="button"
                           onClick={() => onSubscribe('free')}
@@ -1708,7 +1737,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 {!user ? (
                   <p className="text-[9px] text-forge-red italic">Sign in or register in the ACCOUNT tab to configure cloud subscription services.</p>
                 ) : (
-                  <p className="text-[9px] text-forge-dim">Your session token is active. Plan changes below use mock billing routes until production checkout is integrated.</p>
+                  <p className="text-[9px] text-forge-dim">Your session token is active. Checkout uses Stripe globally and Razorpay subscriptions in India.</p>
                 )}
               </div>
 
@@ -1736,7 +1765,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 </div>
               </div>
 
-              {/* Subscription tiers (mock billing until Stripe checkout is wired). */}
+              {/* Recurring subscription tiers. */}
               <div className="flex flex-col gap-2.5 mt-1">
                 {[
                   { id: 'solo', name: 'SOLO', price: `$${TIER_PRICES.solo}/mo`, color: 'text-amber-400', features: ['Execution tracing', 'AI acceptance criteria', 'Basic drift detection', 'PLAN → CREW direct sync'] },
@@ -1774,7 +1803,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 })}
 
                 {/* Demote option */}
-                {user && (user.tier || 'free') !== 'free' && (
+                {user && (user.tier || 'free') !== 'free' && user.billingProvider !== 'license' && (
                   <button
                     type="button"
                     onClick={() => onSubscribe('free')}
@@ -1789,7 +1818,16 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         </div>
 
             {/* Save Buttons */}
-            <div className="flex justify-end gap-3.5 mt-2 border-t border-forge-dark pt-3 shrink-0">
+            <div className="flex justify-between gap-3.5 mt-2 border-t border-forge-dark pt-3 shrink-0">
+              <button
+                type="button"
+                onClick={wipeLocalData}
+                className="px-3.5 py-1.5 border border-red-900 text-red-400 hover:text-white rounded text-[10px]"
+                title="Workspace files and .kryleos folders are preserved"
+              >
+                CLEAR CREDENTIALS + LOCAL APP DATA
+              </button>
+              <div className="flex gap-3.5">
               <button
                 type="button"
                 onClick={() => setShowConfigDrawer(false)}
@@ -1803,6 +1841,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               >
                 Save Settings
               </button>
+              </div>
             </div>
 
           </form>

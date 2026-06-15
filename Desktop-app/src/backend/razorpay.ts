@@ -1,4 +1,5 @@
 import Razorpay from 'razorpay';
+import type { TierId } from '../pricing.generated';
 
 // Razorpay processor for India (DECISIONS — Phase 4 re-scope: Stripe remains
 // the international processor, Razorpay covers Indian customers). Mirrors
@@ -18,39 +19,51 @@ const razorpay = new Razorpay({
   key_secret: razorpayKeySecret,
 });
 
-export interface CreateOrderParams {
-  amountPaise: number;
-  tier: string;
+type RecurringTier = Exclude<TierId, 'free' | 'agency'>;
+
+const planIds: Record<RecurringTier, string | undefined> = {
+  solo: process.env.RAZORPAY_PLAN_SOLO,
+  solo_plus: process.env.RAZORPAY_PLAN_SOLO_PLUS,
+  founder: process.env.RAZORPAY_PLAN_FOUNDER,
+};
+
+export interface CreateSubscriptionParams {
+  tier: RecurringTier;
   email: string;
 }
 
-export interface CreateOrderResult {
-  orderId: string;
-  amount: number;
-  currency: 'INR';
+export interface CreateSubscriptionResult {
+  subscriptionId: string;
   keyId: string;
 }
 
-export async function createOrder({ amountPaise, tier, email }: CreateOrderParams): Promise<CreateOrderResult> {
+export async function createSubscription({ tier, email }: CreateSubscriptionParams): Promise<CreateSubscriptionResult> {
   if (isMockRazorpay) {
     return {
-      orderId: `order_mock_${Date.now()}`,
-      amount: amountPaise,
-      currency: 'INR',
+      subscriptionId: `sub_mock_${tier}_${Date.now()}`,
       keyId: razorpayKeyId,
     };
   }
 
-  const order = await razorpay.orders.create({
-    amount: amountPaise,
-    currency: 'INR',
+  const planId = planIds[tier];
+  if (!planId) {
+    throw new Error(`Missing Razorpay plan id for tier '${tier}'.`);
+  }
+
+  const subscription = await razorpay.subscriptions.create({
+    plan_id: planId,
+    total_count: 1200,
+    customer_notify: true,
     notes: { email, tier },
   });
 
   return {
-    orderId: order.id,
-    amount: amountPaise,
-    currency: 'INR',
+    subscriptionId: subscription.id,
     keyId: razorpayKeyId,
   };
+}
+
+export async function cancelSubscription(subscriptionId: string): Promise<void> {
+  if (isMockRazorpay) return;
+  await razorpay.subscriptions.cancel(subscriptionId, true);
 }

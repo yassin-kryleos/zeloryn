@@ -7,7 +7,7 @@ import rateLimit from 'express-rate-limit';
 import * as path from 'path';
 import * as fs from 'fs';
 import dotenv from 'dotenv';
-import { exec, execSync, execFile } from 'child_process';
+import { exec, execSync, execFile, execFileSync } from 'child_process';
 import { WorkspaceSandbox, type ReviewStatus, classifyCommand } from './tools';
 import { DeepSeekClient, type Message } from './deepseek';
 import { GeminiClient } from './gemini';
@@ -30,9 +30,9 @@ import Stripe from 'stripe';
 import { generateFounderWorkflow } from './founderWorkflows';
 import { generateAgencyWorkflow } from './agencyWorkflows';
 import { unresolvedBlockers } from '../shared/dependencies';
-import { TIER_PRICES, TIER_PRICES_INR, BUYABLE_TIER_IDS, type TierId } from '../pricing.generated';
+import { TIER_PRICES, BUYABLE_TIER_IDS, type TierId } from '../pricing.generated';
 import { verifyLicenseKey } from './license';
-import { razorpayKeySecret, isMockRazorpay, createOrder as createRazorpayOrder } from './razorpay';
+import { razorpayKeySecret, isMockRazorpay, createSubscription as createRazorpaySubscription, cancelSubscription as cancelRazorpaySubscription } from './razorpay';
 import * as crypto from 'crypto';
 
 dotenv.config();
@@ -253,6 +253,33 @@ function requireLoopback(req: express.Request, res: express.Response, next: expr
   next();
 }
 
+function bearerToken(req: express.Request): string | null {
+  const match = req.headers.authorization?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+}
+
+async function resolveRequestTier(
+  req: express.Request,
+  res: express.Response,
+  options: { required?: boolean } = {},
+): Promise<string | null> {
+  const token = bearerToken(req);
+  if (!token) {
+    if (options.required) {
+      res.status(401).json({ success: false, error: 'Unauthorized' });
+      return null;
+    }
+    return 'free';
+  }
+
+  const user = await syncController.getUserByToken(token);
+  if (!user) {
+    res.status(401).json({ success: false, error: 'Unauthorized' });
+    return null;
+  }
+  return user.tier || 'free';
+}
+
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
   let event: any;
   const sig = req.headers['stripe-signature'];
@@ -309,12 +336,19 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
 
     if (event.type === 'checkout.session.completed' || event.type === 'customer.subscription.updated') {
       if (email) {
-        await syncController.subscribeByEmail(email, tier);
+        const subscriptionId = String(obj.subscription || obj.id || '');
+        await syncController.subscribeByEmail(email, tier, {
+          provider: 'stripe',
+          subscriptionId: subscriptionId || undefined,
+        });
         console.log(`[Stripe Webhook] Subscribed ${email} to ${tier}`);
       }
     } else if (event.type === 'customer.subscription.deleted') {
       if (email) {
-        await syncController.subscribeByEmail(email, 'free');
+        await syncController.subscribeByEmail(email, 'free', {
+          provider: 'stripe',
+          subscriptionId: String(obj.id || ''),
+        });
         console.log(`[Stripe Webhook] Subscription deleted. Demoted ${email} to free`);
       }
     }
@@ -357,13 +391,30 @@ app.post('/api/billing/razorpay/webhook', express.raw({ type: 'application/json'
   }
 
   try {
-    if (body.event === 'payment.captured') {
-      const order = body.payload?.payment?.entity?.notes ?? body.payload?.order?.entity?.notes;
-      const email = order?.email;
-      const tier = order?.tier;
-      if (email && tier) {
-        await syncController.subscribeByEmail(email, tier);
+    const subscription = body.payload?.subscription?.entity;
+    const subscriptionId = String(subscription?.id || '');
+    const notes = subscription?.notes || {};
+    const knownUser = subscriptionId
+      ? await syncController.getUserByBillingSubscription(subscriptionId)
+      : null;
+    const email = notes.email || knownUser?.email;
+    const tier = notes.tier || knownUser?.tier;
+
+    if (['subscription.activated', 'subscription.charged'].includes(body.event)) {
+      if (email && BUYABLE_TIER_IDS.includes(tier as TierId)) {
+        await syncController.subscribeByEmail(email, tier, {
+          provider: 'razorpay',
+          subscriptionId,
+        });
         console.log(`[Razorpay Webhook] Subscribed ${email} to ${tier}`);
+      }
+    } else if (['subscription.cancelled', 'subscription.completed', 'subscription.expired', 'subscription.halted'].includes(body.event)) {
+      if (email) {
+        await syncController.subscribeByEmail(email, 'free', {
+          provider: 'razorpay',
+          subscriptionId,
+        });
+        console.log(`[Razorpay Webhook] Demoted ${email} to free after ${body.event}`);
       }
     }
     res.json({ received: true });
@@ -477,6 +528,12 @@ async function startForgeRun(opts: {
   const { orchestrator, queryText, originalText, sessionId, space, planItemId, zeroEgressMode, modelProxy, send, deviceId, source } = opts;
   if (planItemId) {
     await logCommandInitiation(sandbox.getWorkspaceRoot(), { planItemId, deviceId, source: source || 'local' });
+    const markerDir = path.join(sandbox.getWorkspaceRoot(), '.kryleos');
+    fs.mkdirSync(markerDir, { recursive: true });
+    const markerPath = path.join(markerDir, 'run-in-progress.json');
+    const markerTemp = `${markerPath}.${process.pid}.tmp`;
+    fs.writeFileSync(markerTemp, JSON.stringify({ planItemId, startedAt: new Date().toISOString() }, null, 2), 'utf-8');
+    fs.renameSync(markerTemp, markerPath);
   }
   send({ type: 'status', message: 'Orchestrating agents...' });
   if (zeroEgressMode) {
@@ -485,11 +542,17 @@ async function startForgeRun(opts: {
   await orchestrator.handleUserQuery(queryText, sessionId, space, originalText);
   if (planItemId) {
     try {
+      const runState = orchestrator.getRunState();
       const trace = await planningV2().saveTrace({
         planItemId,
         logs: orchestrator.getLogs(),
-        client: modelProxy
+        client: runState.incomplete ? undefined : modelProxy,
+        suggestedStatus: runState.incomplete ? 'in_progress' : undefined,
+        incompleteReason: runState.reason,
+        summary: runState.incomplete ? `INCOMPLETE RUN: ${runState.reason}. Review evidence and rerun before marking complete.` : undefined
       });
+      const markerPath = path.join(sandbox.getWorkspaceRoot(), '.kryleos', 'run-in-progress.json');
+      if (fs.existsSync(markerPath)) fs.unlinkSync(markerPath);
       send({ type: 'execution_trace', trace, message: `Execution trace saved for plan item ${planItemId}.` });
       companionHub.broadcastSessionUpdate({ latestTrace: trace });
     } catch (traceErr: any) {
@@ -539,7 +602,7 @@ function normalizeOllamaModel(model: string): string {
 // Last model selected by any connection. Lets REST routes (e.g. plan drift) reach
 // the configured provider outside the per-connection WebSocket scope. Falls back
 // gracefully: if no key is configured the call errors and callers no-op.
-let activeModel = 'deepseek-chat';
+let activeModel = 'ollama:qwen2.5-coder';
 const getModelClient = (overridePrivacy?: boolean): ChatClient => ({
   async chatStream(messages, callbacks) {
     if ((globalZeroEgressMode || globalPrivacyMode) && !isOllamaModel(activeModel)) {
@@ -573,7 +636,48 @@ const getModelClient = (overridePrivacy?: boolean): ChatClient => ({
   }
 });
 
-const secretsFilePath = path.join(process.env.USERPROFILE || process.env.HOME || defaultWorkspace, '.kryleos_forge_secrets.json');
+const secretsRoot = process.env.KRYLEOS_DATA_DIR?.trim()
+  ? path.resolve(process.env.KRYLEOS_DATA_DIR)
+  : (process.env.USERPROFILE || process.env.HOME || defaultWorkspace);
+const secretsFilePath = path.join(secretsRoot, '.kryleos_forge_secrets.json');
+const dataFilePath = (name: string) => process.env.KRYLEOS_DATA_DIR?.trim()
+  ? path.resolve(process.env.KRYLEOS_DATA_DIR, name)
+  : path.resolve(process.cwd(), name);
+let credentialsWriteQueue: Promise<void> = Promise.resolve();
+
+async function readCredentialsFile(): Promise<Record<string, unknown>> {
+  try {
+    return JSON.parse(await fs.promises.readFile(secretsFilePath, 'utf-8'));
+  } catch (err: any) {
+    if (err?.code === 'ENOENT') return {};
+    throw err;
+  }
+}
+
+function updateCredentialsFile(update: (current: Record<string, unknown>) => Record<string, unknown>): Promise<void> {
+  const write = credentialsWriteQueue.then(async () => {
+    const current = await readCredentialsFile();
+    const next = update(current);
+    await fs.promises.mkdir(path.dirname(secretsFilePath), { recursive: true });
+    const tempPath = `${secretsFilePath}.tmp-${process.pid}-${Date.now()}`;
+    await fs.promises.writeFile(tempPath, JSON.stringify(next, null, 2), 'utf-8');
+    await fs.promises.rename(tempPath, secretsFilePath);
+  });
+  credentialsWriteQueue = write.catch(() => undefined);
+  return write;
+}
+
+function deleteCredentialsFile(): Promise<void> {
+  const deletion = credentialsWriteQueue.then(async () => {
+    try {
+      await fs.promises.unlink(secretsFilePath);
+    } catch (err: any) {
+      if (err?.code !== 'ENOENT') throw err;
+    }
+  });
+  credentialsWriteQueue = deletion.catch(() => undefined);
+  return deletion;
+}
 
 const googleClient = new GoogleClient({
   clientId: process.env.GOOGLE_CLIENT_ID || '1048684784400-mockclientid.apps.googleusercontent.com',
@@ -606,6 +710,17 @@ app.get('/api/sessions/:id', async (req, res) => {
   try {
     const session = await chatDb.getSession(req.params.id);
     if (!session) {
+      if (req.params.id === 'flow_board' || req.params.id.startsWith('flow_board_')) {
+        return res.json({
+          id: req.params.id,
+          title: 'FLOW Board',
+          createdAt: new Date().toISOString(),
+          logs: [],
+          checklist: [],
+          space: 'project',
+          tasks: []
+        });
+      }
       res.status(404).json({ error: 'Session not found' });
       return;
     }
@@ -687,7 +802,7 @@ app.post('/api/workspace', (req, res) => {
 
 app.get('/api/projects', (req, res) => {
   try {
-    const projectsPath = path.resolve(process.cwd(), 'projects.json');
+    const projectsPath = dataFilePath('projects.json');
     let projects = [];
     if (fs.existsSync(projectsPath)) {
       const content = fs.readFileSync(projectsPath, 'utf-8');
@@ -711,7 +826,7 @@ app.post('/api/projects/create', async (req, res) => {
       fs.mkdirSync(resolvedPath, { recursive: true });
     }
 
-    const projectsPath = path.resolve(process.cwd(), 'projects.json');
+    const projectsPath = dataFilePath('projects.json');
     let projects: any[] = [];
     if (fs.existsSync(projectsPath)) {
       const content = fs.readFileSync(projectsPath, 'utf-8');
@@ -758,7 +873,7 @@ app.post('/api/projects/create', async (req, res) => {
 app.post('/api/projects/active', (req, res) => {
   const { id } = req.body;
   try {
-    const projectsPath = path.resolve(process.cwd(), 'projects.json');
+    const projectsPath = dataFilePath('projects.json');
     let projects = [];
     if (fs.existsSync(projectsPath)) {
       const content = fs.readFileSync(projectsPath, 'utf-8');
@@ -770,15 +885,99 @@ app.post('/api/projects/active', (req, res) => {
     }
     sandbox.setWorkspaceRoot(project.workspaceFolder);
     activeProjectId = project.id;
+    planningV2().recoverInterruptedRun().catch(err => console.error('Interrupted trace recovery failed:', err));
     res.json({ success: true, project, workspaceRoot: project.workspaceFolder });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
+app.post('/api/demo/start', async (_req, res) => {
+  try {
+    const home = process.env.USERPROFILE || process.env.HOME || defaultWorkspace;
+    const demoRoot = process.env.KRYLEOS_DATA_DIR
+      ? path.join(process.env.KRYLEOS_DATA_DIR, 'Kryleos Forge Demo')
+      : path.join(home, 'Documents', 'Kryleos Forge Demo');
+    const sourceDir = path.join(demoRoot, 'src');
+    const sourcePath = path.join(sourceDir, 'hello.js');
+    fs.mkdirSync(sourceDir, { recursive: true });
+    fs.writeFileSync(sourcePath, "console.log('Kryleos demo trace: PASS');\n", 'utf-8');
+    fs.writeFileSync(
+      path.join(demoRoot, 'README.md'),
+      '# Kryleos Forge Demo\n\nThis bundled project produces a deterministic demo trace without an AI provider.\n',
+      'utf-8'
+    );
+
+    const output = execFileSync(process.execPath, ['src/hello.js'], {
+      cwd: demoRoot,
+      encoding: 'utf-8',
+      timeout: 10_000
+    }).trim();
+
+    const project = {
+      id: 'project_demo',
+      name: 'Kryleos Trace Demo',
+      workspaceFolder: demoRoot,
+      gitUrl: '',
+      description: 'Deterministic no-key demo. No AI model is called.'
+    };
+    const projectsPath = dataFilePath('projects.json');
+    let projects: any[] = [];
+    if (fs.existsSync(projectsPath)) projects = JSON.parse(fs.readFileSync(projectsPath, 'utf-8') || '[]');
+    projects = projects.filter((entry: any) => entry.id !== project.id && entry.workspaceFolder !== demoRoot);
+    projects.push(project);
+    fs.writeFileSync(projectsPath, JSON.stringify(projects, null, 2), 'utf-8');
+
+    sandbox.setWorkspaceRoot(demoRoot);
+    companionHub.setWorkspaceRoot(demoRoot);
+    activeProjectId = project.id;
+
+    const task: ProjectTask = {
+      id: 'demo_green_trace',
+      title: 'Produce a verified hello-world trace',
+      status: 'in_progress',
+      assignee: 'Demo Runner',
+      category: 'testing',
+      source: 'Bundled deterministic demo',
+      acceptanceCriteria: [{
+        id: 'demo-file-exists',
+        type: 'file_exists',
+        description: 'The demo output file exists.',
+        target: 'src/hello.js',
+        phase: 'phase1'
+      }],
+      lastModified: new Date().toISOString()
+    };
+    const sessionId = `flow_board_${project.id}`;
+    const demoPlanning = new PlanningV2Service(chatDb, demoRoot, sessionId);
+    await chatDb.saveSession({
+      id: sessionId,
+      title: 'Kryleos Trace Demo',
+      createdAt: new Date().toISOString(),
+      logs: [],
+      checklist: [],
+      space: 'project',
+      tasks: [task]
+    });
+    const trace = await demoPlanning.saveTrace({
+      planItemId: task.id,
+      mode: 'demo',
+      summary: 'DEMO REPLAY: created and executed a local hello-world file. No model or API key was used.',
+      filesChanged: ['src/hello.js', 'README.md'],
+      commandsRun: [`${process.execPath} src/hello.js`],
+      outcomes: [output],
+      suggestedStatus: 'done'
+    });
+
+    res.json({ success: true, project, task, trace, replayed: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.delete('/api/projects/:id', (req, res) => {
   try {
-    const projectsPath = path.resolve(process.cwd(), 'projects.json');
+    const projectsPath = dataFilePath('projects.json');
     let projects = [];
     if (fs.existsSync(projectsPath)) {
       const content = fs.readFileSync(projectsPath, 'utf-8');
@@ -956,7 +1155,7 @@ app.post('/api/auth/register', sensitiveLimiter, async (req, res) => {
   }
   try {
     const user = await syncController.register(email, password);
-    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token } });
+    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token, billingProvider: user.billingProvider } });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -972,7 +1171,7 @@ app.post('/api/auth/login', sensitiveLimiter, async (req, res) => {
   }
   try {
     const user = await syncController.login(email, password);
-    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token } });
+    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token, billingProvider: user.billingProvider } });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
   }
@@ -984,21 +1183,9 @@ app.post('/api/auth/subscribe', sensitiveLimiter, async (req, res) => {
   if (!token) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  try {
-    // SEC-M3: this route may only ever downgrade to 'free' (cancel/self-serve
-    // downgrade). Upgrades MUST go through a verified Stripe/Razorpay checkout
-    // (which set the tier via the payment-provider webhook) or a signed
-    // license key (/api/license/activate). Accepting an arbitrary `tier` here
-    // let any authenticated user self-grant any paid tier.
-    const { tier } = req.body;
-    if (tier !== undefined && tier !== 'free') {
-      return res.status(400).json({ error: 'Upgrades must go through checkout or license activation.' });
-    }
-    const user = await syncController.subscribe(token, 'free');
-    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token } });
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
+  const user = await syncController.getUserByToken(token);
+  if (!user) return res.status(401).json({ error: 'Unauthorized' });
+  return res.status(410).json({ error: 'Use the billing cancellation flow; local tier changes are disabled.' });
 });
 
 app.post('/api/billing/create-checkout-session', sensitiveLimiter, async (req, res) => {
@@ -1057,10 +1244,9 @@ app.post('/api/billing/create-checkout-session', sensitiveLimiter, async (req, r
   }
 });
 
-// Razorpay order creation for India. Mirrors create-checkout-session's
-// auth/tier validation; amount is computed server-side from TIER_PRICES_INR
-// (never trusted from the client).
-app.post('/api/billing/razorpay/create-order', sensitiveLimiter, async (req, res) => {
+// Razorpay recurring-subscription creation for India. Plan IDs are configured
+// server-side; the client can select only a canonical buyable tier.
+app.post('/api/billing/razorpay/create-subscription', sensitiveLimiter, async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
@@ -1075,14 +1261,12 @@ app.post('/api/billing/razorpay/create-order', sensitiveLimiter, async (req, res
     if (!BUYABLE_TIER_IDS.includes(tier as TierId)) {
       return res.status(400).json({ error: `tier '${tier}' is not purchasable` });
     }
-    const priceInr = TIER_PRICES_INR[tier as TierId];
-    if (!priceInr) {
-      return res.status(400).json({ error: `tier '${tier}' is not available in INR` });
-    }
-    const amountPaise = Math.round(priceInr * 100);
-
-    const order = await createRazorpayOrder({ amountPaise, tier, email: user.email });
-    res.json({ success: true, orderId: order.orderId, amount: order.amount, currency: order.currency, keyId: order.keyId });
+    const subscription = await createRazorpaySubscription({
+      tier: tier as Exclude<TierId, 'free' | 'agency'>,
+      email: user.email,
+    });
+    await syncController.setBillingSubscription(token, 'razorpay', subscription.subscriptionId);
+    res.json({ success: true, subscriptionId: subscription.subscriptionId, keyId: subscription.keyId });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1122,6 +1306,35 @@ app.post('/api/billing/create-portal-session', sensitiveLimiter, async (req, res
   }
 });
 
+app.post('/api/billing/cancel-subscription', sensitiveLimiter, async (req, res) => {
+  const token = bearerToken(req);
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const user = await syncController.getUserByToken(token);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    if (user.billingProvider === 'license') {
+      return res.status(400).json({ error: 'Offline lifetime licenses are not recurring subscriptions.' });
+    }
+
+    if (user.billingProvider === 'razorpay' && user.billingSubscriptionId) {
+      await cancelRazorpaySubscription(user.billingSubscriptionId);
+      return res.json({ success: true, provider: 'razorpay', scheduledAtCycleEnd: true });
+    }
+
+    if (user.billingProvider === 'stripe' && user.billingSubscriptionId && stripeSecretKey !== 'sk_test_mock_key') {
+      await stripe.subscriptions.update(user.billingSubscriptionId, { cancel_at_period_end: true });
+      return res.json({ success: true, provider: 'stripe', scheduledAtCycleEnd: true });
+    }
+
+    return res.status(409).json({
+      error: 'No recurring subscription is linked to this account. Open the billing portal or contact support.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // SEC-M3: license activation is offline-signature-based (Ed25519, see
 // license.ts). The tier is applied to the AUTHENTICATED caller's own account
 // only — never to a client-supplied email — and only if the key's signature
@@ -1154,8 +1367,8 @@ app.post('/api/license/activate', sensitiveLimiter, async (req, res) => {
       return res.status(400).json({ success: false, error: message });
     }
 
-    const updated = await syncController.subscribeByEmail(user.email, result.tier);
-    res.json({ success: true, user: { email: updated.email, isPremium: updated.isPremium, tier: updated.tier, token: updated.token } });
+    const updated = await syncController.subscribeByEmail(user.email, result.tier, { provider: 'license' });
+    res.json({ success: true, user: { email: updated.email, isPremium: updated.isPremium, tier: updated.tier, token: updated.token, billingProvider: updated.billingProvider } });
   } catch (err: any) {
     res.status(400).json({ success: false, error: err.message });
   }
@@ -1278,12 +1491,7 @@ app.delete('/api/files', async (req, res) => {
 
 app.get('/api/credentials', async (_req, res) => {
   try {
-    if (fs.existsSync(secretsFilePath)) {
-      const content = await fs.promises.readFile(secretsFilePath, 'utf-8');
-      res.json(JSON.parse(content));
-    } else {
-      res.json({});
-    }
+    res.json(await readCredentialsFile());
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1291,16 +1499,41 @@ app.get('/api/credentials', async (_req, res) => {
 
 app.post('/api/credentials', async (req, res) => {
   try {
-    let existing = {};
-    if (fs.existsSync(secretsFilePath)) {
-      const content = await fs.promises.readFile(secretsFilePath, 'utf-8');
-      existing = JSON.parse(content);
-    }
-    const updated = { ...existing, ...req.body };
-    await fs.promises.writeFile(secretsFilePath, JSON.stringify(updated, null, 2), 'utf-8');
+    await updateCredentialsFile(existing => ({ ...existing, ...req.body }));
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/credentials', async (_req, res) => {
+  try {
+    await deleteCredentialsFile();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/local-data', async (_req, res) => {
+  try {
+    await deleteCredentialsFile();
+    const candidates = [
+      dataFilePath('projects.json'),
+      dataFilePath('chat_history.json'),
+      path.resolve(process.cwd(), 'cost_history.json'),
+      path.resolve(process.cwd(), 'command_approvals.json')
+    ];
+    for (const candidate of candidates) {
+      try { if (fs.existsSync(candidate)) await fs.promises.unlink(candidate); } catch {}
+    }
+    res.json({
+      success: true,
+      workspaceDataPreserved: true,
+      note: 'Workspace files and each repository .kryleos directory were preserved. Delete those folders manually when uninstalling if desired.'
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1390,7 +1623,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
     } catch (e) {}
     return (originalSend as any).apply(this, [data, ...args]);
   };
-  let currentModel = 'deepseek-chat';
+  let currentModel = 'ollama:qwen2.5-coder';
   let customInstructions = '';
   let responseMode: ResponseMode = 'balanced';
   let chatAbortRequested = false;
@@ -2089,15 +2322,7 @@ app.get('/api/google/callback', async (req, res) => {
     const redirectUri = `http://localhost:${PORT}/api/google/callback`;
     const tokens = await googleClient.exchangeCodeForTokens(code as string, redirectUri);
     
-    // Save tokens in credentials file
-    let credentials = {};
-    if (fs.existsSync(secretsFilePath)) {
-      try {
-        credentials = JSON.parse(fs.readFileSync(secretsFilePath, 'utf-8'));
-      } catch {}
-    }
-    const updated = { ...credentials, googleTokens: tokens };
-    fs.writeFileSync(secretsFilePath, JSON.stringify(updated, null, 2), 'utf-8');
+    await updateCredentialsFile(credentials => ({ ...credentials, googleTokens: tokens }));
     
     res.send(`
       <html>
@@ -2318,7 +2543,8 @@ app.get('/api/telemetry', (req, res) => {
   res.json({
     bytesSent: totalBytesSent,
     bytesReceived: totalBytesReceived,
-    compressionSavingsRatio: 0.68
+    compressionSavingsRatio: 0.68,
+    processRssMb: Math.round(process.memoryUsage().rss / 1024 / 1024 * 10) / 10
   });
 });
 
@@ -2481,10 +2707,8 @@ const whatsLeftExportAllowed = (tier: string): boolean => whatsLeftLimitForTier(
 
 app.get('/api/plan/whats-left', async (req, res) => {
   try {
-    // SEC: tier must come from the server-validated session
-    // (sandbox.getUserTier(), set via the WS auth handshake from a real
-    // license/subscription), never from a client-supplied query param.
-    const tier = sandbox.getUserTier() || 'free';
+    const tier = await resolveRequestTier(req, res);
+    if (tier === null) return;
     // Bootstrap grants one free unlimited run regardless of tier.
     const limit = req.query.bootstrap === '1' ? null : whatsLeftLimitForTier(tier);
     const report = await planningV2().whatsLeft(getModelClient(), limit);
@@ -2557,14 +2781,12 @@ app.post('/api/plan/workspace/feasibility', async (req, res) => {
 });
 
 app.post('/api/crew/sync', async (req, res) => {
+  const tier = await resolveRequestTier(req, res, { required: true });
+  if (tier === null) return;
   if (globalPrivacyMode) {
     return res.status(400).json({ error: 'PLAN->CREW Sync is disabled when Privacy Mode is active.' });
   }
-  // SEC: tier must come from the server-validated session
-  // (sandbox.getUserTier(), set via the WS auth handshake from a real
-  // license/subscription), never from a client-supplied request body field.
   const { items } = req.body;
-  const tier = sandbox.getUserTier() || 'free';
   if (tier.toLowerCase() === 'free') {
     return res.status(403).json({ success: false, error: 'PLAN->CREW direct sync is only available on paid tiers. Please upgrade.' });
   }
@@ -3114,11 +3336,11 @@ app.post('/api/planning/import', async (req, res) => {
   }
 });
 
-app.get('/api/cost/history', async (_req, res) => {
+app.get('/api/cost/history', async (req, res) => {
   try {
-    // SEC: tier must come from the server-validated session, never from a
-    // client-supplied query param.
-    const tier = String(sandbox.getUserTier() || 'free').toLowerCase();
+    const resolvedTier = await resolveRequestTier(req, res);
+    if (resolvedTier === null) return;
+    const tier = resolvedTier.toLowerCase();
     const tierLadder = ['free', 'solo', 'solo_plus', 'founder', 'agency'];
     const userIndex = tierLadder.indexOf(tier);
     if (userIndex < 2) { // Less than solo_plus

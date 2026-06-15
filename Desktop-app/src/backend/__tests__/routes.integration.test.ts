@@ -23,6 +23,20 @@ async function registerUser(suffix: string) {
   return { email, token: res.body?.user?.token as string | undefined, status: res.status };
 }
 
+describe('credential persistence', () => {
+  it('serializes concurrent updates without corrupting or losing fields', async () => {
+    const updates = Array.from({ length: 8 }, (_, index) => ({ [`raceKey${index}`]: `value-${index}` }));
+    const writes = await Promise.all(updates.map(update => request(app).post('/api/credentials').send(update)));
+    expect(writes.every(response => response.status === 200)).toBe(true);
+
+    const read = await request(app).get('/api/credentials');
+    expect(read.status).toBe(200);
+    for (let index = 0; index < updates.length; index++) {
+      expect(read.body[`raceKey${index}`]).toBe(`value-${index}`);
+    }
+  });
+});
+
 // ─── public endpoints ────────────────────────────────────────────────────────
 
 describe('GET /api/sessions', () => {
@@ -38,6 +52,22 @@ describe('GET /api/telemetry', () => {
     const res = await request(app).get('/api/telemetry');
     expect(res.status).toBe(200);
     expect(typeof res.body).toBe('object');
+  });
+});
+
+describe('POST /api/demo/start', () => {
+  it('creates a no-key project with a green, clearly labeled demo trace', async () => {
+    const res = await request(app).post('/api/demo/start').send({});
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.replayed).toBe(true);
+    expect(res.body.trace.mode).toBe('demo');
+    expect(res.body.trace.suggestedStatus).toBe('done');
+    expect(res.body.trace.criteriaResults).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: 'pass', type: 'file_exists' })
+    ]));
+    expect(res.body.trace.filesChanged).toContain('src/hello.js');
+    expect(res.body.trace.commandsRun[0]).toContain('src/hello.js');
   });
 });
 

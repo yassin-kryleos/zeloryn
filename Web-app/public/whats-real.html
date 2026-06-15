@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kryleos Forge: What Is Real</title>
+  <style>
+    body { margin: 0; background: #090b0d; color: #e8edf2; font: 16px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
+    main { max-width: 900px; margin: 0 auto; padding: 48px 22px; }
+    h1, h2 { color: #25f47a; } .card { border: 1px solid #26312b; border-radius: 8px; padding: 18px; margin: 14px 0; background: #111518; }
+    .real { color: #25f47a; } .preview { color: #67e8f9; } .limited { color: #fbbf24; } .planned { color: #c4b5fd; }
+    a { color: #67e8f9; } code { color: #fbbf24; }
+  </style>
+</head>
+<body><main>
+  <h1>What is real in Kryleos Forge</h1>
+  <p>Invited-beta status, updated June 15, 2026. This page separates shipped behavior from previews and limitations.</p>
+  <section class="card"><h2 class="real">Production</h2><ul>
+    <li>Local workspace file tools with command approval and review evidence.</li>
+    <li>PLAN, FLOW tasks, acceptance criteria, drift checks, and persisted execution traces.</li>
+    <li>Deterministic no-key demo that creates a green trace without calling a model.</li>
+    <li>Ollama plus hosted-provider configuration; zero-egress mode blocks hosted calls.</li>
+    <li>Signed offline licenses and authenticated tier enforcement.</li>
+    <li>LAN/Tailscale companion pairing, live session updates, signed approvals, stop, and remote launch.</li>
+  </ul></section>
+  <section class="card"><h2 class="preview">Preview</h2><ul>
+    <li>Live Preview, terminal evidence deck, artifacts, agency/team workflows, and advanced collaboration surfaces.</li>
+    <li>Unsigned desktop installers. Manual reinstall is required for updates.</li>
+  </ul></section>
+  <section class="card"><h2 class="limited">Known limitations</h2><ul>
+    <li>Companion access from outside LAN/Tailscale needs a future relay.</li>
+    <li>Offline licenses cannot revoke a refunded valid key until its signed expiry.</li>
+    <li>A June 15, 2026 test with <code>qwen2.5:7b</code> failed the full agent-edit-to-green-trace path. Local privacy mode is configurable, but stronger models are recommended for complex drift and review.</li>
+    <li>Windows SmartScreen and macOS Gatekeeper may warn until signing certificates are funded.</li>
+  </ul></section>
+  <section class="card"><h2 class="planned">Not shipped</h2><ul>
+    <li>Internet rendezvous relay, team RBAC enforcement, marketplace publishing, and automatic unsigned update application.</li>
+  </ul></section>
+  <p><a href="/">Return to the companion</a></p>
+</main></body></html>

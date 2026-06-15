@@ -46,6 +46,7 @@ test.describe('Mobile app — accessibility (axe WCAG 2.1 A/AA)', () => {
 
   for (const { name, label } of TABS) {
     test(`${name} tab has no critical/serious violations`, async ({ page }) => {
+      await page.getByRole('button', { name: 'Open navigation menu' }).click();
       const tabEl = page.locator(`text="${label}"`).first();
       if (await tabEl.isVisible({ timeout: 2000 })) {
         await tabEl.click();

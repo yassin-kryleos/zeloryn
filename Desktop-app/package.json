@@ -9,17 +9,21 @@
     "predev": "npm run generate:pricing",
     "prebuild": "npm run generate:pricing",
     "dev": "concurrently -n \"vite,server,electron\" -c \"blue,green,magenta\" \"vite\" \"tsx src/backend/server.ts\" \"electron .\"",
+    "dev:e2e": "concurrently -n \"vite,server\" -c \"blue,green\" \"vite --mode test --port 5174\" \"tsx src/backend/server.ts\"",
     "server": "tsx src/backend/server.ts",
     "build": "tsc -b && vite build && npm run build:backend",
     "build:backend": "esbuild src/backend/server.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist-backend/server.cjs",
     "dist": "npm run build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test --config playwright.config.ts",
+    "test:e2e:packaged": "npm run build && electron-builder --dir --config.win.signAndEditExecutable=false && playwright test --config playwright.packaged.config.ts"
   },
   "dependencies": {
     "@google/genai": "^2.8.0",
     "cors": "^2.8.6",
+    "dompurify": "^3.4.10",
     "dotenv": "^17.4.2",
     "electron-updater": "^6.6.2",
     "express": "^5.2.1",

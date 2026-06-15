@@ -202,6 +202,7 @@ export default function App() {
   // which would otherwise see a stale (pre-pairing) value of the state.
   const desktopPublicKeyRef = useRef<string | null>(null);
   const [companionStatus, setCompanionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected');
+  const [navOpen, setNavOpen] = useState(false);
   const [desktopLogs, setDesktopLogs] = useState<any[]>([]);
   // Phase 5.7: live session feed (P5.5's session_update broadcast) and real
   // process telemetry (replaces the removed fake cpu/memory interval).
@@ -389,6 +390,7 @@ export default function App() {
 
     ws.onerror = () => {
       setCompanionStatus('error');
+      notify('error', `Desktop host not found at ${backendUrl}. Start Forge, use its LAN/Tailscale address (not localhost), then reconnect.`);
     };
   };
 
@@ -848,7 +850,17 @@ export default function App() {
     <ErrorBoundary>
     <SafeAreaView style={styles.safeArea}>
       <RNView style={styles.header}>
-        <RNText style={styles.headerTitle}>⚡ KRYLEOS FORGE // COMPANION</RNText>
+        <RNView style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <TouchableOpacity
+            onPress={() => setNavOpen(open => !open)}
+            accessibilityRole="button"
+            accessibilityLabel={navOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            style={styles.menuButton}
+          >
+            <RNText style={styles.menuButtonText}>{navOpen ? 'X' : '☰'}</RNText>
+          </TouchableOpacity>
+          <RNText style={styles.headerTitle}>⚡ KRYLEOS FORGE // COMPANION</RNText>
+        </RNView>
         <TouchableOpacity
           onPress={toggleConnection}
           style={styles.serverStatusContainer}
@@ -861,13 +873,13 @@ export default function App() {
       </RNView>
 
       {/* Tabs Switcher */}
-      <RNView role="tablist" style={styles.tabContainer}>
+      {navOpen && <RNView role="tablist" style={styles.tabContainer}>
         {TABS.map(({ key, icon, label }) => {
           const isActive = activeTab === key;
           return (
             <TouchableOpacity
               key={key}
-              onPress={() => setActiveTab(key)}
+              onPress={() => { setActiveTab(key); setNavOpen(false); }}
               style={[styles.tabButton, isActive && styles.tabButtonActive]}
               accessibilityRole="tab"
               accessibilityLabel={`${label} tab`}
@@ -881,7 +893,7 @@ export default function App() {
             </TouchableOpacity>
           );
         })}
-      </RNView>
+      </RNView>}
 
       {/* Screen Panels with Keyboard Avoiding support */}
       <KeyboardAvoidingView
@@ -1226,7 +1238,7 @@ export default function App() {
               const isChecked = task.status === 'completed';
               const isProgress = task.status === 'progress';
               const symbol = isChecked ? '[x]' : isProgress ? '[/]' : '[ ]';
-              const color = isChecked ? '#004411' : isProgress ? '#00ff66' : '#aaffbb';
+              const color = isChecked ? '#a1a1aa' : isProgress ? '#00ff66' : '#aaffbb';
 
               return (
                 <RNView key={task.id} style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -1236,6 +1248,7 @@ export default function App() {
                     accessibilityRole="checkbox"
                     accessibilityLabel={task.text}
                     accessibilityState={{ checked: isChecked }}
+                    aria-checked={isChecked}
                   >
                     <RNText style={[styles.taskSymbol, { color }]}>{symbol}</RNText>
                     <RNText style={[styles.taskText, isChecked && styles.taskTextCompleted, { color }]}>
@@ -1655,7 +1668,7 @@ const THEMES = {
     text: '#f4f4f5',
     mutedText: '#a1a1aa',
     tabActiveBg: '#18181b',
-    label: '#71717a',
+    label: '#a1a1aa',
     value: '#f4f4f5',
     inputBg: '#000000',
     progressBarFg: '#00ff66',
@@ -1708,9 +1721,25 @@ const getStyles = (theme: string) => {
       fontWeight: 'bold',
       fontFamily: defaultFont,
     },
+    menuButton: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+    },
+    menuButtonText: {
+      color: colors.neon,
+      fontSize: 16,
+      fontWeight: 'bold',
+    },
     serverStatusContainer: {
       flexDirection: 'row',
       alignItems: 'center',
+      minHeight: 44,
+      paddingHorizontal: 6,
     },
     statusDot: {
       width: 6,
@@ -1862,6 +1891,8 @@ const getStyles = (theme: string) => {
       backgroundColor: colors.neon,
       paddingHorizontal: 12,
       paddingVertical: 8,
+      minHeight: 44,
+      justifyContent: 'center',
       borderRadius: 4,
     },
     syncBtnText: {
@@ -1949,6 +1980,7 @@ const getStyles = (theme: string) => {
       backgroundColor: colors.progressBarBg,
       borderWidth: 1,
       borderColor: colors.neon,
+      minHeight: 44,
       paddingHorizontal: 10,
       justifyContent: 'center',
       borderRadius: 4,
@@ -1984,7 +2016,6 @@ const getStyles = (theme: string) => {
     },
     taskTextCompleted: {
       textDecorationLine: 'line-through',
-      opacity: 0.5,
     },
     inputLabel: {
       color: colors.dim,

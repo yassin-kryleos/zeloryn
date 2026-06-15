@@ -45,3 +45,7 @@ qa-db/
 qa-db-performance/
 playwright-report/
 test-results/
+
+# Packaged e2e scratch dir (packaged.e2e.ts / playwright.packaged.config.ts)
+# - contains runtime secrets/keys copied for the packaged app sandbox
+.tmp-e2e/

@@ -1,0 +1,150 @@
+{
+  "startedAt": "2026-06-15T07:35:59.657Z",
+  "durationMs": 1800000,
+  "requests": 6988,
+  "failures": 0,
+  "errorRatePercent": 0,
+  "latencyMs": {
+    "average": 3.8,
+    "p95": 9.9,
+    "max": 43.5
+  },
+  "memory": {
+    "initialMb": 185.8,
+    "finalMb": 162.7,
+    "peakMb": 185.8,
+    "growthMb": -23.1,
+    "samples": [
+      {
+        "elapsedMs": 1874,
+        "workingSetMb": 185.8
+      },
+      {
+        "elapsedMs": 62099,
+        "workingSetMb": 160.9
+      },
+      {
+        "elapsedMs": 122034,
+        "workingSetMb": 160.7
+      },
+      {
+        "elapsedMs": 181923,
+        "workingSetMb": 161.5
+      },
+      {
+        "elapsedMs": 242053,
+        "workingSetMb": 162.1
+      },
+      {
+        "elapsedMs": 301891,
+        "workingSetMb": 161.5
+      },
+      {
+        "elapsedMs": 362124,
+        "workingSetMb": 161.8
+      },
+      {
+        "elapsedMs": 422130,
+        "workingSetMb": 161.7
+      },
+      {
+        "elapsedMs": 481943,
+        "workingSetMb": 161.8
+      },
+      {
+        "elapsedMs": 541921,
+        "workingSetMb": 162.3
+      },
+      {
+        "elapsedMs": 601968,
+        "workingSetMb": 162.4
+      },
+      {
+        "elapsedMs": 661994,
+        "workingSetMb": 162.1
+      },
+      {
+        "elapsedMs": 721952,
+        "workingSetMb": 161.7
+      },
+      {
+        "elapsedMs": 781916,
+        "workingSetMb": 162.2
+      },
+      {
+        "elapsedMs": 841902,
+        "workingSetMb": 162.2
+      },
+      {
+        "elapsedMs": 901926,
+        "workingSetMb": 162.2
+      },
+      {
+        "elapsedMs": 961933,
+        "workingSetMb": 162.3
+      },
+      {
+        "elapsedMs": 1021890,
+        "workingSetMb": 162.2
+      },
+      {
+        "elapsedMs": 1081951,
+        "workingSetMb": 162.4
+      },
+      {
+        "elapsedMs": 1141968,
+        "workingSetMb": 162.4
+      },
+      {
+        "elapsedMs": 1202028,
+        "workingSetMb": 161.8
+      },
+      {
+        "elapsedMs": 1262035,
+        "workingSetMb": 162.7
+      },
+      {
+        "elapsedMs": 1322020,
+        "workingSetMb": 162.7
+      },
+      {
+        "elapsedMs": 1382006,
+        "workingSetMb": 162.2
+      },
+      {
+        "elapsedMs": 1442085,
+        "workingSetMb": 162.2
+      },
+      {
+        "elapsedMs": 1501955,
+        "workingSetMb": 162.6
+      },
+      {
+        "elapsedMs": 1561910,
+        "workingSetMb": 162.6
+      },
+      {
+        "elapsedMs": 1622084,
+        "workingSetMb": 162.6
+      },
+      {
+        "elapsedMs": 1681979,
+        "workingSetMb": 162.4
+      },
+      {
+        "elapsedMs": 1741990,
+        "workingSetMb": 162.7
+      },
+      {
+        "elapsedMs": 1801997,
+        "workingSetMb": 162.7
+      }
+    ]
+  },
+  "thresholds": {
+    "maxErrorRatePercent": 1,
+    "maxP95LatencyMs": 500,
+    "maxMemoryGrowthMb": 80
+  },
+  "passed": true
+}

@@ -167,7 +167,7 @@ fix the legal copy to match.
 
 **Decision: amend, not revert.** By the time of this audit, Stripe
 (`create-checkout-session`, webhook with signature verification and
-mock-key production guards) and Razorpay (`razorpay/create-order`,
+mock-key production guards) and Razorpay (`razorpay/create-subscription`,
 `razorpay/webhook`, same guards) were both fully implemented, SEC-hardened,
 and exercised by `tier_trust.test.ts`. Reverting would discard working,
 tested checkout/webhook code in favor of a Gumroad integration that does not
@@ -190,9 +190,9 @@ planning document.
   not the "parallel webhook tier-grant" duplication the re-audit warned
   about: it is a distinct product (one-time lifetime key vs. recurring
   subscription), already covered by `tier_trust.test.ts`'s
-  validly-signed/expired-key cases, and `/api/auth/subscribe` (SEC-M3) still
-  only permits self-service downgrade to `free` — no path lets a client
-  self-grant a paid tier outside these two verified mechanisms.
+  validly-signed/expired-key cases. `/api/auth/subscribe` is retired with
+  HTTP 410; cancellation now goes through the linked processor rather than
+  changing local entitlement state directly.
 - `Project-Documents/launch/terms.md` §3 and `privacy.md` §4 are rewritten
   to name Stripe + Razorpay as the actual payment processors (recurring
   subscriptions) and describe the offline license key as a separate
@@ -411,3 +411,271 @@ pre-existing expected fail) including 52/52 in
 additions from the P1(a) follow-up, run for the first time in this pass).
 Web-app `tsc --noEmit` clean, 13/13 vitest. Mobile-app `tsc --noEmit` clean,
 46/46 vitest.
+
+## Phase 4 — authenticated HTTP tier resolution (2026-06-15)
+
+**Re-audit finding addressed:** "Close the forged-tier bypass for real.
+Derive tier server-side from the authenticated user's validated license on
+`/api/crew/sync`; require an auth token. Fix (not allowlist)
+`/api/plan/whats-left` and `/api/cost/history`."
+
+The prior follow-up removed direct `req.body.tier`/`req.query.tier` reads, but
+these routes still read `sandbox.getUserTier()`, a process-global value set by
+the latest WebSocket auth handshake. That did not bind an HTTP request to its
+caller and could leak one connected user's tier into another request.
+
+**Fix:**
+- `Desktop-app/src/backend/server.ts:256-283` adds strict Bearer-token parsing
+  and resolves the caller through `syncController.getUserByToken()`, whose
+  persisted tier is set only by verified payment webhooks or successful
+  Ed25519 license activation.
+- `/api/crew/sync` (`server.ts:2584`) now requires a valid token and returns
+  `401` without one. An authenticated Free caller sending
+  `{tier:'founder'}` remains Free and receives `403`. Solo and higher retain
+  the documented direct-sync entitlement.
+- `/api/plan/whats-left` (`server.ts:2509`) and `/api/cost/history`
+  (`server.ts:3140`) use the authenticated account tier when supplied; guest
+  reads deliberately remain Free. Invalid supplied tokens fail with `401`.
+- `PlanningScreen.tsx:44,198,884,1077` receives the account token from
+  `App.tsx:2131` and sends it on all three requests.
+- `tier_trust.test.ts` now covers unauthenticated `401`, authenticated Free +
+  forged-Founder `403`, and forged query params against an authenticated Free
+  account.
+
+**Verification:** Desktop-app `npx tsc --noEmit` clean. Focused tier-trust
+suite 14/14. Full `npx vitest run`: 431 passed, 1 expected fail, 1 skipped
+across 47 files (46 passed, 1 skipped).
+
+## Phase 4 — recurring processor reconciliation (2026-06-15)
+
+**Re-audit finding addressed:** "Reconcile the monetization decision honestly.
+Either revert to Gumroad/offline-only, or formally amend DECISIONS.md to
+Stripe+Razorpay ... and fix `terms.md`/`privacy.md` to name the real processor
+and retire the parallel webhook tier-grant."
+
+The earlier amendment correctly named Stripe + Razorpay, but a second audit of
+the implementation found Razorpay still used `orders.create`: a one-time
+payment charged the displayed monthly amount and granted an indefinite tier.
+That contradicted both the recurring-subscription decision and legal copy.
+Cancellation buttons also attempted a local tier mutation without cancelling
+processor billing.
+
+**Fix:**
+- `razorpay.ts:40-68` now creates a Razorpay Subscription against server-only
+  monthly plan IDs and returns a `subscriptionId`; checkout passes
+  `subscription_id` (`Desktop App.tsx:1518-1540`, Web `App.tsx:989-1009`).
+  Production configuration requires `RAZORPAY_PLAN_SOLO`,
+  `RAZORPAY_PLAN_SOLO_PLUS`, and `RAZORPAY_PLAN_FOUNDER`; `.env.example`
+  documents them.
+- `server.ts:403-421` grants only on Razorpay subscription activation/charge
+  events and demotes on cancelled/completed/expired/halted events. The retired
+  `payment.captured` one-time-order shape no longer grants entitlement.
+- `sync.ts:69,197-233` persists the processor and subscription ID. Stripe and
+  Razorpay webhooks remain independent because they service distinct regions,
+  but both now implement the same recurring product; the offline Ed25519 key
+  remains a separate lifetime SKU.
+- `POST /api/billing/cancel-subscription` (`server.ts:1161`) schedules Stripe
+  or Razorpay cancellation at cycle end. Desktop/Web cancellation actions use
+  it. `/api/auth/subscribe` now returns 410 and cannot mutate entitlement.
+- `terms.md` §3 and `privacy.md` §4 now describe the actual stored billing
+  metadata and processor-backed cancellation behavior. Stale "mock billing"
+  UI copy was removed.
+
+Razorpay implementation follows its official subscription contract: create a
+Subscription from a Plan, pass `subscription_id` to Standard Checkout, and use
+subscription lifecycle webhooks as the entitlement source of truth.
+
+**Verification:** Desktop-app `npx tsc --noEmit` clean; focused processor/tier
+suites 19/19; full `npx vitest run`: 436 passed, 1 expected fail, 1 skipped
+across 48 files (47 passed, 1 skipped). Web-app `npx tsc --noEmit` clean and
+13/13 vitest.
+
+## Phase 1 — packaged artifact boot re-verification (2026-06-15)
+
+**Re-audit finding addressed:** "Make the packaged app actually boot ... then
+smoke-test the real unpacked `.exe` — not the loose bundle. Rename the scorer's
+`packaged backend self-starts` gate to test the asar artifact."
+
+The earlier `asarUnpack` and `process.resourcesPath` code changes were present,
+but their recorded verification only launched the loose backend bundle.
+
+**Verification and scorer fix:**
+- Ran a fresh `npm run dist`. Renderer/backend builds completed and
+  electron-builder produced
+  `dist-desktop/win-unpacked/Kryleos Forge.exe` plus
+  `resources/app.asar.unpacked/dist-backend/server.cjs` and unpacked production
+  `node_modules` (including Express), all timestamped from this run.
+- Launched that exact `.exe`. Its child command line used the packaged
+  `app.asar.unpacked/dist-backend/server.cjs`; port 3001 opened, a request to
+  `/` returned expected HTTP 404, and a renderer process loaded. The process
+  tree was then stopped and port 3001 closed.
+- `qa/scripts/release-score.mjs` now locates/builds the current platform's
+  electron-builder unpacked artifact, launches its packaged executable in
+  `ELECTRON_RUN_AS_NODE` mode against the unpacked backend, registers a real
+  Free account, and requires authenticated forged-Founder `/api/crew/sync` to
+  return 403. The old loose `dist-backend/server.cjs` smoke and misleading
+  label are removed. `node --check` passes.
+
+**Installer limitation remains environment-only:** after creating the working
+`win-unpacked` artifact, electron-builder failed while extracting its
+cross-platform `winCodeSign` cache because this Windows account cannot create
+the two macOS symlinks (`A required privilege is not held by the client`). No
+NSIS installer was emitted. Developer Mode/admin or CI is still required for
+the installer packaging step; the actual packaged executable/backend boot
+path is now directly proven.
+
+**Verification:** production build TypeScript completed inside `npm run dist`;
+latest full Desktop vitest remains 436 passed, 1 expected fail, 1 skipped.
+
+## Phase 1 — vendored CI wiring re-check (2026-06-15)
+
+**Re-audit finding addressed:** "Wire submodules in CI ... or vendor the apps."
+
+No code change was needed. Commit `8ed591c` already converted Desktop-app and
+Mobile-app from gitlinks to regular tracked directories and removed
+`.gitmodules`. Re-adding submodule configuration would regress the fix.
+
+**Verification:** `git ls-files -s Desktop-app/package.json
+Mobile-app/package.json` reports mode `100644` for both (not gitlink mode
+`160000`), and `.gitmodules` is absent. `.github/workflows/ci.yml` checks out
+the repository normally and its OS/app test matrix explicitly lists
+Desktop-app, Web-app, and Mobile-app; dedicated Desktop Ollama e2e and root
+release-score jobs also run after checkout. Mobile-app `npx tsc --noEmit`
+clean and `npx vitest run` 46/46. Desktop/Web verification counts are recorded
+in the preceding Phase 4 entries.
+
+## Phase 3 — P2 criteria and readiness hardening (2026-06-15)
+
+**Re-audit findings addressed:** (8) "extend comment-trivia-stripping beyond
+JS/TS/MD ... add `realpath`/`lstat` to `resolveWorkspace`"; (9) "invalidate
+`llm_check` on working-tree content"; (10) "ANY failed honesty/security
+phase-gate sub-check caps the final score ... capture node's own exit code
+directly in CI."
+
+**Fix:**
+- `planningV2.ts:194-215` resolves both workspace root and requested task
+  workspace through `lstat` + native `realpath`, verifies the resolved target
+  is a directory inside the real root, and rejects an in-root symlink/junction
+  that points outside.
+- `planningV2.ts:221-307` now blanks comments and quoted strings for every
+  indexed language family: JS/TS scanner; slash-comment languages
+  (Go/Rust/Java/C#/PHP/CSS/SCSS); hash-comment languages
+  (Python/Ruby/shell/YAML); SQL; PowerShell; HTML; JSON/text; and Markdown
+  comments/code spans. New table-driven regression fixtures cover all 17
+  previously unprotected extensions.
+- `planningV2.ts:461-476,1453-1494` replaces the `llm_check` commit-only cache
+  key with a SHA-256 hash of the current indexed workspace contents (excluding
+  Kryleos-generated state). A test mutates `Login.tsx` between two drift runs
+  in a non-git workspace and proves the model is called again.
+- `release-score.mjs:430-434` hard-caps the final result at 6.0 whenever any
+  honesty/security phase-gate check fails. The CI workflow already invokes
+  `node qa/scripts/release-score.mjs` directly with no `tail`/pipeline, so no CI
+  edit was needed.
+
+**Verification:** Desktop-app `npx tsc --noEmit` clean; focused planning suite
+21/21; full `npx vitest run`: 438 passed, 1 expected fail, 1 skipped across 48
+files. `release-score.mjs` syntax clean. Live scorer run with E2E deliberately
+unproven: raw 8.0, PreviewDeck honesty gate failed, hard cap applied to 6.0;
+packaged-artifact boot and authenticated forged-tier gates both passed.
+
+## Phase 6 - activation and first-run proof (2026-06-15)
+
+**Plan finding addressed:** "A stranger reaches a green trace in under 2
+minutes, with no API key - and never hits a dead end." The same phase required
+Ollama-first defaults, a persistent activation checklist, a proof-oriented
+trace, removal of the Preview Deck canned reply, and actionable first-run
+errors.
+
+**Fix:**
+- `server.ts:895` adds `POST /api/demo/start`. It creates an isolated sample
+  workspace, executes `src/hello.js` with the local Node runtime, saves a
+  project-scoped FLOW task, evaluates a real file criterion, and persists a
+  trace marked `mode: 'demo'`. No model client or API key participates.
+- `App.tsx:113-171` defaults to `ollama:qwen2.5-coder`, polls provider
+  detection, and counts a detected Ollama endpoint as a provider. The setup
+  screen and persistent card track connect-model, demo-trace, and add-repo
+  activation steps (`ProjectSetupScreen.tsx:39-113`, `App.tsx:2443-2460`).
+- `PlanningScreen.tsx:1866` labels the resulting proof and keeps criterion,
+  changed-file, and command evidence visible. Starter prompts were added to
+  the empty planning state.
+- The fake Side Chat branch and its canned "Context note queued" response were
+  removed from `PreviewDeck.tsx`. Provider, model-download, invalid-key, and
+  companion-host errors now name the next action.
+
+**Verification:** Browser automation clicked `RUN NO-KEY DEMO` and observed a
+green criterion, files changed, and command evidence without a key. The fresh
+packaged Electron artifact repeated the full path in 26.0 seconds. Route
+integration covers the deterministic demo. Final Desktop vitest: 444 passed,
+1 expected fail, 1 skipped; TypeScript and ESLint clean.
+
+## Phase 7 - crash safety, privacy controls, and runtime QA (2026-06-15)
+
+**Plan finding addressed:** "Replace dev-server claims with packaged-runtime
+evidence; make the trace crash-safe; close the security/privacy hygiene gaps."
+This includes sanitized markdown, duplicate-login/mobile-nav fixes, atomic
+traces, interrupted-run recovery, data deletion, packaged performance, CI E2E,
+and soak/stress evidence.
+
+**Fix:**
+- `planningV2.ts:1126-1177` writes traces through temp-file rename, forces
+  interrupted/max-step/history-compressed runs to `in_progress` with unknown
+  criteria, and recovers a stale `.kryleos/run-in-progress.json` marker on the
+  next project activation. `electron.cjs:1-31` starts Electron crash reporting
+  and records uncaught exceptions/unhandled rejections.
+- `SafeMarkdown.tsx` and `markdownSanitizer.ts` render only sanitized `strong`
+  and `code` markup through DOMPurify. The injection regression proves an
+  `<img onerror>` payload cannot enter the DOM. `App.tsx:1450` blocks duplicate
+  login POSTs; Mobile adds an accessible hamburger and fixes contrast/checkbox
+  semantics.
+- `DELETE /api/credentials` and `DELETE /api/local-data` clear app credentials
+  and local app state while explicitly preserving repository files and
+  `.kryleos`. Credential updates/deletes now share a serialized atomic queue;
+  E2E data is isolated through `KRYLEOS_DATA_DIR`. A concurrent-write
+  regression preserves all fields and readable JSON.
+- Desktop/Web/Mobile Playwright suites and a packaged-Electron driver now run
+  in CI (`ci.yml:130-185`). `vite.config.ts:6` fixes packaged `file://` assets.
+  The driver also exposed and fixed a demo FLOW-session race. Desktop E2E uses
+  dedicated port 5174 to prevent cross-app server reuse.
+- The 1,000-file planning stress test passed under 10 seconds. The reproducible
+  30-minute soak (`session-soak.mjs`) sent 6,988 requests with 0 failures,
+  3.8 ms average / 9.9 ms p95 latency, and backend RSS changed from 185.8 MB
+  to 162.7 MB (-23.1 MB). Raw samples are in `launch/soak-results.json`.
+
+**Verification:** Desktop browser E2E 29 passed / 2 scoped skips; Web 31/31;
+Mobile 17/17; packaged Electron 1/1. Packaged cold readiness measured 2,434 ms
+and process-tree working set 648.1 MB, which remains a profiling concern.
+Final unit matrix: Desktop 444 passed / 1 expected fail / 1 skipped, Web 13/13,
+Mobile 46/46. All three TypeScript checks, Desktop/Web lint, and all three
+production dependency audits passed with zero vulnerabilities.
+
+## Phase 8 - launch evidence and honest demand gate (2026-06-15)
+
+**Plan finding addressed:** "Everything needed to open an invited beta - except
+certs," including a realistic local-model check, launch clips, a public
+real/preview/simulated page, an unsigned-install guide, and real demand signal.
+
+**Outcome:**
+- A real Ollama run with `qwen2.5:7b` failed the full edit-to-green-trace path
+  after 76.8 seconds; the comment-aware evaluator correctly rejected the TODO
+  mention. `launch/LOCAL_MODEL_REALITY_CHECK.md` records the failure. Product
+  copy now treats local privacy as configurable mode and recommends a stronger
+  model for complex demos rather than claiming quality equivalence.
+- `launch/assets/` contains real onboarding, trace, companion screenshots and
+  two clearly identified summary GIFs. `launch/INSTALL_GUIDE.md` documents
+  SmartScreen/Gatekeeper and unsigned-build reality. `Web-app/public/whats-real.html`
+  publicly separates production, preview, limitations, and unshipped work.
+- Demand evidence is not fabricated: `launch/DEMAND_VALIDATION.md` remains
+  **0/1 design partners and 0/25 intent waitlist** with concrete outreach
+  prompts. This launch gate is still open.
+- `release-score.mjs` now always builds a fresh electron-builder artifact,
+  drives its renderer through the no-key demo, requires the completed soak and
+  public honesty page, and hard-gates the recorded demand targets. Desktop and
+  Web E2E use separate ports, and CI captures Node's direct exit status.
+
+**Verification and final score:** Every technical category passed: unit 3/3,
+TypeScript 3/3, lint 2/2, production audit 3/3, browser E2E 3/3, packaged
+backend boot, authenticated forged-tier rejection, packaged no-key demo, soak,
+and public honesty page. Raw technical score: **9.8/10**. The unmet real-user
+demand gate triggers the required hard cap, so final release-readiness score is
+**6.0/10**. The invited beta is not release-ready yet; the remaining scored
+blocker is external demand evidence, not a hidden technical failure.

@@ -18,9 +18,7 @@ test.describe('Desktop renderer — resilience', () => {
   });
 
   test('rapid tab switching does not crash the renderer', async ({ page }) => {
-    const tabs = page.locator('button, [role="tab"]').filter({
-      hasText: /plan|crew|flow|forge|chat|session/i
-    });
+    const tabs = page.locator('button.forge-tab');
     const count = await tabs.count();
     if (count < 2) { test.skip(); return; }
 
@@ -41,6 +39,8 @@ test.describe('Desktop renderer — resilience', () => {
 
     for (let i = 0; i < 5; i++) {
       await configBtn.click();
+      await page.waitForTimeout(100);
+      await page.getByRole('button', { name: '[X]', exact: true }).click();
       await page.waitForTimeout(100);
     }
 

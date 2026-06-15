@@ -104,9 +104,53 @@ describe('PlanningV2Service trace persistence', () => {
     const task = await getTask('task_1700000000001');
     expect(task.latestTraceId).toBeTruthy();
   });
+
+  it('writes traces atomically and forces incomplete evidence to unknown', async () => {
+    fs.writeFileSync(path.join(tmp, 'present.ts'), 'ok');
+    await seed([{ id: 'task_partial', title: 'Partial', status: 'in_progress', acceptanceCriteria: [
+      { id: 'c1', type: 'file_exists', description: 'present', target: 'present.ts', phase: 'phase2' }
+    ] }]);
+    const trace = await svc.saveTrace({
+      planItemId: 'task_partial',
+      incompleteReason: 'maximum steps reached',
+      suggestedStatus: 'in_progress'
+    });
+    expect(trace.suggestedStatus).toBe('in_progress');
+    expect(trace.criteriaResults[0].status).toBe('unknown');
+    expect(trace.incompleteReason).toContain('maximum steps');
+    expect(fs.readdirSync(path.join(tmp, '.kryleos', 'traces')).some(file => file.endsWith('.tmp'))).toBe(false);
+  });
+
+  it('recovers an interrupted run marker as a non-green trace', async () => {
+    await seed([{ id: 'task_interrupted', title: 'Interrupted', status: 'in_progress' }]);
+    fs.mkdirSync(path.join(tmp, '.kryleos'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, '.kryleos', 'run-in-progress.json'), JSON.stringify({
+      planItemId: 'task_interrupted',
+      startedAt: '2026-02-03T00:00:00.000Z'
+    }));
+    const trace = await svc.recoverInterruptedRun();
+    expect(trace?.suggestedStatus).toBe('in_progress');
+    expect(trace?.incompleteReason).toContain('stopped before trace completion');
+    expect(fs.existsSync(path.join(tmp, '.kryleos', 'run-in-progress.json'))).toBe(false);
+  });
 });
 
 describe('PlanningV2Service.checkDrift', () => {
+  it('scans a 1,000-file workspace without losing structural correctness', async () => {
+    const stressDir = path.join(tmp, 'stress');
+    fs.mkdirSync(stressDir);
+    for (let index = 0; index < 1000; index++) {
+      fs.writeFileSync(path.join(stressDir, `file-${index}.ts`), `export const value${index} = ${index};\n`);
+    }
+    await seed([{ id: 'stress-task', title: 'Find final stress file', status: 'todo', acceptanceCriteria: [
+      { id: 'stress-file', type: 'file_exists', description: 'final file exists', target: 'stress/file-999.ts', phase: 'phase2' }
+    ] }]);
+    const startedAt = Date.now();
+    const report = await svc.checkDrift();
+    expect(report.items[0].results[0].status).toBe('pass');
+    expect(Date.now() - startedAt).toBeLessThan(10_000);
+  });
+
   it('classifies complete vs not_started from file evidence and persists driftStatus', async () => {
     fs.writeFileSync(path.join(tmp, 'present.ts'), 'ok');
     await seed([
@@ -167,6 +211,13 @@ describe('PlanningV2Service.checkDrift', () => {
     expect(report2.llmEvaluated).toBe(0);
     const item2 = report2.items.find(i => i.taskId === 'task_llm')!;
     expect(item2.results[0].status).toBe('pass');
+
+    // Working-tree content changes invalidate the cache even when no git
+    // commit changes (this temp workspace is intentionally not a git repo).
+    fs.writeFileSync(path.join(tmp, 'src', 'Login.tsx'), 'export const LoginForm = "changed";');
+    const report3 = await svc.checkDrift(client);
+    expect(calls).toBe(2);
+    expect(report3.llmEvaluated).toBe(1);
   });
 
   it('defers llm_check evaluation once the per-run budget is exhausted', async () => {
@@ -305,6 +356,37 @@ describe('PlanningV2Service.evaluateCriteria symbol matching', () => {
     ]);
     expect(symFail.status).toBe('fail');
   });
+
+  it('symbol_exists strips comments and strings across indexed language families', () => {
+    const fixtures: Record<string, string> = {
+      'sample.json': '{"note":"GhostSymbol"}',
+      'sample.txt': '"GhostSymbol"',
+      'sample.css': '/* GhostSymbol */ .x { content: "GhostSymbol"; }',
+      'sample.scss': '// GhostSymbol\n.x { content: "GhostSymbol"; }',
+      'sample.html': '<!-- GhostSymbol --><div title="GhostSymbol"></div>',
+      'sample.yml': '# GhostSymbol\nnote: "GhostSymbol"',
+      'sample.yaml': '# GhostSymbol\nnote: "GhostSymbol"',
+      'sample.py': '# GhostSymbol\nmsg = "GhostSymbol"',
+      'sample.go': '// GhostSymbol\nvar msg = "GhostSymbol"',
+      'sample.rs': '// GhostSymbol\nlet msg = "GhostSymbol";',
+      'sample.java': '// GhostSymbol\nString msg = "GhostSymbol";',
+      'sample.cs': '// GhostSymbol\nvar msg = "GhostSymbol";',
+      'sample.php': '<?php // GhostSymbol\n$msg = "GhostSymbol";',
+      'sample.rb': '# GhostSymbol\nmsg = "GhostSymbol"',
+      'sample.sql': '-- GhostSymbol\nSELECT "GhostSymbol";',
+      'sample.sh': '# GhostSymbol\nmsg="GhostSymbol"',
+      'sample.ps1': '# GhostSymbol\n$msg = "GhostSymbol"',
+    };
+    for (const [name, content] of Object.entries(fixtures)) {
+      fs.writeFileSync(path.join(tmp, name), content);
+    }
+
+    const task: ProjectTask = { id: 't', title: 'x', status: 'todo' };
+    const [result] = svc.evaluateCriteria(task, [
+      { id: 'c', type: 'symbol_exists', description: 'd', target: 'GhostSymbol', phase: 'phase1', status: 'unknown' }
+    ]);
+    expect(result.status).toBe('fail');
+  });
 });
 
 describe('PlanningV2Service.evaluateCriteria workspace scoping', () => {
@@ -340,6 +422,24 @@ describe('PlanningV2Service.evaluateCriteria workspace scoping', () => {
       ]);
       expect(symFail.status).toBe('fail');
     } finally {
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an in-root symlink or junction that resolves outside the workspace', () => {
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pv2-symlink-outside-'));
+    const linkPath = path.join(tmp, 'linked-workspace');
+    fs.writeFileSync(path.join(outsideDir, 'outside.ts'), 'export const SymlinkEscapeSymbol = 1;');
+
+    try {
+      fs.symlinkSync(outsideDir, linkPath, process.platform === 'win32' ? 'junction' : 'dir');
+      const task: ProjectTask = { id: 't', title: 'x', status: 'todo', workspace: 'linked-workspace' };
+      const [result] = svc.evaluateCriteria(task, [
+        { id: 'c', type: 'symbol_exists', description: 'd', target: 'SymlinkEscapeSymbol', phase: 'phase1', status: 'unknown' }
+      ]);
+      expect(result.status).toBe('fail');
+    } finally {
+      fs.rmSync(linkPath, { recursive: true, force: true });
       fs.rmSync(outsideDir, { recursive: true, force: true });
     }
   });

@@ -110,8 +110,10 @@ function App() {
   const [ollamaUrl, setOllamaUrl] = useState<string>(() => localStorage.getItem('matrix_ollama_url') || 'http://localhost:11434');
   const [useSearch, setUseSearch] = useState<boolean>(() => localStorage.getItem('matrix_gemini_use_search') === 'true');
   const [model, setModel] = useState<string>(() => {
-    return localStorage.getItem('matrix_model') || 'deepseek-chat';
+    return localStorage.getItem('matrix_model') || 'ollama:qwen2.5-coder';
   });
+  const [ollamaDetected, setOllamaDetected] = useState(false);
+  const [activationRevision, setActivationRevision] = useState(0);
   const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
   const [theme, setTheme] = useState<string>(() => {
     const saved = localStorage.getItem('matrix_theme');
@@ -144,6 +146,7 @@ function App() {
   const [pendingDisclosure, setPendingDisclosure] = useState<{ provider: string; query: string; options: SendQueryOptions } | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const notificationIdRef = useRef<number>(1);
+  const loginInFlightRef = useRef(false);
 
   const notify = useCallback((message: string, kind: NotificationKind = 'info') => {
     const id = notificationIdRef.current++;
@@ -152,6 +155,22 @@ function App() {
       setNotifications(prev => prev.filter(notification => notification.id !== id));
     }, kind === 'error' ? 7000 : 4500);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const detect = async () => {
+      try {
+        const res = await fetch(`http://localhost:3001/api/providers/detect?baseUrl=${encodeURIComponent(ollamaUrl)}`);
+        const data = await res.json();
+        if (!cancelled) setOllamaDetected(Boolean(res.ok && data.success && data.ollamaAvailable));
+      } catch {
+        if (!cancelled) setOllamaDetected(false);
+      }
+    };
+    detect();
+    const timer = window.setInterval(detect, 30_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [ollamaUrl]);
 
   // PII filter, Telemetry, and Multi-Repo states
   const [piiFilterEnabled, setPiiFilterEnabled] = useState<boolean>(() => localStorage.getItem('matrix_pii_filter_enabled') === 'true');
@@ -190,7 +209,7 @@ function App() {
   const [appGraphPreviewFile, setAppGraphPreviewFile] = useState<{ path: string; content: string } | null>(null);
   const [isAppGraphEditing, setIsAppGraphEditing] = useState<boolean>(false);
   const [appGraphEditedContent, setAppGraphEditedContent] = useState<string>('');
-  const [user, setUser] = useState<{ email: string; token: string; isPremium: boolean; tier?: string } | null>(() => {
+  const [user, setUser] = useState<{ email: string; token: string; isPremium: boolean; tier?: string; billingProvider?: 'stripe' | 'razorpay' | 'license' } | null>(() => {
     const saved = localStorage.getItem('matrix_user');
     return saved ? JSON.parse(saved) : null;
   });
@@ -319,6 +338,10 @@ function App() {
       if (res.ok && data.success) {
         setActiveProject(project);
         localStorage.setItem('matrix_active_project_id', project.id);
+        if (project.id !== 'project_demo') {
+          localStorage.setItem('matrix_activation_repo', 'true');
+          setActivationRevision(value => value + 1);
+        }
         localStorage.setItem('matrix_project_name', project.name);
         if (project.description) {
           localStorage.setItem('matrix_project_description', project.description);
@@ -1223,6 +1246,8 @@ function App() {
     if (payload.projectName) localStorage.setItem('matrix_project_name', payload.projectName);
     if (payload.description) localStorage.setItem('matrix_project_description', payload.description);
     localStorage.setItem('matrix_setup_done', 'true');
+    localStorage.setItem('matrix_activation_repo', 'true');
+    setActivationRevision(value => value + 1);
     // Create AND activate a real project so PLAN opens ready to use — the
     // Scratchbook requires an active project.
     try {
@@ -1247,6 +1272,20 @@ function App() {
     setActiveSpace('plan');
     if (payload.description) setPlanningInitialInput(payload.description);
     notify('Project set up. Describe and refine your build in PLAN.', 'success');
+  };
+
+  const handleRunDemo = async () => {
+    const res = await fetch('http://localhost:3001/api/demo/start', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+    localStorage.setItem('matrix_setup_done', 'true');
+    localStorage.setItem('matrix_activation_demo', 'true');
+    setActivationRevision(value => value + 1);
+    await fetchProjects(data.project.id);
+    await handleSelectProject(data.project);
+    setShowSetup(false);
+    setActiveSpace('plan');
+    notify('Demo trace passed without an API key. Open Build Loop to inspect the proof.', 'success');
   };
 
   const handleSendPlanItemToForge = (title: string) => {
@@ -1408,6 +1447,8 @@ function App() {
   };
 
   const handleLogin = async (email: string, pass: string) => {
+    if (loginInFlightRef.current) return;
+    loginInFlightRef.current = true;
     try {
       const res = await fetch('http://localhost:3001/api/auth/login', {
         method: 'POST',
@@ -1424,6 +1465,8 @@ function App() {
       }
     } catch (err: any) {
       notify(`Error logging in: ${err.message}`, 'error');
+    } finally {
+      loginInFlightRef.current = false;
     }
   };
 
@@ -1462,8 +1505,27 @@ function App() {
     }
   };
 
+  const handleCancelSubscription = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('http://localhost:3001/api/billing/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${user.token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        notify('Cancellation scheduled for the end of the current billing cycle.', 'success');
+      } else {
+        notify(`Cancellation failed: ${data.error || 'Unknown billing account'}`, 'error');
+      }
+    } catch (err: any) {
+      notify(`Cancellation error: ${err.message}`, 'error');
+    }
+  };
+
   const handleSubscribe = async (tier: string = 'basic') => {
     if (!user) return;
+    if (tier === 'free') return handleCancelSubscription();
     if (isIndianLocale()) {
       return handleSubscribeRazorpay(tier);
     }
@@ -1496,7 +1558,7 @@ function App() {
   const handleSubscribeRazorpay = async (tier: string) => {
     if (!user) return;
     try {
-      const res = await fetch('http://localhost:3001/api/billing/razorpay/create-order', {
+      const res = await fetch('http://localhost:3001/api/billing/razorpay/create-subscription', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1506,7 +1568,7 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        notify(`Upgrade failed: ${data.error || 'Could not create Razorpay order'}`, 'error');
+        notify(`Upgrade failed: ${data.error || 'Could not create Razorpay subscription'}`, 'error');
         return;
       }
 
@@ -1518,9 +1580,7 @@ function App() {
 
       const checkout = new (window as any).Razorpay({
         key: data.keyId,
-        order_id: data.orderId,
-        amount: data.amount,
-        currency: data.currency,
+        subscription_id: data.subscriptionId,
         name: 'Kryleos Forge',
         description: `Upgrade to ${tier.toUpperCase()} plan`,
         prefill: { email: user.email },
@@ -2056,7 +2116,6 @@ function App() {
                 onOpenFilePreview={handleOpenAppGraphPreview}
                 onPinFile={handlePinAppFile}
                 onNotify={notify}
-                onSendQuery={(query) => handleSendQuery(query, 'code')}
               />
             </div>
           ) : activeSpace === 'cowork' ? (
@@ -2128,6 +2187,7 @@ function App() {
                 tasks={tasks}
                 onConfirmComplete={handleConfirmTraceComplete}
                 userTier={user?.tier || (user?.isPremium ? 'basic' : 'free')}
+                authToken={user?.token || ''}
                 onNotify={notify}
                 onAbort={handleAbortWorkflow}
                 resetKey={planningResetKey}
@@ -2359,8 +2419,9 @@ function App() {
           <div className="fixed inset-0 z-[60] bg-forge-very-dark flex">
             <ProjectSetupScreen
               defaultWorkspace={workspaceRoot}
-              hasProvider={Boolean(apiKey || geminiApiKey || openaiApiKey || anthropicApiKey || openrouterApiKey)}
+              hasProvider={Boolean(apiKey || geminiApiKey || openaiApiKey || anthropicApiKey || openrouterApiKey || ollamaDetected)}
               onStart={handleStartBuilding}
+              onRunDemo={handleRunDemo}
               onUpdateWorkspaceRoot={(newPath) => handleUpdateConfig({ workspaceRoot: newPath })}
               onOpenConfig={() => { localStorage.setItem('matrix_setup_done', 'true'); setShowSetup(false); }}
             />
@@ -2378,6 +2439,29 @@ function App() {
           notifications={notifications}
           onDismiss={(id) => setNotifications(prev => prev.filter(notification => notification.id !== id))}
         />
+        {!showSetup && (() => {
+          void activationRevision;
+          const activationSteps = [
+            { label: 'Connect model', done: Boolean(apiKey || geminiApiKey || openaiApiKey || anthropicApiKey || openrouterApiKey || ollamaDetected) },
+            { label: 'Run demo trace', done: localStorage.getItem('matrix_activation_demo') === 'true' },
+            { label: 'Point at repo', done: localStorage.getItem('matrix_activation_repo') === 'true' }
+          ];
+          if (activationSteps.every(step => step.done)) return null;
+          return (
+            <div className="fixed bottom-3 right-3 z-40 w-64 border border-forge-neon/40 bg-forge-panel-bg shadow-lg rounded p-3 font-mono text-[10px] space-y-2 pointer-events-none">
+              <div className="text-forge-neon uppercase font-bold">Activation checklist</div>
+              {activationSteps.map(step => (
+                <div key={step.label} className={step.done ? 'text-emerald-400' : 'text-forge-dim'}>
+                  {step.done ? '[x]' : '[ ]'} {step.label}
+                </div>
+              ))}
+              <div className="flex gap-1 pointer-events-auto">
+                {!activationSteps[1].done && <button type="button" onClick={handleRunDemo} className="forge-btn px-2 py-1">RUN DEMO</button>}
+                {!activationSteps[2].done && <button type="button" onClick={() => setIsProjectModalOpen(true)} className="forge-secondary-button px-2 py-1">ADD REPO</button>}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* App Visualizer file preview / editor modal */}
         {appGraphPreviewFile && (

@@ -518,6 +518,7 @@ export default function App() {
 
     ws.onerror = () => {
       setCompanionStatus('error');
+      pushToast(`Desktop host not found at ${backendUrlRef.current}. Start Forge, use the desktop's LAN/Tailscale address (not localhost on another device), then reconnect.`, 'error');
     };
   }, [pushToast]);
 
@@ -891,16 +892,18 @@ export default function App() {
   const requestPlan = (tier: UserTier) => {
     if (tier === userTier) return;
     if (tier === 'free') {
-      setUserTier('free');
-      // Keep the backend account in sync when paired (best-effort).
       if (authToken) {
-        fetch(`${apiBase()}/api/auth/subscribe`, {
+        fetch(`${apiBase()}/api/billing/cancel-subscription`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-          body: JSON.stringify({ tier: 'free' }),
-        }).catch(() => {});
+          headers: { Authorization: `Bearer ${authToken}` },
+        }).then(async res => {
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) pushToast('Cancellation scheduled for the end of the billing cycle.', 'success');
+          else pushToast(data.error || 'Could not cancel subscription.', 'error');
+        }).catch(() => pushToast('Could not reach billing service.', 'error'));
+      } else {
+        pushToast('Sign in to manage your subscription.', 'info');
       }
-      pushToast('Switched to the Free plan.', 'success');
       return;
     }
     if (!authUser) {
@@ -914,9 +917,7 @@ export default function App() {
 
   interface RazorpayCheckoutOptions {
     key: string;
-    order_id: string;
-    amount: number;
-    currency: string;
+    subscription_id: string;
     name: string;
     description: string;
     prefill?: { email?: string };
@@ -986,14 +987,14 @@ export default function App() {
     const token = tokenOverride ?? authToken;
     if (!token) return;
     try {
-      const res = await fetch(`${apiBase()}/api/billing/razorpay/create-order`, {
+      const res = await fetch(`${apiBase()}/api/billing/razorpay/create-subscription`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ tier }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success) {
-        pushToast(`Upgrade failed: ${data.error || 'Could not create Razorpay order'}`, 'error');
+        pushToast(`Upgrade failed: ${data.error || 'Could not create Razorpay subscription'}`, 'error');
         return;
       }
       setBackendStatus('online');
@@ -1006,9 +1007,7 @@ export default function App() {
 
       const checkout = new razorpayWindow.Razorpay({
         key: data.keyId,
-        order_id: data.orderId,
-        amount: data.amount,
-        currency: data.currency,
+        subscription_id: data.subscriptionId,
         name: 'Kryleos Forge',
         description: `Upgrade to ${TIER_LABELS[tier]} plan`,
         prefill: { email: authUser?.email },
@@ -2742,6 +2741,9 @@ export default function App() {
           <a href="https://kryleos.com/terms" target="_blank" rel="noopener noreferrer" className="text-[10px] uppercase tracking-wider text-[var(--accent-dim)] hover:text-[var(--accent)] transition-all">
             Terms of Service
           </a>
+          <a href="/whats-real.html" className="text-[10px] uppercase tracking-wider text-[var(--accent-dim)] hover:text-[var(--accent)] transition-all">
+            What's real
+          </a>
         </div>
         <a
           href="https://www.kryleos.com"
@@ -2934,4 +2936,3 @@ export default function App() {
     </div>
   );
 }
-

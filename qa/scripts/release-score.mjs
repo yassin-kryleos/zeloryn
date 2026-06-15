@@ -47,9 +47,9 @@ const WEIGHTS = {
   phaseGates:      0.20,  // Honesty + security phase-gate assertions (forged-tier 403, no canned replies, backend self-start)
 };
 
-function run(cmd, cwd, timeoutMs = 120_000) {
+function run(cmd, cwd, timeoutMs = 120_000, extraEnv = {}) {
   try {
-    const output = execSync(cmd, { cwd, stdio: 'pipe', timeout: timeoutMs }).toString();
+    const output = execSync(cmd, { cwd, stdio: 'pipe', timeout: timeoutMs, env: { ...process.env, ...extraEnv } }).toString();
     return { ok: true, output };
   } catch (err) {
     const out = (err.stdout?.toString() ?? '') + (err.stderr?.toString() ?? '');
@@ -138,7 +138,7 @@ if (process.env.SKIP_E2E === '1') {
   e2eNotes = `skipped (SKIP_E2E=1) — counts as not proven, ${e2eConfigured.length} app(s) configured`;
 } else if (e2eConfigured.length > 0) {
   const e2eResults = e2eConfigured.map(a => {
-    const r = run('npx playwright test --reporter=line', a.dir, 240_000);
+    const r = run('npx playwright test --reporter=line', a.dir, 240_000, { CI: '1' });
     return { ...a, ok: r.ok };
   });
   const e2ePassing = e2eResults.filter(r => r.ok).length;
@@ -183,6 +183,7 @@ const perfScripts = [
   path.join(ROOT, 'qa', 'scripts', 'performance-test-scripts', 'node-load-test.mjs'),
   path.join(ROOT, 'qa', 'scripts', 'performance-test-scripts', 'stream-load-test.mjs'),
   path.join(ROOT, 'qa', 'scripts', 'performance-test-scripts', 'stress-test.mjs'),
+  path.join(ROOT, 'qa', 'scripts', 'performance-test-scripts', 'session-soak.mjs'),
 ];
 const perfOk = perfScripts.filter(f => {
   if (!existsSync(f)) return false;
@@ -244,18 +245,28 @@ const previewDeckHasCanned = existsSync(previewDeckPath) &&
   readFileSync(previewDeckPath, 'utf8').includes('Context note queued');
 const previewDeckOk = !previewDeckHasCanned;
 
-// 10c/10d. Live backend smoke test: packaged backend self-starts standalone,
-// and a forged `tier` in a request body is rejected (403) rather than
-// trusted.
-function postJson(url, body) {
+// 10c/10d. Launch the backend through the executable and unpacked resources
+// produced by electron-builder, then verify an authenticated Free account
+// cannot forge a paid tier.
+function postJson(url, body, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
     const req = http.request(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) },
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(data),
+        ...extraHeaders,
+      },
     }, res => {
-      res.resume();
-      resolve(res.statusCode);
+      let raw = '';
+      res.setEncoding('utf8');
+      res.on('data', chunk => { raw += chunk; });
+      res.on('end', () => {
+        let parsed = null;
+        try { parsed = raw ? JSON.parse(raw) : null; } catch {}
+        resolve({ status: res.statusCode, body: parsed });
+      });
     });
     req.on('error', reject);
     req.setTimeout(5000, () => req.destroy(new Error('request timed out')));
@@ -264,7 +275,34 @@ function postJson(url, body) {
   });
 }
 
-function waitForServer(port, attempts = 30) {
+function packagedArtifactPaths(desktopDir) {
+  const output = path.join(desktopDir, 'dist-desktop');
+  if (process.platform === 'win32') {
+    const root = path.join(output, 'win-unpacked');
+    return {
+      executable: path.join(root, 'Kryleos Forge.exe'),
+      serverBundle: path.join(root, 'resources', 'app.asar.unpacked', 'dist-backend', 'server.cjs'),
+    };
+  }
+  if (process.platform === 'darwin') {
+    const appRoot = path.join(output, 'mac', 'Kryleos Forge.app', 'Contents');
+    return {
+      executable: path.join(appRoot, 'MacOS', 'Kryleos Forge'),
+      serverBundle: path.join(appRoot, 'Resources', 'app.asar.unpacked', 'dist-backend', 'server.cjs'),
+    };
+  }
+  const root = path.join(output, 'linux-unpacked');
+  const executableCandidates = [
+    path.join(root, 'kryleos-forge'),
+    path.join(root, 'Kryleos Forge'),
+  ];
+  return {
+    executable: executableCandidates.find(existsSync) || executableCandidates[0],
+    serverBundle: path.join(root, 'resources', 'app.asar.unpacked', 'dist-backend', 'server.cjs'),
+  };
+}
+
+function waitForServer(port, attempts = 120) {
   return new Promise(resolve => {
     let tries = 0;
     const attempt = () => {
@@ -282,34 +320,55 @@ function waitForServer(port, attempts = 30) {
 
 async function checkBackendGates() {
   const desktopDir = path.join(ROOT, 'Desktop-app');
-  const serverBundle = path.join(desktopDir, 'dist-backend', 'server.cjs');
-  if (!existsSync(serverBundle)) {
-    const build = run('npm run build:backend', desktopDir, 180_000);
-    if (!build.ok || !existsSync(serverBundle)) {
-      return { smokeOk: false, tierOk: false, tierNote: 'backend bundle build failed' };
-    }
+  const build = run('npm run build', desktopDir, 240_000);
+  if (!build.ok) {
+    return { smokeOk: false, tierOk: false, smokeNote: 'desktop production build failed', tierNote: 'not run' };
+  }
+  const packaged = run('npx electron-builder --dir --config.win.signAndEditExecutable=false --publish never', desktopDir, 300_000);
+  const artifact = packagedArtifactPaths(desktopDir);
+  if (!packaged.ok || !existsSync(artifact.executable) || !existsSync(artifact.serverBundle)) {
+    return { smokeOk: false, tierOk: false, smokeNote: 'fresh electron-builder artifact missing', tierNote: 'not run' };
   }
 
   const PORT = 34577;
   const tmpWorkspace = path.join(ROOT, '.release-score-tmp');
   mkdirSync(tmpWorkspace, { recursive: true });
 
-  const child = spawn(process.execPath, [serverBundle], {
+  const child = spawn(artifact.executable, [artifact.serverBundle], {
     cwd: tmpWorkspace,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: String(PORT) },
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      NODE_ENV: 'development',
+      KRYLEOS_DATA_DIR: tmpWorkspace,
+      PORT: String(PORT),
+    },
     stdio: 'ignore',
   });
 
   let smokeOk = false;
   let tierOk = false;
+  let smokeNote = `packaged backend did not respond (${path.relative(ROOT, artifact.serverBundle)})`;
   let tierNote = 'backend did not respond';
   try {
     smokeOk = await waitForServer(PORT);
+    if (smokeOk) smokeNote = `packaged artifact reachable on 127.0.0.1:${PORT}`;
     if (smokeOk) {
       try {
-        const status = await postJson(`http://127.0.0.1:${PORT}/api/crew/sync`, { tier: 'founder', items: [] });
-        tierOk = status === 403;
-        tierNote = `forged tier='founder' on /api/crew/sync -> HTTP ${status}`;
+        const email = `release_score_${Date.now()}@test.local`;
+        const registration = await postJson(`http://127.0.0.1:${PORT}/api/auth/register`, {
+          email,
+          password: 'ReleaseScore123!',
+        });
+        const token = registration.body?.user?.token;
+        if (!token) throw new Error(`registration failed with HTTP ${registration.status}`);
+        const forged = await postJson(
+          `http://127.0.0.1:${PORT}/api/crew/sync`,
+          { tier: 'founder', items: [] },
+          { Authorization: `Bearer ${token}` },
+        );
+        tierOk = forged.status === 403;
+        tierNote = `authenticated Free + forged tier='founder' -> HTTP ${forged.status}`;
       } catch (err) {
         tierNote = `request failed: ${err.message}`;
       }
@@ -325,10 +384,37 @@ async function checkBackendGates() {
       // best-effort; leave the scratch dir for the next run to reuse/clean
     }
   }
-  return { smokeOk, tierOk, tierNote };
+  return { smokeOk, tierOk, smokeNote, tierNote };
 }
 
-const { smokeOk, tierOk, tierNote } = await checkBackendGates();
+const { smokeOk, tierOk, smokeNote, tierNote } = await checkBackendGates();
+const packagedRenderer = run(
+  'npx playwright test --config playwright.packaged.config.ts --reporter=line',
+  path.join(ROOT, 'Desktop-app'),
+  120_000
+);
+const packagedRendererOk = packagedRenderer.ok;
+const whatsRealOk = existsSync(path.join(ROOT, 'Web-app', 'public', 'whats-real.html'));
+let demandOk = false;
+let demandNote = 'demand tracker missing';
+try {
+  const demand = readFileSync(path.join(ROOT, 'launch', 'DEMAND_VALIDATION.md'), 'utf-8');
+  const partners = demand.match(/Design partners committed:\s*\*\*(\d+)\s*\/\s*(\d+)/i);
+  const waitlist = demand.match(/Waitlist with stated intent:\s*\*\*(\d+)\s*\/\s*(\d+)/i);
+  const partnerCount = Number(partners?.[1] || 0);
+  const partnerTarget = Number(partners?.[2] || 1);
+  const waitlistCount = Number(waitlist?.[1] || 0);
+  const waitlistTarget = Number(waitlist?.[2] || 25);
+  demandOk = partnerCount >= partnerTarget && waitlistCount >= waitlistTarget;
+  demandNote = `${partnerCount}/${partnerTarget} design partners, ${waitlistCount}/${waitlistTarget} waitlist intent`;
+} catch {}
+let soakOk = false;
+let soakNote = '30-minute soak report missing';
+try {
+  const soak = JSON.parse(readFileSync(path.join(ROOT, 'launch', 'soak-results.json'), 'utf-8'));
+  soakOk = soak.passed === true && Number(soak.durationMs) >= 30 * 60 * 1000;
+  soakNote = `${(Number(soak.durationMs) / 60_000).toFixed(1)} min, ${soak.failures}/${soak.requests} failures, ${soak.memory?.growthMb ?? '?'} MB growth`;
+} catch {}
 
 const phaseGateChecks = [
   {
@@ -343,13 +429,33 @@ const phaseGateChecks = [
   },
   {
     ok: smokeOk,
-    label: 'packaged backend self-starts standalone',
-    note: smokeOk ? `reachable on 127.0.0.1:${34577}` : 'backend did not come up',
+    label: 'electron-builder artifact backend starts',
+    note: smokeNote,
   },
   {
     ok: tierOk,
     label: 'forged tier in request body is rejected (403)',
     note: tierNote,
+  },
+  {
+    ok: packagedRendererOk,
+    label: 'packaged Electron reaches green no-key demo trace',
+    note: packagedRendererOk ? 'Playwright packaged driver passed' : 'packaged renderer driver failed',
+  },
+  {
+    ok: soakOk,
+    label: '30-minute session soak passes',
+    note: soakNote,
+  },
+  {
+    ok: whatsRealOk,
+    label: 'public What\'s real page exists',
+    note: whatsRealOk ? 'Web-app/public/whats-real.html' : 'missing',
+  },
+  {
+    ok: demandOk,
+    label: 'design-partner and intent waitlist gate met',
+    note: demandNote,
   },
 ];
 const phaseGatePassing = phaseGateChecks.filter(c => c.ok).length;
@@ -364,7 +470,12 @@ checks.push(check(
 
 const totalWeighted = checks.reduce((s, c) => s + c.weighted, 0);
 const totalWeight = checks.reduce((s, c) => s + c.weight, 0);
-const finalScore = (totalWeighted / totalWeight) * 10;
+const rawScore = (totalWeighted / totalWeight) * 10;
+const failedPhaseGates = phaseGateChecks.filter(c => !c.ok);
+const PHASE_GATE_FAILURE_CAP = 6.0;
+const finalScore = failedPhaseGates.length > 0
+  ? Math.min(rawScore, PHASE_GATE_FAILURE_CAP)
+  : rawScore;
 
 // ─── Print table ──────────────────────────────────────────────────────────────
 
@@ -391,6 +502,12 @@ for (const c of checks) {
 
 console.log('─'.repeat(70));
 console.log(`FINAL RELEASE READINESS SCORE: ${finalScore.toFixed(1)} / 10`);
+if (failedPhaseGates.length > 0 && rawScore > finalScore) {
+  console.log(
+    `Hard cap applied: ${failedPhaseGates.length} honesty/security phase gate(s) failed ` +
+    `(raw ${rawScore.toFixed(1)} -> capped ${PHASE_GATE_FAILURE_CAP.toFixed(1)}).`
+  );
+}
 
 const TARGET = 8.5;
 const meets = finalScore >= TARGET;

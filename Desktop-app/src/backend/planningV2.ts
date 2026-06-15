@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as ts from 'typescript';
+import * as crypto from 'crypto';
 import { execSync } from 'child_process';
 import type {
   AcceptanceCriterion,
@@ -81,7 +82,7 @@ interface DivergenceCacheEntry {
 }
 
 interface LlmCheckCacheEntry {
-  commitHash: string;
+  workspaceHash: string;
   criteriaKey: string;
   status: CriterionResultStatus;
   evidence: string;
@@ -191,17 +192,34 @@ function titleToCriteria(task: ProjectTask): AcceptanceCriterion[] {
 }
 
 function resolveWorkspace(workspaceRoot: string, task?: ProjectTask): string {
-  if (!task?.workspace) return workspaceRoot;
   const normalizedRoot = path.resolve(workspaceRoot);
-  const resolved = path.isAbsolute(task.workspace) ? task.workspace : path.resolve(normalizedRoot, task.workspace);
-  const normalizedResolved = path.resolve(resolved);
-  const isWithinRoot = normalizedResolved === normalizedRoot || normalizedResolved.startsWith(normalizedRoot + path.sep);
-  return isWithinRoot && fs.existsSync(normalizedResolved) ? normalizedResolved : workspaceRoot;
+  let realRoot: string;
+  try {
+    realRoot = fs.realpathSync.native(normalizedRoot);
+  } catch {
+    return normalizedRoot;
+  }
+  if (!task?.workspace) return realRoot;
+
+  const candidate = path.isAbsolute(task.workspace)
+    ? path.resolve(task.workspace)
+    : path.resolve(normalizedRoot, task.workspace);
+  try {
+    const stat = fs.lstatSync(candidate);
+    if (!stat.isDirectory() && !stat.isSymbolicLink()) return realRoot;
+    const realCandidate = fs.realpathSync.native(candidate);
+    const isWithinRoot = realCandidate === realRoot || realCandidate.startsWith(realRoot + path.sep);
+    return isWithinRoot && fs.statSync(realCandidate).isDirectory() ? realCandidate : realRoot;
+  } catch {
+    return realRoot;
+  }
 }
 
 // Extensions whose comments/string literals can mask false-positive symbol_exists
 // matches (e.g. a symbol name mentioned only in a code comment).
 const scannableExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
+const slashCommentExtensions = new Set(['.go', '.rs', '.java', '.cs', '.php', '.css', '.scss']);
+const hashCommentExtensions = new Set(['.py', '.rb', '.sh', '.yml', '.yaml']);
 
 const triviaTokenKinds = new Set<ts.SyntaxKind>([
   ts.SyntaxKind.SingleLineCommentTrivia,
@@ -231,6 +249,24 @@ function stripJsLikeTrivia(content: string): string {
   return chars.join('');
 }
 
+function blankMatches(content: string, patterns: RegExp[]): string {
+  let result = content;
+  for (const pattern of patterns) {
+    result = result.replace(pattern, match => match.replace(/[^\n\r]/g, ' '));
+  }
+  return result;
+}
+
+function stripQuotedStrings(content: string): string {
+  return blankMatches(content, [
+    /'''[\s\S]*?'''/g,
+    /"""[\s\S]*?"""/g,
+    /'(?:\\.|[^'\\])*'/g,
+    /"(?:\\.|[^"\\])*"/g,
+    /`(?:\\.|[^`\\])*`/g,
+  ]);
+}
+
 // Blanks out comments/strings so symbol_exists can't match a symbol that only
 // appears inside a comment or string literal. git_grep is intentionally not
 // run through this — it keeps raw substring semantics.
@@ -244,7 +280,25 @@ function stripCommentsAndStrings(filePath: string, content: string): string {
     }
   }
   if (ext === '.md') {
-    return content.replace(/<!--[\s\S]*?-->/g, match => match.replace(/[^\n\r]/g, ' '));
+    return blankMatches(stripQuotedStrings(content), [/<!--[\s\S]*?-->/g, /```[\s\S]*?```/g, /`[^`\n]*`/g]);
+  }
+  if (ext === '.json' || ext === '.txt') return stripQuotedStrings(content);
+  if (slashCommentExtensions.has(ext)) {
+    const withoutStrings = stripQuotedStrings(content);
+    return blankMatches(withoutStrings, [/\/\*[\s\S]*?\*\//g, /\/\/[^\r\n]*/g]);
+  }
+  if (hashCommentExtensions.has(ext)) {
+    const withoutStrings = stripQuotedStrings(content);
+    return blankMatches(withoutStrings, [/#.*$/gm]);
+  }
+  if (ext === '.sql') {
+    return blankMatches(stripQuotedStrings(content), [/\/\*[\s\S]*?\*\//g, /--[^\r\n]*/g, /\$\$[\s\S]*?\$\$/g]);
+  }
+  if (ext === '.ps1') {
+    return blankMatches(stripQuotedStrings(content), [/<#[\s\S]*?#>/g, /#.*$/gm]);
+  }
+  if (ext === '.html') {
+    return blankMatches(stripQuotedStrings(content), [/<!--[\s\S]*?-->/g]);
   }
   return content;
 }
@@ -402,6 +456,23 @@ function stableHash(basis: string): string {
   let hash = 5381;
   for (let i = 0; i < basis.length; i++) hash = ((hash << 5) + hash + basis.charCodeAt(i)) | 0;
   return (hash >>> 0).toString(36);
+}
+
+function workspaceContentHash(root: string): string {
+  const hash = crypto.createHash('sha256');
+  const generatedStateFiles = new Set([
+    'chat_history.json',
+    '.kryleos_sync_users.json',
+    '.kryleos_sync_state.json',
+  ]);
+  for (const filePath of walkTextFiles(root).filter(file => !generatedStateFiles.has(path.basename(file))).sort()) {
+    const relative = path.relative(root, filePath).replace(/\\/g, '/');
+    hash.update(relative);
+    hash.update('\0');
+    try { hash.update(fs.readFileSync(filePath)); } catch {}
+    hash.update('\0');
+  }
+  return hash.digest('hex');
 }
 
 // Stable short signature of an item's criteria so the divergence cache invalidates
@@ -1052,7 +1123,14 @@ export class PlanningV2Service {
     }
 
     const timestamp = traceInput.timestamp || new Date().toISOString();
-    const status = this.classify(task, evaluated);
+    if (traceInput.incompleteReason) {
+      evaluated = evaluated.map(result => ({
+        ...result,
+        status: 'unknown',
+        evidence: `Incomplete run: ${traceInput.incompleteReason}`
+      }));
+    }
+    const status = traceInput.incompleteReason ? 'in_progress' : this.classify(task, evaluated);
     const trace: ExecutionTrace = {
       id: `${timestamp}-${slugPart(traceInput.planItemId)}`,
       planItemId: traceInput.planItemId,
@@ -1062,11 +1140,16 @@ export class PlanningV2Service {
       outcomes: traceInput.outcomes || evidence.outcomes,
       criteriaResults: traceInput.criteriaResults || evaluated,
       suggestedStatus: traceInput.suggestedStatus || this.suggestedStatus(status),
-      summary
+      summary,
+      mode: traceInput.mode,
+      incompleteReason: traceInput.incompleteReason
     };
 
     const dir = traceDir(this.workspaceRoot);
-    fs.writeFileSync(path.join(dir, safeTraceFileName(trace)), JSON.stringify(trace, null, 2), 'utf-8');
+    const finalPath = path.join(dir, safeTraceFileName(trace));
+    const tempPath = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tempPath, JSON.stringify(trace, null, 2), 'utf-8');
+    fs.renameSync(tempPath, finalPath);
     await this.updateTask(trace.planItemId, item => ({
       ...item,
       latestTraceId: trace.id,
@@ -1074,6 +1157,26 @@ export class PlanningV2Service {
       lastModified: new Date().toISOString()
     }));
     return trace;
+  }
+
+  public async recoverInterruptedRun(): Promise<ExecutionTrace | null> {
+    const markerPath = path.join(kryleosDir(this.workspaceRoot), 'run-in-progress.json');
+    if (!fs.existsSync(markerPath)) return null;
+    try {
+      const marker = JSON.parse(fs.readFileSync(markerPath, 'utf-8')) as { planItemId?: string; startedAt?: string };
+      if (!marker.planItemId) return null;
+      const trace = await this.saveTrace({
+        planItemId: marker.planItemId,
+        timestamp: new Date().toISOString(),
+        summary: `Recovered interrupted FORGE run started at ${marker.startedAt || 'an unknown time'}. Review and rerun it.`,
+        suggestedStatus: 'in_progress',
+        incompleteReason: 'application or backend stopped before trace completion'
+      });
+      fs.unlinkSync(markerPath);
+      return trace;
+    } catch {
+      return null;
+    }
   }
 
   public listTraces(planItemId: string): ExecutionTrace[] {
@@ -1379,6 +1482,7 @@ export class PlanningV2Service {
     // llm_check resolution and divergence both only run when a client is available.
     if (client) {
       const commit = currentGitCommit(this.workspaceRoot);
+      const workspaceHashes = new Map<string, string>();
 
       // Standalone llm_check evaluator: resolve any llm_check criteria the
       // structural pass left `unknown`, budgeted and cached per criterion.
@@ -1399,8 +1503,14 @@ export class PlanningV2Service {
           const cacheKey = `${item.taskId}:${criterion.id}`;
           const criteriaKey = llmCheckSignature(criterion);
           const cached = llmCheckCache[cacheKey];
+          const root = resolveWorkspace(this.workspaceRoot, task);
+          let workspaceHash = workspaceHashes.get(root);
+          if (!workspaceHash) {
+            workspaceHash = workspaceContentHash(root);
+            workspaceHashes.set(root, workspaceHash);
+          }
 
-          if (cached && cached.commitHash === commit && cached.criteriaKey === criteriaKey) {
+          if (cached && cached.workspaceHash === workspaceHash && cached.criteriaKey === criteriaKey) {
             if (cached.status !== 'unknown') {
               result.status = cached.status;
               result.evidence = cached.evidence;
@@ -1412,9 +1522,8 @@ export class PlanningV2Service {
           if (llmCheckBudget <= 0) { deferred++; continue; }
           llmCheckBudget--;
           llmEvaluated++;
-          const root = resolveWorkspace(this.workspaceRoot, task);
           const evaluation = await this.evaluateLlmCheck(client, task, criterion, root);
-          llmCheckCache[cacheKey] = { commitHash: commit, criteriaKey, status: evaluation.status, evidence: evaluation.evidence };
+          llmCheckCache[cacheKey] = { workspaceHash, criteriaKey, status: evaluation.status, evidence: evaluation.evidence };
           if (evaluation.status !== 'unknown') {
             result.status = evaluation.status;
             result.evidence = evaluation.evidence;

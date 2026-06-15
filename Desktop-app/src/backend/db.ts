@@ -156,6 +156,8 @@ export interface ExecutionTrace {
   criteriaResults: CriterionResult[];
   suggestedStatus: 'todo' | 'in_progress' | 'done';
   summary: string;
+  mode?: 'live' | 'demo';
+  incompleteReason?: string;
 }
 
 export interface ChatSession {
@@ -179,8 +181,9 @@ export class ChatDatabase {
   private opChain: Promise<unknown> = Promise.resolve();
 
   constructor() {
-    // Save DB inside process.cwd() or user's app data directory
-    this.dbPath = process.env.KRYLEOS_DB_PATH || path.resolve(process.cwd(), 'chat_history.json');
+    const dataRoot = process.env.KRYLEOS_DATA_DIR?.trim();
+    this.dbPath = process.env.KRYLEOS_DB_PATH
+      || (dataRoot ? path.resolve(dataRoot, 'chat_history.json') : path.resolve(process.cwd(), 'chat_history.json'));
   }
 
   private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
@@ -194,6 +197,7 @@ export class ChatDatabase {
     try {
       await fs.promises.access(this.dbPath);
     } catch {
+      await fs.promises.mkdir(path.dirname(this.dbPath), { recursive: true });
       await fs.promises.writeFile(this.dbPath, '{}', 'utf-8');
     }
   }

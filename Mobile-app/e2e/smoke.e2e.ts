@@ -13,6 +13,10 @@ import { test, expect } from '@playwright/test';
 
 const TABS = ['Dashboard', 'Plan', 'Chat', 'Tasks', 'Settings'];
 
+async function openNavigation(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'Open navigation menu' }).click();
+}
+
 test.describe('Mobile app — smoke (Expo Web)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -32,6 +36,7 @@ test.describe('Mobile app — smoke (Expo Web)', () => {
 
   for (const tab of TABS) {
     test(`${tab} tab is visible in navigation`, async ({ page }) => {
+      await openNavigation(page);
       const tabEl = page.locator(`text="${tab}"`).or(
         page.locator(`text=/${tab}/i`)
       ).first();
@@ -41,6 +46,7 @@ test.describe('Mobile app — smoke (Expo Web)', () => {
 
   test('clicking each tab does not crash the app', async ({ page }) => {
     for (const tab of TABS) {
+      await openNavigation(page);
       const tabEl = page.locator(`text="${tab}"`).or(
         page.locator(`text=/${tab}/i`)
       ).first();
@@ -55,6 +61,7 @@ test.describe('Mobile app — smoke (Expo Web)', () => {
   });
 
   test('Settings tab shows COMPANION PAIRING CODE field', async ({ page }) => {
+    await openNavigation(page);
     const settingsTab = page.locator('text="Settings"').or(
       page.locator('text=/settings/i')
     ).first();
@@ -72,6 +79,7 @@ test.describe('Mobile app — smoke (Expo Web)', () => {
   });
 
   test('Dashboard shows WORKSPACE TELEMETRY section', async ({ page }) => {
+    await openNavigation(page);
     const dashTab = page.locator('text="Dashboard"').first();
     if (await dashTab.isVisible({ timeout: 1000 })) {
       await dashTab.click();

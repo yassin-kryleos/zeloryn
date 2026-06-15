@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ExternalLink, FileText, FolderOpen, GitBranch, Globe, MessageSquare, RefreshCw, Terminal } from 'lucide-react';
+import { ExternalLink, FileText, FolderOpen, GitBranch, Globe, RefreshCw, Terminal } from 'lucide-react';
 import type { AgentLog } from '../backend/agents';
 import { FileBrowser } from './FileBrowser';
 import { CodebaseGraph } from './CodebaseGraph';
 import { CodeReviewPanel } from './CodeReviewPanel';
 import { FeatureBadge } from './FeatureBadge';
 
-type PreviewTab = 'files' | 'live' | 'terminal' | 'sidechat' | 'artifacts' | 'review';
+type PreviewTab = 'files' | 'live' | 'terminal' | 'artifacts' | 'review';
 
 interface ArtifactItem {
   path: string;
@@ -24,14 +24,12 @@ interface PreviewDeckProps {
   onOpenFilePreview: (path: string) => void;
   onPinFile: (path: string) => void;
   onNotify?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
-  onSendQuery: (query: string) => void;
 }
 
 const tabs: Array<{ id: PreviewTab; label: string; status: 'production' | 'preview' | 'planned' }> = [
   { id: 'files', label: 'Files', status: 'production' },
   { id: 'live', label: 'Live Preview', status: 'preview' },
   { id: 'terminal', label: 'Terminal', status: 'preview' },
-  { id: 'sidechat', label: 'Side Chat', status: 'preview' },
   { id: 'artifacts', label: 'Artifacts', status: 'preview' },
   { id: 'review', label: 'Review', status: 'production' },
 ];
@@ -44,17 +42,12 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
   onUpdateWorkspaceRoot,
   onOpenFilePreview,
   onPinFile,
-  onNotify,
-  onSendQuery
+  onNotify
 }) => {
   const [activeTab, setActiveTab] = useState<PreviewTab>('files');
   const [previewUrl, setPreviewUrl] = useState('http://localhost:5173');
   const [previewKey, setPreviewKey] = useState(0);
   const [filesMode, setFilesMode] = useState<'browser' | 'visualizer'>('browser');
-  const [sideInput, setSideInput] = useState('');
-  const [sideMessages, setSideMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
-    { role: 'assistant', content: 'Ask a context-only question here. This pane does not write files or run commands.' }
-  ]);
   const [artifacts, setArtifacts] = useState<ArtifactItem[]>([]);
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactItem | null>(null);
   const [artifactContent, setArtifactContent] = useState('');
@@ -102,20 +95,6 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
       loadArtifacts();
     }
   }, [activeTab, loadArtifacts]);
-
-  const handleSideQuestion = () => {
-    const clean = sideInput.trim();
-    if (!clean) return;
-    setSideMessages(prev => [
-      ...prev,
-      { role: 'user', content: clean },
-      {
-        role: 'assistant',
-        content: `Context note queued locally. For workspace-changing work, send it through the main FORGE agent so command approvals and review still apply.\n\nQuestion: ${clean}`
-      }
-    ]);
-    setSideInput('');
-  };
 
   return (
     <aside className="border-l border-forge-dark bg-forge-panel-bg overflow-hidden flex flex-col w-[420px] min-w-[360px]">
@@ -243,41 +222,6 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
                 ))
               )}
             </div>
-          </div>
-        )}
-
-        {activeTab === 'sidechat' && (
-          <div className="h-full p-2 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5 forge-panel-title">
-              <MessageSquare size={12} />
-              <span>Side Chat</span>
-              <FeatureBadge status="preview" compact />
-            </div>
-            <div className="flex-1 overflow-y-auto border border-forge-dark rounded bg-black bg-opacity-40 p-2 text-[10px] space-y-2">
-              {sideMessages.map((msg, idx) => (
-                <div key={idx} className={`p-2 rounded border ${msg.role === 'user' ? 'ml-6 border-forge-dark text-forge-text' : 'mr-6 border-forge-neon border-opacity-30 text-forge-text'}`}>
-                  <div className="text-[8px] text-forge-dim font-bold uppercase mb-1">{msg.role}</div>
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-1">
-              <input
-                value={sideInput}
-                onChange={(e) => setSideInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSideQuestion()}
-                className="forge-input flex-1 text-[10px]"
-                placeholder="Ask without changing files..."
-              />
-              <button type="button" onClick={handleSideQuestion} className="forge-btn text-[9px] font-bold">Ask</button>
-            </div>
-            <button
-              type="button"
-              onClick={() => onSendQuery(`[SIDE CHAT PROMOTED TO FORGE]\n${sideMessages.map(m => `${m.role}: ${m.content}`).join('\n')}`)}
-              className="forge-secondary-button"
-            >
-              Send side context to Forge
-            </button>
           </div>
         )}
 

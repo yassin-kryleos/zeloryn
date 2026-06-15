@@ -66,6 +66,8 @@ export interface UserAccount {
   isPremium: boolean;
   tier: SubscriptionTier;
   token: string;
+  billingProvider?: 'stripe' | 'razorpay' | 'license';
+  billingSubscriptionId?: string;
 }
 
 interface SyncPayload {
@@ -193,7 +195,11 @@ export async function subscribe(token: string, tier: SubscriptionTier = 'basic')
   return user;
 }
 
-export async function subscribeByEmail(email: string, tier: SubscriptionTier = 'basic'): Promise<UserAccount> {
+export async function subscribeByEmail(
+  email: string,
+  tier: SubscriptionTier = 'basic',
+  billing?: { provider: UserAccount['billingProvider']; subscriptionId?: string },
+): Promise<UserAccount> {
   const users = await readUsers();
   const user = users[email.toLowerCase()];
   if (!user) {
@@ -202,8 +208,30 @@ export async function subscribeByEmail(email: string, tier: SubscriptionTier = '
 
   user.tier = tier;
   user.isPremium = tier !== 'free';
+  if (billing?.provider) user.billingProvider = billing.provider;
+  if (billing?.subscriptionId) user.billingSubscriptionId = billing.subscriptionId;
+  else if (billing?.provider === 'license') delete user.billingSubscriptionId;
   await writeUsers(users);
   return user;
+}
+
+export async function setBillingSubscription(
+  token: string,
+  provider: Exclude<UserAccount['billingProvider'], undefined>,
+  subscriptionId: string,
+): Promise<UserAccount> {
+  const users = await readUsers();
+  const user = Object.values(users).find(u => u.token === token);
+  if (!user) throw new Error('Unauthorized');
+  user.billingProvider = provider;
+  user.billingSubscriptionId = subscriptionId;
+  await writeUsers(users);
+  return user;
+}
+
+export async function getUserByBillingSubscription(subscriptionId: string): Promise<UserAccount | null> {
+  const users = await readUsers();
+  return Object.values(users).find(u => u.billingSubscriptionId === subscriptionId) || null;
 }
 
 export function mergeTasks(incoming: any[], stored: any[]): any[] {
