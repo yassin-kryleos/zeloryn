@@ -26,6 +26,7 @@ import { PlanningV2Service } from './planningV2';
 import { CostGuard, estimateTokens, estimateCost, getProviderForModel } from './costGuard';
 import { scanSecrets } from './secretScanner';
 import { companionHub } from './companionHub';
+import { claudeCodeRun, findClaudeCodeBinary } from './claudeCodeRunner';
 import Stripe from 'stripe';
 import { generateFounderWorkflow } from './founderWorkflows';
 import { generateAgencyWorkflow } from './agencyWorkflows';
@@ -34,8 +35,34 @@ import { TIER_PRICES, BUYABLE_TIER_IDS, type TierId } from '../pricing.generated
 import { verifyLicenseKey } from './license';
 import { razorpayKeySecret, isMockRazorpay, createSubscription as createRazorpaySubscription, cancelSubscription as cancelRazorpaySubscription } from './razorpay';
 import * as crypto from 'crypto';
+import { SlidingWindowLimiter } from './slidingWindowLimiter';
+import { TerminalManager } from './terminalManager';
 
 dotenv.config();
+
+const LOCAL_SESSION_SECRET = process.env.KRYLEOS_LOCAL_SESSION_SECRET?.trim() || '';
+const LOCAL_AUTH_REQUIRED = process.env.NODE_ENV !== 'test' || process.env.KRYLEOS_ENFORCE_LOCAL_AUTH === 'true';
+if (LOCAL_AUTH_REQUIRED && LOCAL_SESSION_SECRET.length < 32) {
+  throw new Error('FATAL: KRYLEOS_LOCAL_SESSION_SECRET must be set to at least 32 characters.');
+}
+
+const COMPANION_AUTH_TOKEN = process.env.KRYLEOS_COMPANION_AUTH_TOKEN?.trim() || '';
+
+export function isValidCompanionAuthToken(candidate: unknown): boolean {
+  if (!COMPANION_AUTH_TOKEN) return true; // optional — no constraint when unset
+  if (typeof candidate !== 'string' || candidate.length === 0) return false;
+  const expected = Buffer.from(COMPANION_AUTH_TOKEN);
+  const provided = Buffer.from(candidate);
+  return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+}
+
+export function isValidLocalSessionSecret(candidate: unknown): boolean {
+  if (!LOCAL_AUTH_REQUIRED) return true;
+  if (typeof candidate !== 'string') return false;
+  const expected = Buffer.from(LOCAL_SESSION_SECRET);
+  const provided = Buffer.from(candidate);
+  return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+}
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY || 'sk_test_mock_key';
 const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_mock_secret';
@@ -177,6 +204,12 @@ async function resolveQueryMentions(text: string, sandbox: WorkspaceSandbox): Pr
 }
 
 const app = express();
+const trustedHttpOrigins = new Set([
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+]);
 
 // SEC-M4: security headers. CSP and cross-origin resource policy are disabled
 // here because this is a local API behind a custom CORS layer (below) and the
@@ -207,9 +240,7 @@ app.use((req, res, next) => {
                    req.path === '/api/billing/razorpay/webhook';
   
   if (origin) {
-    const isLocal = origin.startsWith('http://localhost:') || 
-                    origin.startsWith('http://127.0.0.1:') || 
-                    origin.startsWith('vscode-webview://');
+    const isLocal = trustedHttpOrigins.has(origin) || /^vscode-webview:\/\/[a-z0-9-]+$/i.test(origin);
                     
     if (!isLocal && !isExempt) {
       console.warn(`[Security Alert] Blocked request to ${req.path} from untrusted origin: ${origin}`);
@@ -219,7 +250,7 @@ app.use((req, res, next) => {
     // Configure CORS headers dynamically
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Kryleos-Session');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else {
     // If no origin is provided, fallback to allow-all or specific localhost for cross-origin compliance
@@ -425,12 +456,24 @@ app.post('/api/billing/razorpay/webhook', express.raw({ type: 'application/json'
 
 app.use(express.json({ limit: '1mb' }));
 
+app.use((req, res, next) => {
+  if (!LOCAL_AUTH_REQUIRED) return next();
+  if (req.method === 'OPTIONS') return next();
+  if (req.path === '/api/billing/webhook' || req.path === '/api/billing/razorpay/webhook') return next();
+  if (!isValidLocalSessionSecret(req.headers['x-kryleos-session'])) {
+    console.warn(`[Security] Local session auth failed: ${req.method} ${req.path} from ${req.socket.remoteAddress}`);
+    return res.status(401).json({ error: 'Unauthorized local client.' });
+  }
+  next();
+});
+
 const server = http.createServer(app);
 let totalBytesSent = 0;
 let totalBytesReceived = 0;
 
 const wss = new WebSocketServer({ 
-  server,
+  noServer: true,
+  maxPayload: 1024 * 1024,
   perMessageDeflate: {
     zlibDeflateOptions: {
       chunkSize: 1024,
@@ -445,6 +488,63 @@ const wss = new WebSocketServer({
     concurrencyLimit: 10
   }
 });
+
+const companionServer = http.createServer((_req, res) => {
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Not found' }));
+});
+const companionWss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
+const companionIpLimiter = new SlidingWindowLimiter(30, 60 * 1000);
+
+const trustedRendererOrigins = new Set([
+  ...trustedHttpOrigins,
+  'file://',
+]);
+
+export function isLoopbackAddress(address: string | undefined): boolean {
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1';
+}
+
+export function isTrustedLocalWebSocketRequest(req: Pick<http.IncomingMessage, 'headers' | 'socket'>): boolean {
+  const origin = req.headers.origin;
+  return (typeof origin === 'string' && trustedRendererOrigins.has(origin)) ||
+    (!origin && isLoopbackAddress(req.socket.remoteAddress));
+}
+
+export function isAuthenticatedLocalWebSocketRequest(req: Pick<http.IncomingMessage, 'headers' | 'socket' | 'url'>): boolean {
+  if (!isTrustedLocalWebSocketRequest(req)) return false;
+  const url = new URL(req.url || '/', 'http://localhost');
+  return isValidLocalSessionSecret(url.searchParams.get('session'));
+}
+
+function rejectUpgrade(socket: import('node:stream').Duplex, status = '403 Forbidden') {
+  console.warn(`[Security] WebSocket upgrade rejected: ${status}`);
+  socket.write(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`);
+  socket.destroy();
+}
+
+server.on('upgrade', (req, socket, head) => {
+  const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+  if (pathname !== '/') return rejectUpgrade(socket, '404 Not Found');
+
+  if (!isAuthenticatedLocalWebSocketRequest(req)) return rejectUpgrade(socket);
+
+  wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req));
+});
+
+companionServer.on('upgrade', (req, socket, head) => {
+  const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+  if (pathname !== '/api/companion/ws') return rejectUpgrade(socket, '404 Not Found');
+  const remoteAddress = req.socket.remoteAddress || 'unknown';
+  if (!companionIpLimiter.consume(remoteAddress)) return rejectUpgrade(socket, '429 Too Many Requests');
+  if (!isValidCompanionAuthToken(new URL(req.url || '/', 'http://localhost').searchParams.get('auth'))) {
+    console.warn(`[Security] Companion WS upgrade rejected: invalid/missing auth token from ${remoteAddress}`);
+    return rejectUpgrade(socket, '403 Forbidden');
+  }
+  companionWss.handleUpgrade(req, socket, head, ws => companionWss.emit('connection', ws, req));
+});
+
+companionWss.on('connection', (ws, req) => companionHub.handleConnection(ws, req));
 
 const chatDb = new ChatDatabase();
 // Active project id (set via POST /api/projects/active). The planning layer
@@ -566,6 +666,27 @@ const defaultWorkspace = path.resolve(process.cwd());
 
 const sandbox = new WorkspaceSandbox(defaultWorkspace);
 companionHub.setWorkspaceRoot(defaultWorkspace);
+const pendingTerminalApprovals = new Map<string, (approved: boolean) => void>();
+let terminalManager = new TerminalManager({
+  workspaceRoot: defaultWorkspace,
+  onCommand: async (_sessionId, command, classification) => {
+    const approvalPromise = new Promise<boolean>((resolve) => {
+      pendingTerminalApprovals.set(_sessionId, resolve);
+    });
+    try {
+      ws.send(JSON.stringify({
+        type: 'terminal_approval_required',
+        sessionId: _sessionId,
+        command,
+        destructive: true,
+        reason: classification.reason || 'Destructive command requires approval',
+      }));
+    } catch { /* ws may have disconnected */ }
+    const result = await approvalPromise;
+    pendingTerminalApprovals.delete(_sessionId);
+    return result;
+  },
+});
 const deepseekClient = new DeepSeekClient({
   apiKey: '',
   model: 'deepseek-chat'
@@ -794,6 +915,7 @@ app.post('/api/workspace', (req, res) => {
   try {
     sandbox.setWorkspaceRoot(newPath);
     companionHub.setWorkspaceRoot(newPath);
+    terminalManager = new TerminalManager({ workspaceRoot: newPath });
     res.json({ success: true, workspaceRoot: sandbox.getWorkspaceRoot() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1562,7 +1684,7 @@ app.get('/api/companion/status', requireLoopback, (req, res) => {
     const pairingSecret = companionHub.getPairingSecret();
     const pairingExpiresAt = companionHub.getPairingExpiry();
     const connectedCount = companionHub.getConnectedCount();
-    res.json({ success: true, code, pairingSecret, pairingExpiresAt, connectedCount });
+    res.json({ success: true, code, pairingSecret, pairingExpiresAt, connectedCount, companionAuthToken: COMPANION_AUTH_TOKEN || null, claudeCodeAvailable: !!findClaudeCodeBinary() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1606,12 +1728,6 @@ function broadcastSyncUpdate(token: string, payload: any, lastUpdated: string) {
 }
 
 wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
-  const url = req?.url || '';
-  if (url.includes('/api/companion/ws')) {
-    companionHub.handleConnection(ws, req);
-    return;
-  }
-
   console.log('Client connected to Kryleos Forge WS server');
 
   // Hook ws.send to track bytes sent
@@ -1769,6 +1885,44 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
   };
   companionHub.registerForgeRunner(currentSessionId, remoteForgeRunner);
 
+  // Phase 6 / CC-2: Companion-channel Claude Code runner — same interface
+  // as remoteForgeRunner but delegates to the `claude` CLI subprocess
+  // instead of the built-in orchestrator.
+  const remoteClaudeCodeRunner: ForgeRunner = async (planItemId, send) => {
+    const task = await findTaskById(planItemId);
+    if (!task) {
+      send({ type: 'error', code: 'plan_item_not_found', message: `Plan item ${planItemId} not found.` });
+      return;
+    }
+    const blockers = await findUnresolvedBlockers(planItemId);
+    if (blockers.length > 0) {
+      send({
+        type: 'error',
+        code: 'blocked',
+        message: `BLOCKED PLAN ITEM REJECTED: plan item ${planItemId} has unresolved blockers (${blockers.join(', ')}).`
+      });
+      return;
+    }
+    const claudePath = findClaudeCodeBinary();
+    if (!claudePath) {
+      send({ type: 'error', code: 'claude_code_not_found', message: 'Claude Code CLI not found.' });
+      return;
+    }
+    try {
+      const result = await claudeCodeRun({
+        queryText: task.title,
+        workspaceRoot: sandbox.getWorkspaceRoot(),
+        planItemId,
+      });
+      send({ type: 'status', message: 'Claude Code execution complete.', durationMs: result.durationMs });
+      send({ type: 'claude_code_output', output: result.stdout, isStderr: false });
+      if (result.stderr) send({ type: 'claude_code_output', output: result.stderr, isStderr: true });
+    } catch (err: any) {
+      send({ type: 'error', code: 'claude_code_error', message: err.message });
+    }
+  };
+  companionHub.registerForgeRunner(currentSessionId + '_claude', remoteClaudeCodeRunner);
+
   orchestrator.onCommandApprovalRequired = (tool, command) => {
     const commandId = `cmd_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`;
     orchestrator.pendingCommandId = commandId;
@@ -1848,8 +2002,12 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
             // We could also set it on the orchestrator if needed for system prompt verbosity
             // orchestrator.setThinkingCapability(data.thinkingCapability);
           }
-          if (data.workspaceRoot) {
-            sandbox.setWorkspaceRoot(data.workspaceRoot);
+          if (data.workspaceRoot !== undefined) {
+            ws.send(JSON.stringify({
+              type: 'error',
+              code: 'workspace_change_requires_local_api',
+              message: 'Workspace changes must use the local workspace or project API.'
+            }));
           }
           if (data.token) {
             activeSockets.set(ws, data.token);
@@ -2048,6 +2206,33 @@ ${getResponseModeInstructions(responseMode)}`;
                   ws.send(JSON.stringify({ type: 'error', message: `Chat Error: ${err.message}` }));
                 }
               });
+            } else if (data.runner === 'claude-code') {
+              ws.send(JSON.stringify({ type: 'status', message: 'Launching Claude Code CLI, please wait...' }));
+              try {
+                const claudePath = findClaudeCodeBinary();
+                if (!claudePath) {
+                  ws.send(JSON.stringify({ type: 'error', message: 'Claude Code CLI not found. Install it or set KRYLEOS_CLAUDE_CODE_PATH.' }));
+                  break;
+                }
+                const ccResult = await claudeCodeRun({
+                  queryText,
+                  workspaceRoot: sandbox.getWorkspaceRoot(),
+                  planItemId: data.planItemId,
+                });
+                ws.send(JSON.stringify({
+                  type: 'update',
+                  logs: [{
+                    timestamp: new Date().toLocaleTimeString(),
+                    sender: 'claude-code',
+                    recipient: 'user',
+                    message: ccResult.stdout + (ccResult.stderr ? `\n--- stderr ---\n${ccResult.stderr}` : ''),
+                    type: 'info',
+                  }],
+                  isStreaming: false,
+                }));
+              } catch (ccErr: any) {
+                ws.send(JSON.stringify({ type: 'error', message: `Claude Code CLI error: ${ccErr.message}` }));
+              }
             } else {
               await startForgeRun({
                 orchestrator,
@@ -2165,7 +2350,7 @@ ${getResponseModeInstructions(responseMode)}`;
             orchestrator.pendingApprovalSource = { source: 'local' };
             if (data.approved) {
               const pendingId = orchestrator.pendingCommandId;
-              if (data.commandId && data.commandId !== pendingId) {
+              if (!data.commandId || data.commandId !== pendingId) {
                 ws.send(JSON.stringify({
                   type: 'error',
                   message: 'STALE COMMAND APPROVAL BLOCKED: approval did not match the active command.'
@@ -2196,6 +2381,10 @@ ${getResponseModeInstructions(responseMode)}`;
           break;
 
         case 'smoke_command': {
+          if (process.env.NODE_ENV !== 'test' && process.env.KRYLEOS_ENABLE_SMOKE_COMMAND !== 'true') {
+            ws.send(JSON.stringify({ type: 'error', message: 'Smoke command is unavailable outside test mode.' }));
+            break;
+          }
           // Deterministic approval-modal QA: drives the real approval + exec flow
           // for a fixed command, no model/agent. Approve via the normal approve_command.
           const smokeCommand = (data.command && String(data.command)) || 'node -v';
@@ -2278,6 +2467,43 @@ ${getResponseModeInstructions(responseMode)}`;
           }));
           break;
 
+        case 'terminal_create':
+          try {
+            terminalManager.createSession(ws, data.cwd);
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', code: 'terminal_create_failed', message: err.message }));
+          }
+          break;
+
+        case 'terminal_input':
+          try {
+            terminalManager.writeInput(data.sessionId, data.data);
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', code: 'terminal_write_failed', message: err.message }));
+          }
+          break;
+
+        case 'terminal_resize':
+          try {
+            terminalManager.resize(data.sessionId, data.cols, data.rows);
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', code: 'terminal_resize_failed', message: err.message }));
+          }
+          break;
+
+        case 'terminal_approval':
+          {
+            const resolve = pendingTerminalApprovals.get(data.sessionId);
+            if (resolve) {
+              resolve(data.approved === true);
+            }
+          }
+          break;
+
+        case 'terminal_close':
+          terminalManager.closeSession(data.sessionId);
+          break;
+
         default:
           ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${data.type}` }));
       }
@@ -2289,6 +2515,8 @@ ${getResponseModeInstructions(responseMode)}`;
   ws.on('close', () => {
     companionHub.unregisterOrchestrator(currentSessionId);
     companionHub.unregisterForgeRunner(currentSessionId);
+    // Close any terminal sessions owned by this WebSocket
+    terminalManager.closeSessionByWs(ws);
     console.log('Client disconnected');
     activeSockets.delete(ws);
     const roomToken = (ws as any).collabRoomToken;
@@ -3467,15 +3695,16 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 });
 
 const PORT = process.env.PORT || 3001;
-// SEC-B5: bind to loopback by default so the command-executing backend is not
-// reachable from the LAN. Companion-over-network users can opt in explicitly by
-// setting KRYLEOS_BIND_HOST=0.0.0.0 (only safe together with the hardened,
-// rate-limited pairing in companionHub).
-const BIND_HOST = process.env.KRYLEOS_BIND_HOST || '127.0.0.1';
+const BIND_HOST = '127.0.0.1';
+const COMPANION_PORT = Number(process.env.KRYLEOS_COMPANION_PORT || 3002);
+const COMPANION_BIND_HOST = process.env.KRYLEOS_COMPANION_BIND_HOST || '127.0.0.1';
 if (process.env.NODE_ENV !== 'test') {
   server.listen(Number(PORT), BIND_HOST, () => {
     console.log(`Kryleos Forge backend running on http://${BIND_HOST}:${PORT}`);
   });
+  companionServer.listen(COMPANION_PORT, COMPANION_BIND_HOST, () => {
+    console.log(`Kryleos Forge companion channel running on ws://${COMPANION_BIND_HOST}:${COMPANION_PORT}/api/companion/ws`);
+  });
 }
 
-export { app, server };
+export { app, server, companionServer };

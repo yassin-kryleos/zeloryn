@@ -37,7 +37,10 @@
     "react-dom": "^19.2.6",
     "stripe": "^22.2.0",
     "typescript": "~6.0.2",
-    "ws": "^8.21.0"
+    "node-pty": "^1.1.0",
+    "ws": "^8.21.0",
+    "@xterm/xterm": "^6.0.0",
+    "@xterm/addon-fit": "^0.11.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",

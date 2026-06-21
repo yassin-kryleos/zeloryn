@@ -5,6 +5,7 @@ import { FileBrowser } from './FileBrowser';
 import { CodebaseGraph } from './CodebaseGraph';
 import { CodeReviewPanel } from './CodeReviewPanel';
 import { FeatureBadge } from './FeatureBadge';
+import { InteractiveTerminal } from './InteractiveTerminal';
 
 type PreviewTab = 'files' | 'live' | 'terminal' | 'artifacts' | 'review';
 
@@ -19,6 +20,8 @@ interface PreviewDeckProps {
   workspaceRoot: string;
   logs: AgentLog[];
   isStreaming: boolean;
+  ws: WebSocket | null;
+  isConnected: boolean;
   commandPendingApproval?: { tool: string; command: string; commandId?: string } | null;
   onUpdateWorkspaceRoot?: (newRoot: string) => void;
   onOpenFilePreview: (path: string) => void;
@@ -38,6 +41,8 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
   workspaceRoot,
   logs,
   isStreaming,
+  ws,
+  isConnected,
   commandPendingApproval,
   onUpdateWorkspaceRoot,
   onOpenFilePreview,
@@ -193,36 +198,7 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
         )}
 
         {activeTab === 'terminal' && (
-          <div className="h-full p-2 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5 forge-panel-title">
-              <Terminal size={12} />
-              <span>Terminal Evidence</span>
-              <FeatureBadge status="preview" compact />
-            </div>
-            {commandPendingApproval && (
-              <div className="border border-amber-500/30 bg-amber-500/10 text-amber-500 rounded p-2 text-[10px]">
-                <div className="font-bold uppercase mb-1">Command waiting for approval</div>
-                <code className="text-forge-text break-all">{commandPendingApproval.command}</code>
-              </div>
-            )}
-            {isStreaming && (
-              <div className="forge-status-chip forge-status-chip-success animate-pulse">
-                Forge run is active. Execution traces will update after completion.
-              </div>
-            )}
-            <div className="flex-1 overflow-y-auto border border-forge-dark rounded bg-black bg-opacity-40 p-2 text-[9px] space-y-2">
-              {terminalLogs.length === 0 ? (
-                <div className="text-forge-dim italic text-center py-8">No command evidence in this session yet.</div>
-              ) : (
-                terminalLogs.map((log, idx) => (
-                  <div key={`${log.timestamp || idx}-${idx}`} className="border-b border-forge-dark pb-1.5 last:border-b-0">
-                    <div className="text-forge-dim uppercase font-bold">{log.sender}</div>
-                    <pre className="whitespace-pre-wrap text-[9px] max-h-32 overflow-y-auto">{log.message}</pre>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          <InteractiveTerminal ws={ws} isConnected={isConnected} />
         )}
 
         {activeTab === 'artifacts' && (

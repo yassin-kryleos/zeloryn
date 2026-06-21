@@ -337,8 +337,39 @@ export class WorkspaceSandbox {
   private activeCommandProcesses: Set<ChildProcess> = new Set();
 
   constructor(workspaceRoot: string) {
-    this.workspaceRoot = path.resolve(workspaceRoot);
+    this.workspaceRoot = this.canonicalizePath(path.resolve(workspaceRoot));
     this.whitelistedDirectories.add(this.workspaceRoot);
+  }
+
+  private canonicalizePath(targetPath: string): string {
+    const resolved = path.resolve(targetPath);
+    let existing = resolved;
+    const suffix: string[] = [];
+
+    while (!fs.existsSync(existing)) {
+      const parent = path.dirname(existing);
+      if (parent === existing) break;
+      suffix.unshift(path.basename(existing));
+      existing = parent;
+    }
+
+    let canonicalBase = existing;
+    if (fs.existsSync(existing)) {
+      try {
+        canonicalBase = fs.realpathSync.native(existing);
+      } catch {
+        canonicalBase = fs.realpathSync(existing);
+      }
+    }
+
+    return path.resolve(canonicalBase, ...suffix);
+  }
+
+  private isWithinRoot(root: string, target: string): boolean {
+    const comparisonRoot = process.platform === 'win32' ? root.toLowerCase() : root;
+    const comparisonTarget = process.platform === 'win32' ? target.toLowerCase() : target;
+    const relative = path.relative(comparisonRoot, comparisonTarget);
+    return relative === '' || (!path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`));
   }
 
   public setUserTier(tier: string) {
@@ -358,7 +389,7 @@ export class WorkspaceSandbox {
   }
 
   public whitelistDirectory(dirPath: string) {
-    const resolved = path.resolve(dirPath);
+    const resolved = this.canonicalizePath(dirPath);
     this.whitelistedDirectories.add(resolved);
   }
 
@@ -391,13 +422,14 @@ export class WorkspaceSandbox {
 
   // Helper to resolve and verify path is within whitelisted directories
   public resolvePath(targetPath: string): string {
-    const absolutePath = path.isAbsolute(targetPath) 
+    const absolutePath = path.isAbsolute(targetPath)
       ? path.resolve(targetPath) 
       : path.resolve(this.workspaceRoot, targetPath);
+    const canonicalPath = this.canonicalizePath(absolutePath);
     
     let isWhitelisted = false;
     for (const allowedDir of this.whitelistedDirectories) {
-      if (absolutePath.startsWith(allowedDir)) {
+      if (this.isWithinRoot(allowedDir, canonicalPath)) {
         isWhitelisted = true;
         break;
       }
@@ -406,7 +438,7 @@ export class WorkspaceSandbox {
     if (!isWhitelisted) {
       throw new Error(`Access Denied: Path "${targetPath}" is outside the whitelisted directories: ${Array.from(this.whitelistedDirectories).join(', ')}`);
     }
-    return absolutePath;
+    return canonicalPath;
   }
 
   public getWorkspaceRoot(): string {
@@ -414,8 +446,12 @@ export class WorkspaceSandbox {
   }
 
   public setWorkspaceRoot(newRoot: string) {
-    this.workspaceRoot = path.resolve(newRoot);
-    this.whitelistedDirectories.add(this.workspaceRoot);
+    const resolved = this.canonicalizePath(newRoot);
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+      throw new Error(`Invalid workspace root: "${newRoot}" must be an existing directory.`);
+    }
+    this.workspaceRoot = resolved;
+    this.whitelistedDirectories = new Set([resolved]);
   }
 
   private normalizeWorkspacePath(filePath: string): string {
