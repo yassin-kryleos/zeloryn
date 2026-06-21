@@ -9,6 +9,7 @@
   --forge-panel-bg: rgba(24, 24, 27, 0.95); /* zinc-900 */
   --forge-neon: #f59e0b; /* amber-500 — primary identity accent */
   --forge-neon-rgb: 245, 158, 11;
+  --forge-neon-text: #fbbf24; /* amber-300 — WCAG AA ≥4.5:1 on zinc-950 for small text */
   --forge-dim: #a1a1aa; /* zinc-400 */
   --forge-dark: #27272a; /* zinc-800 */
   --forge-very-dark: #18181b; /* zinc-900 */
@@ -36,6 +37,7 @@ body.theme-dark, body.theme-slate {
   --forge-panel-bg: rgba(24, 24, 27, 0.95);
   --forge-neon: #f59e0b;
   --forge-neon-rgb: 245, 158, 11;
+  --forge-neon-text: #fbbf24; /* amber-300 */
   --forge-dim: #a1a1aa;
   --forge-dark: #27272a;
   --forge-very-dark: #18181b;
@@ -55,6 +57,7 @@ body.theme-light {
   --forge-panel-bg: rgba(255, 255, 255, 0.95);
   --forge-neon: #d97706;
   --forge-neon-rgb: 217, 119, 6;
+  --forge-neon-text: #b45309; /* amber-700 — WCAG AA ≥4.5:1 on zinc-50 for small text */
   --forge-dim: #71717a;
   --forge-dark: #d4d4d8;
   --forge-very-dark: #f4f4f5;
@@ -558,6 +561,7 @@ body.theme-slate .bg-opacity-80, body.theme-slate .bg-opacity-90, body.theme-sla
 
 /* Custom Color helper utilities */
 .text-forge-neon { color: var(--forge-neon) !important; }
+.text-forge-neon-text { color: var(--forge-neon-text) !important; }
 .text-forge-dim { color: var(--forge-dim) !important; }
 .text-forge-dark { color: var(--forge-dark) !important; }
 .text-forge-text { color: var(--forge-text) !important; }

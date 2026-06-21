@@ -58,16 +58,19 @@ Most developer tools aim for surgical cleanliness (VS Code, Cursor, Zed). Forge'
 
 ### Accent colors
 
-| Role | Value | Usage |
-|------|-------|-------|
-| **Primary accent** | `#f59e0b` (amber) | Primary identity color — buttons, active states, focus rings, key indicators |
-| Hover | `#d97706` (amber-600) | Button hover, link hover |
-| Glow | `rgba(245, 158, 11, 0.08)` | Panel glow, focus shadow |
-| Subtle | `rgba(245, 158, 11, 0.06)` | Background tint for active items |
-| Secondary | `#38bdf8` (sky) | Links, secondary status, info badges |
-| Success | `#22c55e` (green) | Build passing, tasks complete, online status |
-| Error | `#ef4444` (red) | Errors, failures, destructive actions |
-| Warning | (amber, same as primary) | Warning states use amber at reduced opacity |
+| Role | Value | Usage | WCAG AA (dark bg) |
+|------|-------|-------|-------------------|
+| **Primary accent** | `#f59e0b` (amber) | Primary identity color — buttons, active states, focus rings, key indicators | ✅ ≥4.5:1 at any size |
+| Accent text (small) | `#fbbf24` (amber-300) | Small amber text (<14px) on dark bg — badges, labels, captions | ✅ ≥4.5:1 on zinc-950 |
+| Hover | `#d97706` (amber-600) | Button hover, link hover | ✅ ≥4.5:1 at body+ sizes |
+| Glow | `rgba(245, 158, 11, 0.08)` | Panel glow, focus shadow | N/A |
+| Subtle | `rgba(245, 158, 11, 0.06)` | Background tint for active items | N/A |
+| Secondary | `#38bdf8` (sky) | Links, secondary status, info badges | ✅ ≥4.5:1 |
+| Success | `#22c55e` (green) | Build passing, tasks complete, online status | ✅ ≥4.5:1 |
+| Error | `#ef4444` (red) | Errors, failures, destructive actions | ✅ ≥4.5:1 |
+| Warning | (amber, same as primary) | Warning states use amber at reduced opacity | ✅ ≥4.5:1 |
+
+> **Light theme note:** On `#fafafa` (zinc-50) bg, `#d97706` (amber-600) is used for accents. Small text uses `#b45309` (amber-700) to maintain 4.5:1 contrast. The CSS variable `--forge-neon-text` carries the appropriate contrast-safe value per theme.
 
 ### Text
 
