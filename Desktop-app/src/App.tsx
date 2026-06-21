@@ -200,6 +200,7 @@ function App() {
   
   // Connection, Sidebar & Space Toggles
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [ws, setWs] = useState<WebSocket | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   // Returning users (setup already completed) land on the FLOW Today view;
   // first-run users start in PLAN behind the project-setup screen.
@@ -723,6 +724,7 @@ function App() {
 
       ws.onopen = () => {
         setIsConnected(true);
+        setWs(ws);
         socketRef.current = ws;
         reconnectDelay = 1000;
 
@@ -866,6 +868,7 @@ function App() {
 
       ws.onclose = () => {
         setIsConnected(false);
+        setWs(null);
         socketRef.current = null;
 
         if (animationFrameId) {
@@ -2091,6 +2094,8 @@ function App() {
               </section>
 
               <PreviewDeck
+                ws={ws}
+                isConnected={isConnected}
                 workspaceRoot={workspaceRoot}
                 logs={logs}
                 isStreaming={isStreaming}

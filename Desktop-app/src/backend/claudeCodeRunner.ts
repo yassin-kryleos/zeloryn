@@ -168,7 +168,7 @@ function execFilePromise(
       maxBuffer: opts.maxBuffer,
       input: opts.input,
       env: opts.env as any,
-    }, (error, stdout, stderr) => {
+    } as any, (error: any, stdout: string, stderr: string) => {
       if (error && error.code === 'ETIMEDOUT') {
         reject(new Error(`Claude Code CLI timed out after ${opts.timeout}ms`));
         return;

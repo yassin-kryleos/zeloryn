@@ -25,7 +25,7 @@ import { getPublicKey } from './security';
 import { PlanningV2Service } from './planningV2';
 import { CostGuard, estimateTokens, estimateCost, getProviderForModel } from './costGuard';
 import { scanSecrets } from './secretScanner';
-import { companionHub } from './companionHub';
+import { companionHub, type ForgeRunner } from './companionHub';
 import { claudeCodeRun, findClaudeCodeBinary } from './claudeCodeRunner';
 import {
   initDeviationStore,

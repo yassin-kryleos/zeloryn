@@ -362,8 +362,8 @@ describe('TerminalManager', () => {
     const ws = new FakeWebSocket() as unknown as WebSocket;
     const session = manager.createSession(ws, tmpDir);
 
-    expect(session.pty._onDataCb).toBeDefined();
-    session.pty._onDataCb('hello from shell\r\n');
+    expect((session.pty as any)._onDataCb).toBeDefined();
+    (session.pty as any)._onDataCb('hello from shell\r\n');
 
     const dataSent = (ws as any).sent.find((m: any) => m.type === 'terminal_data');
     expect(dataSent).toBeDefined();
@@ -380,7 +380,7 @@ describe('TerminalManager', () => {
     const ws = new FakeWebSocket() as unknown as WebSocket;
     const session = manager.createSession(ws, tmpDir);
 
-    session.pty._onDataCb('some terminal output\r\n');
+    (session.pty as any)._onDataCb('some terminal output\r\n');
 
     expect(onTerminalOutput).toHaveBeenCalledWith(session.id, 'some terminal output\r\n');
   });
@@ -389,8 +389,8 @@ describe('TerminalManager', () => {
     const ws = new FakeWebSocket() as unknown as WebSocket;
     const session = manager.createSession(ws, tmpDir);
 
-    expect(session.pty._onExitCb).toBeDefined();
-    session.pty._onExitCb({ exitCode: 0 });
+    expect((session.pty as any)._onExitCb).toBeDefined();
+    (session.pty as any)._onExitCb({ exitCode: 0 });
 
     const exitMsg = (ws as any).sent.find((m: any) => m.type === 'terminal_exit');
     expect(exitMsg).toBeDefined();
