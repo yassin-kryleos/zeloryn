@@ -96,7 +96,9 @@ export const InteractiveTerminal: React.FC<InteractiveTerminalProps> = ({ ws, is
 
         case 'terminal_data':
           if (msg.sessionId === sessionIdRef.current) {
-            term.write(msg.data);
+            // Strip terminal title escape sequences (OSC 0, OSC 1, OSC 2)
+            const safe = typeof msg.data === 'string' ? msg.data.replace(/\x1b\]0;.*?\x07|\x1b\]1;.*?\x07|\x1b\]2;.*?\x07/g, '') : msg.data;
+            term.write(safe);
           }
           break;
 

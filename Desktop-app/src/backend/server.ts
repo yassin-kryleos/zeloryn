@@ -27,6 +27,13 @@ import { CostGuard, estimateTokens, estimateCost, getProviderForModel } from './
 import { scanSecrets } from './secretScanner';
 import { companionHub } from './companionHub';
 import { claudeCodeRun, findClaudeCodeBinary } from './claudeCodeRunner';
+import {
+  initDeviationStore,
+  takeSnapshot,
+  computeDeviations,
+  getDeviations,
+  updateDeviationStatus,
+} from './ccDeviationService';
 import Stripe from 'stripe';
 import { generateFounderWorkflow } from './founderWorkflows';
 import { generateAgencyWorkflow } from './agencyWorkflows';
@@ -495,6 +502,7 @@ const companionServer = http.createServer((_req, res) => {
 });
 const companionWss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
 const companionIpLimiter = new SlidingWindowLimiter(30, 60 * 1000);
+const terminalOpLimiter = new SlidingWindowLimiter(30, 5 * 1000);
 
 const trustedRendererOrigins = new Set([
   ...trustedHttpOrigins,
@@ -666,26 +674,37 @@ const defaultWorkspace = path.resolve(process.cwd());
 
 const sandbox = new WorkspaceSandbox(defaultWorkspace);
 companionHub.setWorkspaceRoot(defaultWorkspace);
+initDeviationStore(path.join(defaultWorkspace, '.kryleos', 'cc-deviations.json'));
 const pendingTerminalApprovals = new Map<string, (approved: boolean) => void>();
-let terminalManager = new TerminalManager({
-  workspaceRoot: defaultWorkspace,
-  onCommand: async (_sessionId, command, classification) => {
-    const approvalPromise = new Promise<boolean>((resolve) => {
-      pendingTerminalApprovals.set(_sessionId, resolve);
-    });
-    try {
-      ws.send(JSON.stringify({
+
+// Terminal approval callback — looks up the session's ws via terminalManager
+// so it works at module scope where no bare `ws` variable exists.
+const terminalOnCommand = async (sessionId: string, command: string, classification: import('./tools').CommandClassification): Promise<boolean> => {
+  const session = terminalManager.getSession(sessionId);
+  if (!session) return false;
+  const approvalPromise = new Promise<boolean>((resolve) => {
+    pendingTerminalApprovals.set(sessionId, resolve);
+  });
+  try {
+    if (session.ws.readyState === WebSocket.OPEN) {
+      session.ws.send(JSON.stringify({
         type: 'terminal_approval_required',
-        sessionId: _sessionId,
+        sessionId,
         command,
-        destructive: true,
+        destructive: classification.destructive,
         reason: classification.reason || 'Destructive command requires approval',
       }));
-    } catch { /* ws may have disconnected */ }
-    const result = await approvalPromise;
-    pendingTerminalApprovals.delete(_sessionId);
-    return result;
-  },
+    }
+  } catch { /* ws may have disconnected */ }
+  const result = await approvalPromise;
+  pendingTerminalApprovals.delete(sessionId);
+  return result;
+};
+
+let terminalManager = new TerminalManager({
+  workspaceRoot: defaultWorkspace,
+  onCommand: terminalOnCommand,
+  onTerminalOutput: (sessionId: string, data: string) => companionHub.broadcastTerminalOutput(sessionId, data),
 });
 const deepseekClient = new DeepSeekClient({
   apiKey: '',
@@ -915,7 +934,7 @@ app.post('/api/workspace', (req, res) => {
   try {
     sandbox.setWorkspaceRoot(newPath);
     companionHub.setWorkspaceRoot(newPath);
-    terminalManager = new TerminalManager({ workspaceRoot: newPath });
+    terminalManager = new TerminalManager({ workspaceRoot: newPath, onCommand: terminalOnCommand, onTerminalOutput: (s: string, d: string) => companionHub.broadcastTerminalOutput(s, d) });
     res.json({ success: true, workspaceRoot: sandbox.getWorkspaceRoot() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1201,6 +1220,31 @@ app.post('/api/review/revert', async (req, res) => {
   }
 });
 
+// ── CC Deviation API ─────────────────────────────────────────────────────────
+app.get('/api/cc-deviations', async (_req, res) => {
+  try {
+    const records = getDeviations();
+    res.json({ success: true, records });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/cc-deviations/status', async (req, res) => {
+  const { id, status } = req.body as { id?: string; status?: string };
+  if (!id) return res.status(400).json({ error: 'id is required' });
+  if (!['pending', 'accepted', 'rejected'].includes(status || '')) {
+    return res.status(400).json({ error: 'status must be pending, accepted, or rejected' });
+  }
+  try {
+    const record = updateDeviationStatus(id, status as 'pending' | 'accepted' | 'rejected');
+    if (!record) return res.status(404).json({ error: 'Deviation record not found' });
+    res.json({ success: true, record });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/git/commit', async (req, res) => {
   const { message } = req.body;
   if (!message) {
@@ -1274,6 +1318,12 @@ app.post('/api/auth/register', sensitiveLimiter, async (req, res) => {
   }
   if (email.includes('\x00') || password.includes('\x00')) {
     return res.status(400).json({ error: 'Invalid input' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+  }
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+    return res.status(400).json({ error: 'Password must include at least one uppercase letter, one lowercase letter, and one digit.' });
   }
   try {
     const user = await syncController.register(email, password);
@@ -1908,7 +1958,15 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       send({ type: 'error', code: 'claude_code_not_found', message: 'Claude Code CLI not found.' });
       return;
     }
+    let snapshotId: string | undefined;
     try {
+      const snapshot = await takeSnapshot({
+        workspaceRoot: sandbox.getWorkspaceRoot(),
+        planItemId,
+        queryText: task.title,
+      });
+      snapshotId = snapshot.id;
+
       const result = await claudeCodeRun({
         queryText: task.title,
         workspaceRoot: sandbox.getWorkspaceRoot(),
@@ -1917,6 +1975,11 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       send({ type: 'status', message: 'Claude Code execution complete.', durationMs: result.durationMs });
       send({ type: 'claude_code_output', output: result.stdout, isStderr: false });
       if (result.stderr) send({ type: 'claude_code_output', output: result.stderr, isStderr: true });
+
+      // Compute deviations (fire-and-forget — if it fails, snapshot is still available for manual review)
+      computeDeviations(snapshotId, result.stdout).catch((err) => {
+        send({ type: 'status', message: `Deviation analysis failed: ${err.message}` });
+      });
     } catch (err: any) {
       send({ type: 'error', code: 'claude_code_error', message: err.message });
     }
@@ -2214,6 +2277,17 @@ ${getResponseModeInstructions(responseMode)}`;
                   ws.send(JSON.stringify({ type: 'error', message: 'Claude Code CLI not found. Install it or set KRYLEOS_CLAUDE_CODE_PATH.' }));
                   break;
                 }
+
+                let deviationSnapshotId: string | undefined;
+                try {
+                  const snap = await takeSnapshot({
+                    workspaceRoot: sandbox.getWorkspaceRoot(),
+                    planItemId: data.planItemId,
+                    queryText,
+                  });
+                  deviationSnapshotId = snap.id;
+                } catch { /* snapshot is optional; proceed anyway */ }
+
                 const ccResult = await claudeCodeRun({
                   queryText,
                   workspaceRoot: sandbox.getWorkspaceRoot(),
@@ -2230,6 +2304,11 @@ ${getResponseModeInstructions(responseMode)}`;
                   }],
                   isStreaming: false,
                 }));
+
+                // Fire-and-forget deviation analysis
+                if (deviationSnapshotId) {
+                  computeDeviations(deviationSnapshotId, ccResult.stdout).catch(() => { /* non-critical */ });
+                }
               } catch (ccErr: any) {
                 ws.send(JSON.stringify({ type: 'error', message: `Claude Code CLI error: ${ccErr.message}` }));
               }
@@ -2469,6 +2548,11 @@ ${getResponseModeInstructions(responseMode)}`;
 
         case 'terminal_create':
           try {
+            const createKey = (ws as any)._socket?.remoteAddress || 'local';
+            if (!terminalOpLimiter.consume(createKey)) {
+              ws.send(JSON.stringify({ type: 'error', code: 'rate_limited', message: 'Terminal rate limit exceeded. Wait a few seconds.' }));
+              break;
+            }
             terminalManager.createSession(ws, data.cwd);
           } catch (err: any) {
             ws.send(JSON.stringify({ type: 'error', code: 'terminal_create_failed', message: err.message }));
@@ -2477,6 +2561,16 @@ ${getResponseModeInstructions(responseMode)}`;
 
         case 'terminal_input':
           try {
+            const inputKey = (ws as any)._socket?.remoteAddress || 'local';
+            if (!terminalOpLimiter.consume(inputKey)) {
+              ws.send(JSON.stringify({ type: 'error', code: 'rate_limited', message: 'Terminal rate limit exceeded. Wait a few seconds.' }));
+              break;
+            }
+            const tSession = terminalManager.getSession(data.sessionId);
+            if (!tSession || tSession.ws !== ws) {
+              ws.send(JSON.stringify({ type: 'error', code: 'forbidden', message: 'Not authorized for this session' }));
+              break;
+            }
             terminalManager.writeInput(data.sessionId, data.data);
           } catch (err: any) {
             ws.send(JSON.stringify({ type: 'error', code: 'terminal_write_failed', message: err.message }));
@@ -2485,6 +2579,16 @@ ${getResponseModeInstructions(responseMode)}`;
 
         case 'terminal_resize':
           try {
+            const resizeKey = (ws as any)._socket?.remoteAddress || 'local';
+            if (!terminalOpLimiter.consume(resizeKey)) {
+              ws.send(JSON.stringify({ type: 'error', code: 'rate_limited', message: 'Terminal rate limit exceeded. Wait a few seconds.' }));
+              break;
+            }
+            const rSession = terminalManager.getSession(data.sessionId);
+            if (!rSession || rSession.ws !== ws) {
+              ws.send(JSON.stringify({ type: 'error', code: 'forbidden', message: 'Not authorized for this session' }));
+              break;
+            }
             terminalManager.resize(data.sessionId, data.cols, data.rows);
           } catch (err: any) {
             ws.send(JSON.stringify({ type: 'error', code: 'terminal_resize_failed', message: err.message }));
@@ -2493,6 +2597,11 @@ ${getResponseModeInstructions(responseMode)}`;
 
         case 'terminal_approval':
           {
+            const aSession = terminalManager.getSession(data.sessionId);
+            if (!aSession || aSession.ws !== ws) {
+              ws.send(JSON.stringify({ type: 'error', code: 'forbidden', message: 'Not authorized for this session' }));
+              break;
+            }
             const resolve = pendingTerminalApprovals.get(data.sessionId);
             if (resolve) {
               resolve(data.approved === true);
@@ -2501,7 +2610,14 @@ ${getResponseModeInstructions(responseMode)}`;
           break;
 
         case 'terminal_close':
-          terminalManager.closeSession(data.sessionId);
+          {
+            const cSession = terminalManager.getSession(data.sessionId);
+            if (!cSession || cSession.ws !== ws) {
+              ws.send(JSON.stringify({ type: 'error', code: 'forbidden', message: 'Not authorized for this session' }));
+              break;
+            }
+            terminalManager.closeSession(data.sessionId);
+          }
           break;
 
         default:
@@ -3254,6 +3370,9 @@ app.post('/api/docs/patch', async (req, res) => {
   try {
     const root = sandbox.getWorkspaceRoot();
     const absPath = path.isAbsolute(docPath) ? docPath : path.resolve(root, docPath);
+    if (!isPathInside(root, absPath)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Path is outside the workspace root.' });
+    }
     if (!fs.existsSync(absPath)) {
       return res.status(404).json({ success: false, error: 'Documentation file not found.' });
     }
@@ -3316,7 +3435,10 @@ app.post('/api/docs/write', async (req, res) => {
   try {
     const root = sandbox.getWorkspaceRoot();
     const absPath = path.isAbsolute(docPath) ? docPath : path.resolve(root, docPath);
-    
+    if (!isPathInside(root, absPath)) {
+      return res.status(403).json({ success: false, error: 'Access Denied: Path is outside the workspace root.' });
+    }
+
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
     fs.writeFileSync(absPath, content, 'utf-8');
 
@@ -3698,6 +3820,12 @@ const PORT = process.env.PORT || 3001;
 const BIND_HOST = '127.0.0.1';
 const COMPANION_PORT = Number(process.env.KRYLEOS_COMPANION_PORT || 3002);
 const COMPANION_BIND_HOST = process.env.KRYLEOS_COMPANION_BIND_HOST || '127.0.0.1';
+if (COMPANION_BIND_HOST !== '127.0.0.1' && !COMPANION_AUTH_TOKEN) {
+  console.warn(
+    `[CRITICAL] Companion WebSocket exposed on ${COMPANION_BIND_HOST} with NO auth token. ` +
+    `Set KRYLEOS_COMPANION_AUTH_TOKEN to prevent unauthorized access.`
+  );
+}
 if (process.env.NODE_ENV !== 'test') {
   server.listen(Number(PORT), BIND_HOST, () => {
     console.log(`Kryleos Forge backend running on http://${BIND_HOST}:${PORT}`);

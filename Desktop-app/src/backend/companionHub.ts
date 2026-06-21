@@ -420,6 +420,17 @@ export class CompanionHub {
     }
   }
 
+  /** Forward terminal output to all connected companion devices.
+   *  Read-only (view-only) — companions receive output but cannot send input
+   *  to the terminal. */
+  public broadcastTerminalOutput(sessionId: string, data: string) {
+    this.broadcastToCompanions({
+      type: 'terminal_output',
+      sessionId,
+      data,
+    });
+  }
+
   public broadcastCommandApprovalRequired(sessionId: string, commandId: string, tool: string, command: string, destructive: boolean) {
     // Phase 5.3: sign so a paired phone can verify this request actually came
     // from this desktop (checked against desktopPublicKey received at pairing).

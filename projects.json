@@ -1,0 +1,9 @@
+[
+  {
+    "id": "project_demo",
+    "name": "Kryleos Trace Demo",
+    "workspaceFolder": "C:\\Users\\yassi\\Documents\\Kryleos Forge Demo",
+    "gitUrl": "",
+    "description": "Deterministic no-key demo. No AI model is called."
+  }
+]

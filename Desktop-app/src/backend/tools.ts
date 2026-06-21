@@ -402,7 +402,7 @@ export class WorkspaceSandbox {
     for (const child of processes) {
       try {
         if (process.platform === 'win32' && child.pid) {
-          exec(`taskkill /pid ${child.pid} /T /F`);
+          execFile('taskkill', ['/pid', String(child.pid), '/T', '/F']);
         } else {
           child.kill('SIGTERM');
         }

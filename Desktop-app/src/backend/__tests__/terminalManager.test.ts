@@ -92,7 +92,7 @@ describe('TerminalManager', () => {
     const ws = new FakeWebSocket() as unknown as WebSocket;
     const session = manager.createSession(ws, tmpDir);
 
-    expect(session.id).toMatch(/^term_/);
+    expect(session.id).toMatch(/^[0-9a-f-]+$/);
     expect(session.ws).toBe(ws);
     expect(session.cwd).toBe(tmpDir);
     expect(session.pty).toBeDefined();
@@ -369,6 +369,20 @@ describe('TerminalManager', () => {
     expect(dataSent).toBeDefined();
     expect(dataSent.sessionId).toBe(session.id);
     expect(dataSent.data).toBe('hello from shell\r\n');
+  });
+
+  it('onTerminalOutput callback fires for PTY data', () => {
+    const onTerminalOutput = vi.fn();
+    manager = new TerminalManager({
+      workspaceRoot: tmpDir,
+      onTerminalOutput,
+    });
+    const ws = new FakeWebSocket() as unknown as WebSocket;
+    const session = manager.createSession(ws, tmpDir);
+
+    session.pty._onDataCb('some terminal output\r\n');
+
+    expect(onTerminalOutput).toHaveBeenCalledWith(session.id, 'some terminal output\r\n');
   });
 
   it('PTY onExit cleans up session and notifies WS', () => {

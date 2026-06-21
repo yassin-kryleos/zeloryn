@@ -1,0 +1,414 @@
+# API and Event Contracts
+
+## Base URLs
+
+Desktop local API:
+
+```text
+http://127.0.0.1:3001
+```
+
+Desktop WebSocket:
+
+```text
+ws://127.0.0.1:3001
+```
+
+Companion WebSocket:
+
+```text
+ws://127.0.0.1:3002/api/companion/ws
+```
+
+All local API calls from the desktop renderer must include:
+
+```text
+X-Kryleos-Session: <process-scoped-secret>
+```
+
+## WebSocket Messages
+
+### Renderer to Backend
+
+```json
+{ "type": "config", "model": "ollama:qwen2.5-coder", "workspaceRoot": "C:/Project" }
+```
+
+```json
+{ "type": "query", "sessionId": "session_plan_x", "space": "plan", "query": "..." }
+```
+
+```json
+{ "type": "approve_command", "approved": true, "commandId": "cmd_123" }
+```
+
+```json
+{ "type": "approve_tool", "approved": true, "invocationId": "tool_inv_123" }
+```
+
+```json
+{ "type": "abort_execution" }
+```
+
+```json
+{ "type": "start_swarm_run", "taskId": "task_123" }
+```
+
+```json
+{ "type": "stop_swarm_run", "swarmSessionId": "swarm_123" }
+```
+
+### Backend to Renderer
+
+```json
+{ "type": "update", "logs": [], "checklist": [], "activeAgent": "builder" }
+```
+
+```json
+{
+  "type": "command_approval_required",
+  "tool": "runCommand",
+  "command": "npm test",
+  "commandId": "cmd_123",
+  "destructive": false
+}
+```
+
+```json
+{
+  "type": "tool_approval_required",
+  "invocationId": "tool_inv_123",
+  "toolId": "git.push",
+  "permission": "network",
+  "approvalPolicy": "always",
+  "summary": "Push current branch to origin",
+  "destructive": false
+}
+```
+
+```json
+{
+  "type": "tool_invocation_update",
+  "invocationId": "tool_inv_123",
+  "toolId": "test.run",
+  "status": "succeeded",
+  "resultSummary": "12 tests passed"
+}
+```
+
+```json
+{ "type": "trace_complete", "traceId": "trace_1", "planItemId": "task_1", "allCriteriaPassed": true }
+```
+
+```json
+{ "type": "drift_result", "taskId": "task_1", "status": "in_progress" }
+```
+
+```json
+{ "type": "swarm_started", "swarmSession": {}, "agentRuns": [] }
+```
+
+```json
+{ "type": "swarm_agent_update", "swarmSessionId": "swarm_123", "agentRun": {} }
+```
+
+```json
+{ "type": "swarm_completed", "swarmSession": {}, "agentRuns": [], "trace": {} }
+```
+
+```json
+{ "type": "swarm_failed", "swarmSession": {}, "agentRuns": [], "message": "Stopped by user." }
+```
+
+```json
+{ "type": "learning_recommendations_update", "recommendations": [] }
+```
+
+## Companion WebSocket Messages
+
+Connection query:
+
+```text
+/api/companion/ws?code=123456
+/api/companion/ws?deviceToken=<token>
+```
+
+Pair device:
+
+```json
+{
+  "type": "PAIR_DEVICE",
+  "deviceId": "mobile-abc",
+  "publicKey": "<ed25519-public-key>",
+  "label": "ios companion",
+  "pairingSecret": "<qr-secret>"
+}
+```
+
+Approve command:
+
+```json
+{
+  "type": "APPROVE_COMMAND",
+  "sessionId": "global_session",
+  "commandId": "cmd_123",
+  "nonce": "n_123",
+  "timestamp": 1760000000000,
+  "signature": "<device-signature>"
+}
+```
+
+Reject command:
+
+```json
+{
+  "type": "REJECT_COMMAND",
+  "sessionId": "global_session",
+  "commandId": "cmd_123",
+  "nonce": "n_124",
+  "timestamp": 1760000000000,
+  "signature": "<device-signature>"
+}
+```
+
+Stop workflow:
+
+```json
+{
+  "type": "STOP_WORKFLOW",
+  "sessionId": "global_session",
+  "nonce": "n_125",
+  "timestamp": 1760000000000,
+  "signature": "<device-signature>"
+}
+```
+
+Sync planning notes:
+
+```json
+{
+  "type": "SYNC_PLANNING_NOTES",
+  "noteId": "offline-1",
+  "notes": "- Add auth flow",
+  "nonce": "n_126",
+  "timestamp": 1760000000000,
+  "signature": "<device-signature>"
+}
+```
+
+Start Forge run:
+
+```json
+{
+  "type": "START_FORGE_RUN",
+  "sessionId": "global_session",
+  "planItemId": "task_1",
+  "nonce": "n_127",
+  "timestamp": 1760000000000,
+  "signature": "<device-signature>"
+}
+```
+
+## REST Route Groups
+
+### Sessions
+
+```text
+GET    /api/sessions?space=plan
+GET    /api/sessions/:id
+DELETE /api/sessions/:id
+```
+
+### Projects
+
+```text
+GET    /api/projects
+POST   /api/projects/create
+POST   /api/projects/active
+DELETE /api/projects/:id
+```
+
+### Workspace
+
+```text
+GET  /api/workspace
+POST /api/workspace
+GET  /api/workspace/graph
+POST /api/workspace/revert
+```
+
+### Files
+
+```text
+GET    /api/files?path=src
+GET    /api/files/content?path=src/App.tsx
+POST   /api/files/create
+POST   /api/files/save
+DELETE /api/files?path=src/tmp.txt
+```
+
+### Git
+
+```text
+GET  /api/git/status
+POST /api/git/stage
+POST /api/git/commit
+POST /api/git/remote
+POST /api/git/push
+POST /api/git/pull
+```
+
+### Review
+
+```text
+GET  /api/review/current
+POST /api/review/status
+POST /api/review/stage
+POST /api/review/revert
+```
+
+### Credentials and Providers
+
+```text
+GET  /api/credentials
+POST /api/credentials
+GET  /api/providers/detect
+GET  /api/providers/capabilities
+POST /api/providers/health-check
+POST /api/providers/test
+```
+
+### Tool API and MCP
+
+```text
+GET    /api/tools
+GET    /api/tools/:toolId
+POST   /api/tools/invoke
+GET    /api/tools/invocations?sessionId=global_session
+POST   /api/tools/invocations/:id/approval
+GET    /api/mcp/servers
+POST   /api/mcp/servers
+POST   /api/mcp/servers/:id/test
+POST   /api/mcp/servers/:id/discover
+PATCH  /api/mcp/servers/:id
+DELETE /api/mcp/servers/:id
+```
+
+Rules:
+
+- `/api/tools/invoke` is for user/system initiated tools; model-initiated tools flow through the Agent Orchestrator and Tool API Gateway.
+- All tool invocations must validate against the registered `ToolDefinition.inputSchema`.
+- Tool approval decisions must reference the exact `invocationId`.
+- MCP token values are stored through credential references and never returned in route responses.
+- Disabled MCP servers cannot be invoked even if a provider emits a matching tool call.
+
+### Planning
+
+```text
+POST /api/planning/import
+GET  /api/plan/workspace
+POST /api/plan/workspace/extract
+POST /api/plan/workspace/save
+POST /api/plan/items/:id/feasibility
+POST /api/plan/items/:id/criteria
+PATCH /api/plan/items/:id/criteria
+GET  /api/plan/items/:id/criteria
+GET  /api/plan/drift
+GET  /api/plan/whats-left
+GET  /api/plan/export
+POST /api/crew/sync
+```
+
+### Traces
+
+```text
+POST /api/traces
+GET  /api/traces/:itemId
+POST /api/traces/:traceId/confirm-complete
+```
+
+### Swarm and Learning
+
+```text
+GET  /api/swarm/sessions/:id
+GET  /api/swarm/sessions/:id/trace
+GET  /api/learning/signals
+GET  /api/learning/recommendations
+POST /api/learning/recommendations/generate
+POST /api/learning/recommendations/:id/approve
+POST /api/learning/recommendations/:id/reject
+POST /api/learning/recommendations/:id/rollback
+```
+
+Rules:
+
+- Swarm runs must reuse the same blocked-task, workspace, Tool API, approval, and Zero Egress enforcement as normal Forge runs.
+- Learning recommendation approval may update only local approved learning patterns.
+- Learning rejection must suppress repeated recommendation signatures.
+- Learning rollback must disable the approved pattern and append a rollback record.
+- Learning routes must not call hosted providers or send project data out in V1.
+
+### Companion
+
+```text
+GET    /api/companion/pairing
+GET    /api/companion/devices
+DELETE /api/companion/devices/:deviceId
+```
+
+Pairing code/secret routes must be loopback-only.
+
+### Billing
+
+```text
+POST /api/auth/register
+POST /api/auth/login
+POST /api/auth/subscribe
+POST /api/billing/checkout
+POST /api/billing/webhook
+POST /api/billing/razorpay/checkout
+POST /api/billing/razorpay/webhook
+POST /api/license/verify
+```
+
+Webhook routes must verify Stripe/Razorpay signatures outside mock development.
+
+### Sync
+
+```text
+POST /api/sync/push
+GET  /api/sync/pull
+```
+
+### Docs and Workflows
+
+```text
+POST /api/docs/generate
+POST /api/docs/patch
+POST /api/docs/write
+POST /api/workflows/founder/generate
+POST /api/workflows/agency/export
+```
+
+Docs/workflow outputs must be secret-scanned before write/export.
+
+### Cost
+
+```text
+POST /api/cost/estimate
+GET  /api/cost/history
+```
+
+## API Rules
+
+- Server validates tier; client tier is never authoritative.
+- Server validates workspace path boundaries.
+- Server rejects stale command approvals.
+- Server enforces Zero Egress.
+- Server routes every agent-callable tool through the Tool API Gateway.
+- Server blocks tool invocations that fail schema, tier, workspace, approval, or Zero Egress checks.
+- Server writes redacted tool invocation audit records.
+- Server sanitizes external/MCP tool output before returning it to models.
+- Server validates local session headers for desktop REST.
+- Server rate-limits sensitive auth/billing/pairing routes.
+- Server treats preview/live pages as untrusted.

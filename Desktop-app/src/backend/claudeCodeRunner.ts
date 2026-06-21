@@ -74,6 +74,25 @@ function buildClaudePrompt(queryText: string, workspaceRoot: string, planItemId?
 }
 
 // ── Runner ───────────────────────────────────────────────────────────────────
+
+/** Whitelist of env keys safe to pass to the Claude Code subprocess.
+ *  Anything sensitive (API keys, DB URLs, KRYLEOS_ secrets) is excluded. */
+const ALLOWED_ENV_KEYS = new Set([
+  'PATH', 'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'USER', 'USERNAME',
+  'SHELL', 'LANG', 'LC_ALL', 'TERM', 'TERMINFO', 'TMPDIR', 'TEMP', 'TMP',
+  'PWD', 'CLICOLOR', 'FORCE_COLOR', 'PIP_NO_INPUT', 'NPM_CONFIG_LOGLEVEL',
+  'EDITOR', 'VISUAL',
+]);
+
+function sanitizeEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of ALLOWED_ENV_KEYS) {
+    if (process.env[key] !== undefined) {
+      env[key] = process.env[key];
+    }
+  }
+  return env;
+}
 export async function claudeCodeRun(opts: ClaudeCodeRunnerOptions): Promise<ClaudeCodeResult> {
   const claudePath = findClaudeCodeBinary();
   if (!claudePath) {
@@ -95,7 +114,7 @@ export async function claudeCodeRun(opts: ClaudeCodeRunnerOptions): Promise<Clau
       cwd: opts.workspaceRoot,
       timeout: timeoutMs,
       maxBuffer,
-      env: { ...process.env },
+      env: { ...sanitizeEnv() },
     });
     usedPrintMode = true;
     return {

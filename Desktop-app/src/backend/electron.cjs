@@ -71,10 +71,19 @@ function getFallbackKey() {
   }
 }
 
+let warnedElectronLegacy = false;
+
 // Legacy decrypt for data written by the old constant-key scheme, so existing
 // installs aren't bricked. Encryption never uses this path again.
 function legacyDecrypt(cipherText) {
   const legacySeed = process.env.OS_FINGERPRINT || 'kryleos-fallback-key-9988';
+  if (!process.env.OS_FINGERPRINT && !warnedElectronLegacy) {
+    warnedElectronLegacy = true;
+    console.warn(
+      '[Security] OS_FINGERPRINT not set — using hardcoded fallback decryption key. ' +
+      'Set the OS_FINGERPRINT environment variable to a unique 32+ char secret for secure key derivation.'
+    );
+  }
   const parts = cipherText.split(':');
   const iv = Buffer.from(parts[1], 'hex');
   const encryptedText = Buffer.from(parts[2], 'hex');

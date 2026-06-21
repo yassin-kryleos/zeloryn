@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ExternalLink, FileDiff, GitBranch, RefreshCw, RotateCcw, ShieldAlert, Terminal } from 'lucide-react';
+import { CheckCircle2, ExternalLink, FileDiff, GitBranch, RefreshCw, RotateCcw, ShieldAlert, Terminal, XCircle } from 'lucide-react';
 import type { AgentLog } from '../backend/agents';
 
 interface CodeReviewPanelProps {
@@ -49,6 +49,19 @@ interface EvidenceRecord {
   timestamp: string;
   message: string;
   level: 'info' | 'error';
+}
+
+interface CcDeviationRecord {
+  id: string;
+  snapshotId: string;
+  file: string;
+  action: 'modified' | 'created' | 'deleted';
+  diff: string;
+  planItemId?: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  riskNotes: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 const diffStartMarker = '--- DIFF CONTENT ---';
@@ -171,6 +184,11 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
   const [loading, setLoading] = useState<boolean>(false);
   const [pendingRevertId, setPendingRevertId] = useState<string | null>(null);
 
+  // CC deviation state
+  const [ccDeviations, setCcDeviations] = useState<CcDeviationRecord[]>([]);
+  const [ccLoading, setCcLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'changes' | 'cc-deviation'>('changes');
+
   const evidence = useMemo(() => parseEvidence(logs), [logs]);
   const logChanges = useMemo(() => parseLogChanges(logs), [logs]);
   const gitChanges = useMemo(() => reviewState?.success ? reviewState.files.map(mapApiFile) : [], [reviewState]);
@@ -178,6 +196,38 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
   const selectedChange = changes.find(change => change.id === selectedChangeId) || changes[0] || null;
   const riskCount = changes.reduce((count, change) => count + change.risks.length, 0);
   const gitEnabled = Boolean(reviewState?.success);
+
+  // ── CC Deviation helpers ─────────────────────────────────────────────────────
+  const refreshCcDeviations = useCallback(async () => {
+    try {
+      setCcLoading(true);
+      const res = await fetch('http://localhost:3001/api/cc-deviations');
+      const data = await res.json() as { success: boolean; records: CcDeviationRecord[] };
+      if (data.success) setCcDeviations(data.records);
+    } catch {
+      // Non-critical — CC deviation may not be available
+    } finally {
+      setCcLoading(false);
+    }
+  }, []);
+
+  const updateCcDeviationStatus = useCallback(async (id: string, status: 'accepted' | 'rejected') => {
+    setCcDeviations(prev => prev.map(d => d.id === id ? { ...d, status } : d));
+    try {
+      await fetch('http://localhost:3001/api/cc-deviations/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      });
+      onNotify?.(`CC deviation ${status}.`, status === 'rejected' ? 'warning' : 'success');
+    } catch {
+      onNotify?.('Failed to update CC deviation status.', 'error');
+    }
+  }, [onNotify]);
+
+  useEffect(() => {
+    refreshCcDeviations();
+  }, [logs.length, refreshCcDeviations]);
 
   const refreshReview = useCallback(async () => {
     try {
@@ -274,7 +324,117 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
     ));
   };
 
-  if (changes.length === 0) {
+  // ── Tab bar ──────────────────────────────────────────────────────────────────
+  const pendingCcCount = ccDeviations.filter(d => d.status === 'pending').length;
+
+  const tabBar = (
+    <div className="flex gap-0 border-b border-forge-dark">
+      <button
+        onClick={() => setActiveTab('changes')}
+        className={`px-3 py-1.5 text-[10px] font-bold tracking-widest inline-flex items-center gap-1.5 ${activeTab === 'changes' ? 'text-forge-neon border-b-2 border-forge-neon' : 'text-forge-dim hover:text-forge-text'}`}
+        type="button"
+      >
+        <FileDiff size={12} />
+        CHANGES
+        {changes.length > 0 && <span className="text-[9px] opacity-70">({changes.length})</span>}
+      </button>
+      <button
+        onClick={() => { setActiveTab('cc-deviation'); if (ccDeviations.length === 0) refreshCcDeviations(); }}
+        className={`px-3 py-1.5 text-[10px] font-bold tracking-widest inline-flex items-center gap-1.5 ${activeTab === 'cc-deviation' ? 'text-cyan-300 border-b-2 border-cyan-300' : 'text-forge-dim hover:text-forge-text'}`}
+        type="button"
+      >
+        <Terminal size={12} />
+        CC DEVIATION
+        {pendingCcCount > 0 && <span className="bg-red-500 text-white rounded-full px-1.5 text-[8px]">{pendingCcCount}</span>}
+      </button>
+    </div>
+  );
+
+  // ── CC Deviation view ──────────────────────────────────────────────────────
+  const renderCcDeviations = () => {
+    if (ccLoading) {
+      return <div className="p-3 text-[10px] text-forge-dim">Loading CC deviations...</div>;
+    }
+    if (ccDeviations.length === 0) {
+      return (
+        <div className="p-3 text-[10px] text-forge-dim">
+          No CC deviation records found. Deviations are generated when a Claude Code CLI run completes — its workspace diff is compared against the pre-run snapshot.
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex gap-2 min-h-0 flex-1">
+        <div className="w-[42%] overflow-auto border border-forge-dark rounded bg-forge-very-dark bg-opacity-25">
+          {ccDeviations.map(record => {
+            const diffLines = record.diff ? record.diff.split('\n') : [];
+            const added = diffLines.filter(l => l.startsWith('+') && !l.startsWith('+++')).length;
+            const removed = diffLines.filter(l => l.startsWith('-') && !l.startsWith('---')).length;
+            const riskCount = record.riskNotes.length;
+            const isPending = record.status === 'pending';
+            return (
+              <div
+                key={record.id}
+                className={`border-b border-forge-dark p-2 text-[10px] ${isPending ? 'text-forge-text' : 'text-forge-dim opacity-60'}`}
+              >
+                <div className="flex items-center gap-1.5 font-bold">
+                  <span className="truncate">{record.file.replace(/\\/g, '/').split('/').pop()}</span>
+                </div>
+                <div className="mt-0.5 text-[9px] text-forge-dim">
+                  {record.action} | +{added} / -{removed} | {record.status.toUpperCase()}
+                </div>
+                {riskCount > 0 && (
+                  <div className="mt-0.5 text-[9px] text-red-300">
+                    {record.riskNotes.length} risk{riskCount > 1 ? 's' : ''}
+                  </div>
+                )}
+                <div className="flex gap-1.5 mt-1.5">
+                  <button
+                    onClick={() => updateCcDeviationStatus(record.id, 'accepted')}
+                    className="text-[8px] text-forge-neon hover:text-white border border-forge-dark rounded px-1.5 py-0.5"
+                    type="button"
+                  >
+                    ACCEPT
+                  </button>
+                  <button
+                    onClick={() => updateCcDeviationStatus(record.id, 'rejected')}
+                    className="text-[8px] text-red-300 hover:text-white border border-red-950 rounded px-1.5 py-0.5"
+                    type="button"
+                  >
+                    REJECT
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex-1 min-w-0 overflow-auto border border-forge-dark rounded bg-forge-very-dark bg-opacity-35">
+          {ccDeviations.length > 0 && (
+            <>
+              <div className="border-b border-forge-dark p-2 text-[10px] text-cyan-300 font-bold">
+                DIFF: {ccDeviations[0].file}
+              </div>
+              {ccDeviations[0].diff ? (
+                ccDeviations[0].diff.split('\n').map((line, i) => (
+                  <div key={i} className={`${diffLineClass(line)} whitespace-pre-wrap px-2 py-0.5`}>
+                    {line}
+                  </div>
+                ))
+              ) : (
+                <div className="p-2 text-[9px] text-forge-dim">
+                  No git diff available — CC reported changes but no on-disk diff was detected.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Empty state ───────────────────────────────────────────────────────────
+  if (changes.length === 0 && ccDeviations.length === 0) {
     return (
       <div className="flex-1 border border-forge-dark bg-forge-very-dark bg-opacity-20 p-3 font-mono text-xs overflow-auto">
         <div className="flex items-center justify-between gap-2 text-forge-neon font-bold tracking-widest mb-3">
@@ -282,14 +442,23 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
             <FileDiff size={14} />
             REVIEW
           </span>
-          <button onClick={refreshReview} className="forge-btn text-[9px] inline-flex items-center gap-1" type="button">
-            <RefreshCw size={11} />
-            REFRESH
-          </button>
+          <div className="flex gap-1.5">
+            <button onClick={() => refreshCcDeviations()} className="forge-btn text-[9px] inline-flex items-center gap-1" type="button" title="Refresh CC deviations">
+              <Terminal size={11} />
+              CC DEV
+            </button>
+            <button onClick={refreshReview} className="forge-btn text-[9px] inline-flex items-center gap-1" type="button">
+              <RefreshCw size={11} />
+              REFRESH
+            </button>
+          </div>
         </div>
-        <p className="text-forge-dim leading-relaxed">
-          Git working/staged changes will appear here. If this is not a Git workspace, session-level agent diffs will appear after Forge modifies files.
-        </p>
+        {tabBar}
+        {activeTab === 'cc-deviation' ? renderCcDeviations() : (
+          <p className="text-forge-dim leading-relaxed mt-3">
+            Git working/staged changes will appear here. If this is not a Git workspace, session-level agent diffs will appear after Forge modifies files.
+          </p>
+        )}
         <div className="mt-4 border border-forge-dark rounded p-2 text-[10px] text-forge-dim bg-forge-very-dark bg-opacity-50">
           STATUS: {loading ? 'Refreshing review state...' : reviewState?.message || 'No changed files detected.'}
         </div>
@@ -299,6 +468,10 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col gap-2 font-mono text-xs">
+      {tabBar}
+
+      {activeTab === 'cc-deviation' ? renderCcDeviations() : (
+        <>
       <div className="grid grid-cols-4 gap-1.5 text-[9px]">
         <div className="border border-forge-dark rounded p-1.5 bg-forge-very-dark bg-opacity-25">
           <div className="text-forge-dim">CHANGES</div>
@@ -469,6 +642,8 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
           </pre>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 };

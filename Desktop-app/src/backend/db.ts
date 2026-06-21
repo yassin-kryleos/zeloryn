@@ -44,8 +44,18 @@ function getDbKey(): Buffer {
   }
 }
 
+let warnedLegacyKey = false;
+
 // Legacy constant-derived key, used only to read pre-existing data.
+// WARNING: do NOT rely on this for new data — requires OS_FINGERPRINT env var.
 function getLegacyDbKey(): Buffer {
+  if (!process.env.OS_FINGERPRINT && !warnedLegacyKey) {
+    warnedLegacyKey = true;
+    console.warn(
+      '[Security] OS_FINGERPRINT not set — using hardcoded fallback encryption key. ' +
+      'Set the OS_FINGERPRINT environment variable to a unique 32+ char secret for secure key derivation.'
+    );
+  }
   return crypto.scryptSync(
     process.env.OS_FINGERPRINT || 'kryleos-fallback-key-9988',
     'kryleos-salt-9281',

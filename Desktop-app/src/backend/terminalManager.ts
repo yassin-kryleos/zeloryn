@@ -3,9 +3,11 @@
 // Sessions are sandboxed to the workspace root and subject to
 // command classification + approval gate.
 
-import { spawn, type IPty } from 'node-pty';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { spawn, type IPty } from 'node-pty';
 import { WebSocket } from 'ws';
 import { classifyCommand, type CommandClassification } from './tools';
 
@@ -29,6 +31,9 @@ export interface TerminalManagerOptions {
   /** Called for destructive terminal commands pending user approval.
    *  Return true to allow execution (send \r), false to reject (discard line). */
   onCommand?: (sessionId: string, command: string, classification: CommandClassification) => Promise<boolean>;
+  /** Called for every PTY data event. Used to forward terminal output to
+   *  companion/remote viewers in real-time. */
+  onTerminalOutput?: (sessionId: string, data: string) => void;
   shellPath?: string;
   shellArgs?: string[];
 }
@@ -46,6 +51,7 @@ export class TerminalManager {
       maxSessions: opts.maxSessions ?? DEFAULT_MAX_SESSIONS,
       idleTimeoutMs: opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
       onCommand: opts.onCommand ?? (() => Promise.resolve(true)),
+      onTerminalOutput: opts.onTerminalOutput ?? (() => {}),
       shellPath: opts.shellPath ?? (os.platform() === 'win32' ? 'powershell.exe' : '/bin/bash'),
       shellArgs: opts.shellArgs ?? [],
     };
@@ -63,7 +69,7 @@ export class TerminalManager {
       );
     }
 
-    const sessionId = `term_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const sessionId = crypto.randomUUID();
     const resolvedCwd = cwd || this.options.workspaceRoot;
 
     if (!this.isPathInsideWorkspace(resolvedCwd)) {
@@ -104,6 +110,10 @@ export class TerminalManager {
           ws.send(JSON.stringify({ type: 'terminal_data', sessionId, data }));
         }
       } catch { /* ws may have closed */ }
+      // Forward output to companion/remote viewers.
+      try {
+        this.options.onTerminalOutput(sessionId, data);
+      } catch { /* companion may not be connected */ }
     });
 
     pty.onExit(({ exitCode }) => {
@@ -134,7 +144,7 @@ export class TerminalManager {
   writeInput(sessionId: string, data: string): void {
     const session = this.sessions.get(sessionId);
     if (!session) {
-      throw new Error(`Terminal session ${sessionId} not found.`);
+      throw new Error('Terminal session not found.');
     }
     session.lastActivity = Date.now();
 
@@ -250,9 +260,14 @@ export class TerminalManager {
   resize(sessionId: string, cols: number, rows: number): void {
     const session = this.sessions.get(sessionId);
     if (!session) {
-      throw new Error(`Terminal session ${sessionId} not found.`);
+      throw new Error('Terminal session not found.');
     }
     session.pty.resize(cols, rows);
+  }
+
+  /** Get a session by ID. Returns undefined if not found. */
+  getSession(sessionId: string): TerminalSession | undefined {
+    return this.sessions.get(sessionId);
   }
 
   /** Close a terminal session. */
@@ -296,8 +311,12 @@ export class TerminalManager {
   }
 
   private isPathInsideWorkspace(targetPath: string): boolean {
-    const resolved = path.resolve(targetPath);
-    const workspace = path.resolve(this.options.workspaceRoot);
-    return resolved === workspace || resolved.startsWith(workspace + path.sep);
+    try {
+      const resolved = fs.realpathSync(path.resolve(targetPath));
+      const workspace = fs.realpathSync(this.options.workspaceRoot);
+      return resolved === workspace || resolved.startsWith(workspace + path.sep);
+    } catch {
+      return false;
+    }
   }
 }
