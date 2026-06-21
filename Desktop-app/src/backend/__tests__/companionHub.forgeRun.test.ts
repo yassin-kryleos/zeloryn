@@ -193,8 +193,8 @@ describe('CompanionHub START_FORGE_RUN (P5.4)', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    const errorMsg = ws.sent.find((m) => m.type === 'error' && /Remote FORGE run failed/.test(m.message || ''));
+    const errorMsg = ws.sent.find((m) => m.type === 'error');
     expect(errorMsg).toBeDefined();
-    expect(errorMsg.message).toMatch(/boom/);
+    expect(errorMsg.message).toMatch(/execution failed/);
   });
 });

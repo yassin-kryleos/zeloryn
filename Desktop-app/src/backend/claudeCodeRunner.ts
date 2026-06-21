@@ -131,7 +131,7 @@ export async function claudeCodeRun(opts: ClaudeCodeRunnerOptions): Promise<Clau
       timeout: timeoutMs,
       maxBuffer,
       input: prompt,
-      env: { ...process.env, CLAUDE_CODE_HEADLESS: '1' },
+      env: { ...sanitizeEnv(), CLAUDE_CODE_HEADLESS: '1' },
     });
     return {
       stdout: result.stdout,

@@ -161,7 +161,8 @@ async function resolveQueryMentions(text: string, sandbox: WorkspaceSandbox): Pr
           }
         }
       } catch (err: any) {
-        contextBlocks.push(`\n[WARNING: Could not expand wildcard mention "${rawPath}" - ${err.message}]`);
+        contextBlocks.push(`\n[WARNING: Could not expand wildcard mention "${rawPath}"]`);
+        console.warn('Wildcard mention expansion failed:', err.message);
       }
       continue;
     }
@@ -203,7 +204,8 @@ async function resolveQueryMentions(text: string, sandbox: WorkspaceSandbox): Pr
         }
       }
     } catch (err: any) {
-      contextBlocks.push(`\n[WARNING: Could not reference file "${rawPath}" - ${err.message}]`);
+      contextBlocks.push(`\n[WARNING: Could not reference file "${rawPath}"]`);
+      console.warn('File reference failed:', err.message);
     }
   }
 
@@ -343,14 +345,14 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
     try {
       event = stripe.webhooks.constructEvent(req.body, sig as string, stripeWebhookSecret);
     } catch (err: any) {
-      return res.status(400).send(`Webhook Error: ${err.message}`);
+      return res.status(400).send('Webhook Error: Invalid payload.');
     }
   } else {
     // Dev/test mock path only.
     try {
       event = JSON.parse(req.body.toString('utf8'));
     } catch (err: any) {
-      return res.status(400).send(`Webhook Error parsing JSON: ${err.message}`);
+      return res.status(400).send('Webhook Error: Invalid JSON payload.');
     }
   }
 
@@ -392,7 +394,7 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
     }
     res.json({ received: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -425,7 +427,7 @@ app.post('/api/billing/razorpay/webhook', express.raw({ type: 'application/json'
   try {
     body = JSON.parse(req.body.toString('utf8'));
   } catch (err: any) {
-    return res.status(400).send(`Webhook Error parsing JSON: ${err.message}`);
+    return res.status(400).send('Webhook Error: Invalid JSON payload.');
   }
 
   try {
@@ -457,7 +459,7 @@ app.post('/api/billing/razorpay/webhook', express.raw({ type: 'application/json'
     }
     res.json({ received: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -842,7 +844,7 @@ app.get('/api/sessions', async (req, res) => {
     const list = await chatDb.listSessions(req.query.space as any);
     res.json(list);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -866,7 +868,7 @@ app.get('/api/sessions/:id', async (req, res) => {
     }
     res.json(session);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -875,7 +877,7 @@ app.delete('/api/sessions/:id', async (req, res) => {
     await chatDb.deleteSession(req.params.id);
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -915,7 +917,7 @@ app.put('/api/sessions/:id/tasks', async (req, res) => {
     await chatDb.saveSession(session);
     res.json({ success: true, tasks: session.tasks });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -937,7 +939,7 @@ app.post('/api/workspace', (req, res) => {
     terminalManager = new TerminalManager({ workspaceRoot: newPath, onCommand: terminalOnCommand, onTerminalOutput: (s: string, d: string) => companionHub.broadcastTerminalOutput(s, d) });
     res.json({ success: true, workspaceRoot: sandbox.getWorkspaceRoot() });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -951,7 +953,7 @@ app.get('/api/projects', (req, res) => {
     }
     res.json({ success: true, projects });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -997,7 +999,8 @@ app.post('/api/projects/create', async (req, res) => {
         execFile('git', ['clone', gitUrl, '.'], { cwd: resolvedPath }, (err, stdout, stderr) => {
           if (err) {
             console.error('Git clone failed:', stderr || err.message);
-            newProject.description = `${newProject.description} (Git clone failed: ${err.message})`.trim();
+            newProject.description = `${newProject.description} (Git clone failed — see server log for details)`.trim();
+            console.error('Git clone details:', err.message);
           }
           finalizeProject();
         });
@@ -1007,7 +1010,7 @@ app.post('/api/projects/create', async (req, res) => {
 
     finalizeProject();
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1029,7 +1032,7 @@ app.post('/api/projects/active', (req, res) => {
     planningV2().recoverInterruptedRun().catch(err => console.error('Interrupted trace recovery failed:', err));
     res.json({ success: true, project, workspaceRoot: project.workspaceFolder });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1112,7 +1115,7 @@ app.post('/api/demo/start', async (_req, res) => {
 
     res.json({ success: true, project, task, trace, replayed: true });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -1129,7 +1132,7 @@ app.delete('/api/projects/:id', (req, res) => {
     if (activeProjectId === req.params.id) activeProjectId = null;
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1142,7 +1145,7 @@ app.post('/api/workspace/revert', async (req, res) => {
     const success = await sandbox.revertFile(filePath);
     res.json({ success, message: success ? `Reverted ${path.basename(filePath)} to snapshot state` : 'No snapshot available for this file' });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1151,7 +1154,7 @@ app.get('/api/git/status', async (_req, res) => {
     const status = await sandbox.gitStatus();
     res.json(status);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1164,7 +1167,7 @@ app.post('/api/git/stage', async (req, res) => {
     const success = await sandbox.gitStage(filePath);
     res.json({ success });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1173,7 +1176,7 @@ app.get('/api/review/current', async (_req, res) => {
     const state = await sandbox.gitReviewCurrent();
     res.json(state);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1190,7 +1193,7 @@ app.post('/api/review/status', async (req, res) => {
     const result = await sandbox.setReviewStatus(filePath, status);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1203,7 +1206,7 @@ app.post('/api/review/stage', async (req, res) => {
     const result = await sandbox.gitReviewStage(filePath, staged !== false);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1216,7 +1219,7 @@ app.post('/api/review/revert', async (req, res) => {
     const result = await sandbox.gitReviewRevert(filePath);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1226,7 +1229,7 @@ app.get('/api/cc-deviations', async (_req, res) => {
     const records = getDeviations();
     res.json({ success: true, records });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1241,7 +1244,7 @@ app.post('/api/cc-deviations/status', async (req, res) => {
     if (!record) return res.status(404).json({ error: 'Deviation record not found' });
     res.json({ success: true, record });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1254,7 +1257,7 @@ app.post('/api/git/commit', async (req, res) => {
     const result = await sandbox.gitCommit(message);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1267,7 +1270,7 @@ app.post('/api/git/remote', async (req, res) => {
     const result = await sandbox.gitSetRemote(url, token);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1277,7 +1280,7 @@ app.post('/api/git/push', async (req, res) => {
     const result = await sandbox.gitPush(branch || 'main');
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1287,7 +1290,7 @@ app.post('/api/git/pull', async (req, res) => {
     const result = await sandbox.gitPull(branch || 'main');
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1297,7 +1300,7 @@ app.get('/api/files', async (req, res) => {
     const list = await sandbox.listDir(dirPath);
     res.json(list);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1307,7 +1310,7 @@ app.get('/api/workspace/graph', async (req, res) => {
     const graphData = await generateWorkspaceGraph(rootPath);
     res.json(graphData);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1329,7 +1332,7 @@ app.post('/api/auth/register', sensitiveLimiter, async (req, res) => {
     const user = await syncController.register(email, password);
     res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token, billingProvider: user.billingProvider } });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1345,7 +1348,7 @@ app.post('/api/auth/login', sensitiveLimiter, async (req, res) => {
     const user = await syncController.login(email, password);
     res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token, billingProvider: user.billingProvider } });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1412,7 +1415,7 @@ app.post('/api/billing/create-checkout-session', sensitiveLimiter, async (req, r
 
     res.json({ success: true, url: session.url });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1440,7 +1443,7 @@ app.post('/api/billing/razorpay/create-subscription', sensitiveLimiter, async (r
     await syncController.setBillingSubscription(token, 'razorpay', subscription.subscriptionId);
     res.json({ success: true, subscriptionId: subscription.subscriptionId, keyId: subscription.keyId });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1474,7 +1477,7 @@ app.post('/api/billing/create-portal-session', sensitiveLimiter, async (req, res
 
     res.json({ success: true, url: session.url });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1503,7 +1506,7 @@ app.post('/api/billing/cancel-subscription', sensitiveLimiter, async (req, res) 
       error: 'No recurring subscription is linked to this account. Open the billing portal or contact support.',
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1542,7 +1545,7 @@ app.post('/api/license/activate', sensitiveLimiter, async (req, res) => {
     const updated = await syncController.subscribeByEmail(user.email, result.tier, { provider: 'license' });
     res.json({ success: true, user: { email: updated.email, isPremium: updated.isPremium, tier: updated.tier, token: updated.token, billingProvider: updated.billingProvider } });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
+    res.status(400).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -1574,7 +1577,7 @@ app.post('/api/sync/push', async (req, res) => {
     broadcastSyncUpdate(token, req.body, lastUpdated);
     res.json({ success: true, lastUpdated });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1591,7 +1594,7 @@ app.get('/api/sync/pull', async (req, res) => {
     const syncData = await syncController.pullSync(token);
     res.json({ success: true, syncData });
   } catch (err: any) {
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1610,7 +1613,7 @@ app.get('/api/files/content', async (req, res) => {
     }
     res.json({ content, lastModified });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1628,7 +1631,7 @@ app.post('/api/files/create', async (req, res) => {
     }
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1641,7 +1644,7 @@ app.post('/api/files/save', async (req, res) => {
     await sandbox.writeFile(filePath, content || '');
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1655,7 +1658,7 @@ app.delete('/api/files', async (req, res) => {
     await fs.promises.unlink(resolved);
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1665,7 +1668,7 @@ app.get('/api/credentials', async (_req, res) => {
   try {
     res.json(await readCredentialsFile());
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1674,7 +1677,7 @@ app.post('/api/credentials', async (req, res) => {
     await updateCredentialsFile(existing => ({ ...existing, ...req.body }));
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1683,7 +1686,7 @@ app.delete('/api/credentials', async (_req, res) => {
     await deleteCredentialsFile();
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -1705,7 +1708,7 @@ app.delete('/api/local-data', async (_req, res) => {
       note: 'Workspace files and each repository .kryleos directory were preserved. Delete those folders manually when uninstalling if desired.'
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -1715,7 +1718,7 @@ app.post('/api/security/scan', (req, res) => {
     const secrets = scanSecrets(text || '');
     res.json({ success: true, secrets });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1724,7 +1727,7 @@ app.get('/api/companion/pairing-code', requireLoopback, (req, res) => {
     const code = companionHub.generatePairingCode();
     res.json({ success: true, code });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1736,7 +1739,7 @@ app.get('/api/companion/status', requireLoopback, (req, res) => {
     const connectedCount = companionHub.getConnectedCount();
     res.json({ success: true, code, pairingSecret, pairingExpiresAt, connectedCount, companionAuthToken: COMPANION_AUTH_TOKEN || null, claudeCodeAvailable: !!findClaudeCodeBinary() });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1745,7 +1748,7 @@ app.get('/api/companion/devices', (req, res) => {
     const devices = companionHub.listDevices();
     res.json({ success: true, devices });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1758,7 +1761,7 @@ app.delete('/api/companion/devices/:deviceId', (req, res) => {
     }
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1978,10 +1981,12 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
 
       // Compute deviations (fire-and-forget — if it fails, snapshot is still available for manual review)
       computeDeviations(snapshotId, result.stdout).catch((err) => {
-        send({ type: 'status', message: `Deviation analysis failed: ${err.message}` });
+        send({ type: 'status', message: 'Deviation analysis failed.' });
+        console.error('Deviation analysis error:', err.message);
       });
     } catch (err: any) {
-      send({ type: 'error', code: 'claude_code_error', message: err.message });
+      send({ type: 'error', code: 'claude_code_error', message: 'Claude Code execution failed.' });
+      console.error('Claude Code error:', err.message);
     }
   };
   companionHub.registerForgeRunner(currentSessionId + '_claude', remoteClaudeCodeRunner);
@@ -2266,7 +2271,8 @@ ${getResponseModeInstructions(responseMode)}`;
                 },
                 onError: (err) => {
                   if (chatAbortRequested) return;
-                  ws.send(JSON.stringify({ type: 'error', message: `Chat Error: ${err.message}` }));
+                  ws.send(JSON.stringify({ type: 'error', message: 'Chat execution failed.' }));
+                  console.error('Chat Error:', err.message);
                 }
               });
             } else if (data.runner === 'claude-code') {
@@ -2326,7 +2332,8 @@ ${getResponseModeInstructions(responseMode)}`;
               });
             }
           } catch (err: any) {
-            ws.send(JSON.stringify({ type: 'error', message: `Execution Error: ${err.message}` }));
+            ws.send(JSON.stringify({ type: 'error', message: 'Execution failed.' }));
+            console.error('Execution Error:', err.message);
           }
           break;
 
@@ -2359,7 +2366,8 @@ ${getResponseModeInstructions(responseMode)}`;
               ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
             }
           } catch (err: any) {
-            ws.send(JSON.stringify({ type: 'error', message: `Load Session Error: ${err.message}` }));
+            ws.send(JSON.stringify({ type: 'error', message: 'Failed to load session.' }));
+            console.error('Load Session Error:', err.message);
           }
           break;
 
@@ -2392,7 +2400,8 @@ ${getResponseModeInstructions(responseMode)}`;
             }));
             companionHub.broadcastSessionUpdate({ tasks: session.tasks });
           } catch (err: any) {
-            ws.send(JSON.stringify({ type: 'error', message: `Save Tasks Error: ${err.message}` }));
+            ws.send(JSON.stringify({ type: 'error', message: 'Failed to save tasks.' }));
+            console.error('Save Tasks Error:', err.message);
           }
           break;
 
@@ -2420,7 +2429,8 @@ ${getResponseModeInstructions(responseMode)}`;
               ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
             }
           } catch (err: any) {
-            ws.send(JSON.stringify({ type: 'error', message: `Save Agents Error: ${err.message}` }));
+            ws.send(JSON.stringify({ type: 'error', message: 'Failed to save agents.' }));
+            console.error('Save Agents Error:', err.message);
           }
           break;
 
@@ -2555,7 +2565,8 @@ ${getResponseModeInstructions(responseMode)}`;
             }
             terminalManager.createSession(ws, data.cwd);
           } catch (err: any) {
-            ws.send(JSON.stringify({ type: 'error', code: 'terminal_create_failed', message: err.message }));
+            ws.send(JSON.stringify({ type: 'error', code: 'terminal_create_failed', message: 'Failed to create terminal session.' }));
+            console.error('Terminal create failed:', err.message);
           }
           break;
 
@@ -2573,7 +2584,8 @@ ${getResponseModeInstructions(responseMode)}`;
             }
             terminalManager.writeInput(data.sessionId, data.data);
           } catch (err: any) {
-            ws.send(JSON.stringify({ type: 'error', code: 'terminal_write_failed', message: err.message }));
+            ws.send(JSON.stringify({ type: 'error', code: 'terminal_write_failed', message: 'Failed to write to terminal.' }));
+            console.error('Terminal write failed:', err.message);
           }
           break;
 
@@ -2591,7 +2603,8 @@ ${getResponseModeInstructions(responseMode)}`;
             }
             terminalManager.resize(data.sessionId, data.cols, data.rows);
           } catch (err: any) {
-            ws.send(JSON.stringify({ type: 'error', code: 'terminal_resize_failed', message: err.message }));
+            ws.send(JSON.stringify({ type: 'error', code: 'terminal_resize_failed', message: 'Failed to resize terminal.' }));
+            console.error('Terminal resize failed:', err.message);
           }
           break;
 
@@ -2624,7 +2637,8 @@ ${getResponseModeInstructions(responseMode)}`;
           ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${data.type}` }));
       }
     } catch (err: any) {
-      ws.send(JSON.stringify({ type: 'error', message: `Message Parse Error: ${err.message}` }));
+      ws.send(JSON.stringify({ type: 'error', message: 'Failed to parse message.' }));
+      console.error('Message Parse Error:', err.message);
     }
   });
 
@@ -2677,7 +2691,8 @@ app.get('/api/google/callback', async (req, res) => {
       </html>
     `);
   } catch (err: any) {
-    res.status(500).send(`Authentication failed: ${err.message}`);
+    console.error('Authentication failed:', err.message);
+    res.status(500).send('Authentication failed. See server logs for details.');
   }
 });
 
@@ -2727,7 +2742,7 @@ app.post('/api/google/sync', async (req, res) => {
 
     res.json({ success: true, message: 'Google Apps Sync Complete!' });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2753,7 +2768,7 @@ app.post('/api/google/import-folder', async (req, res) => {
     
     res.json({ success: true, message: `Successfully imported ${files.length} files from Google Drive` });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2803,7 +2818,7 @@ app.get('/api/artifacts', (req, res) => {
     for (const sub of sourceDirs) walk(path.join(root, sub), 0);
     res.json({ success: true, artifacts });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2814,7 +2829,7 @@ app.get('/api/artifacts/content', async (req, res) => {
     const content = await sandbox.readFile(filePath);
     res.json({ success: true, content });
   } catch (err: any) {
-    res.status(403).json({ error: err.message });
+    res.status(403).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2860,7 +2875,7 @@ app.post('/api/artifacts/publish', async (req, res) => {
       res.status(500).json({ error: `Gist API failed: ${errText}` });
     }
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2879,7 +2894,7 @@ app.post('/api/artifacts/deploy', async (req, res) => {
       res.json({ success: true, url, log: stdout });
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2900,7 +2915,7 @@ app.get('/api/ollama/models', async (req, res) => {
     const models = await ollamaClient.listModels(baseUrl);
     res.json({ success: true, models });
   } catch (err: any) {
-    res.status(503).json({ success: false, error: err.message, models: [] });
+    res.status(503).json({ success: false, error: 'Operation failed.', models: [] });
   }
 });
 
@@ -2915,7 +2930,7 @@ app.get('/api/workspace/semantic-cache', async (req, res) => {
     const results = await sandbox.querySemanticCache(query);
     res.json({ success: true, results });
   } catch (err: any) {
-    res.status(403).json({ error: err.message });
+    res.status(403).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2924,7 +2939,7 @@ app.post('/api/workspace/semantic-cache/rebuild', async (req, res) => {
     const result = await sandbox.buildSemanticCache();
     res.json(result);
   } catch (err: any) {
-    res.status(403).json({ error: err.message });
+    res.status(403).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2939,7 +2954,7 @@ app.post('/api/workspace/command-policy', (req, res) => {
     }
     res.json({ success: true, message: 'Sandbox command policies updated successfully.' });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -2948,7 +2963,7 @@ app.get('/api/plan/items/:id/criteria', async (req, res) => {
     const result = await planningV2().getCriteria(req.params.id);
     res.json({ success: true, task: result.task, criteria: result.criteria });
   } catch (err: any) {
-    res.status(404).json({ success: false, error: err.message });
+    res.status(404).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -2957,7 +2972,7 @@ app.post('/api/plan/items/:id/criteria', async (req, res) => {
     const task = await planningV2().saveCriteria(req.params.id, req.body.criteria);
     res.json({ success: true, task, criteria: task.acceptanceCriteria || [] });
   } catch (err: any) {
-    res.status(404).json({ success: false, error: err.message });
+    res.status(404).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -2965,7 +2980,7 @@ app.get('/api/plan/bootstrap', (_req, res) => {
   try {
     res.json({ success: true, fingerprint: planningV2().bootstrapFingerprint() });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -2974,7 +2989,7 @@ app.post('/api/plan/bootstrap/evaluate', async (_req, res) => {
     const result = await planningV2().bootstrapEvaluate(getModelClient());
     res.json({ success: true, result });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -2983,7 +2998,7 @@ app.post('/api/plan/items/:id/criteria/generate', async (req, res) => {
     const result = await planningV2().generateCriteria(getModelClient(), req.params.id);
     res.json({ success: true, task: result.task, criteria: result.criteria, usedLlm: result.usedLlm });
   } catch (err: any) {
-    res.status(404).json({ success: false, error: err.message });
+    res.status(404).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -2998,7 +3013,7 @@ app.post('/api/plan/items/:id/criteria/enrich', async (req, res) => {
       candidates: result.candidates
     });
   } catch (err: any) {
-    res.status(404).json({ success: false, error: err.message });
+    res.status(404).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3007,7 +3022,7 @@ app.patch('/api/plan/items/:id/criteria', async (req, res) => {
     const task = await planningV2().patchCriteria(req.params.id, req.body.criteria || []);
     res.json({ success: true, task, criteria: task.acceptanceCriteria || [] });
   } catch (err: any) {
-    res.status(404).json({ success: false, error: err.message });
+    res.status(404).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3015,7 +3030,7 @@ app.get('/api/traces/:itemId', (req, res) => {
   try {
     res.json({ success: true, traces: planningV2().listTraces(req.params.itemId) });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3024,7 +3039,7 @@ app.post('/api/traces', async (req, res) => {
     const trace = await planningV2().saveTrace(req.body);
     res.json({ success: true, trace });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
+    res.status(400).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3058,7 +3073,7 @@ app.get('/api/plan/whats-left', async (req, res) => {
     const report = await planningV2().whatsLeft(getModelClient(), limit);
     res.json({ success: true, report, tier, exportAllowed: whatsLeftExportAllowed(tier) });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3067,7 +3082,7 @@ app.get('/api/plan/drift', async (_req, res) => {
     const report = await planningV2().checkDrift(getModelClient());
     res.json({ success: true, report });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3075,7 +3090,7 @@ app.get('/api/plan/workspace', (req, res) => {
   try {
     res.json({ success: true, items: planningV2().getWorkspaceItems() });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3084,7 +3099,7 @@ app.post('/api/plan/workspace', (req, res) => {
     planningV2().saveWorkspaceItems(req.body.items || []);
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3101,7 +3116,7 @@ app.post('/api/plan/workspace/extract', async (req, res) => {
     const items = await planningV2().extractWorkspaceItems(getModelClient(), session.messages || []);
     res.json({ success: true, items });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3120,7 +3135,7 @@ app.post('/api/plan/workspace/feasibility', async (req, res) => {
     );
     res.json({ success: true, feasibility: result });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3147,7 +3162,7 @@ app.post('/api/crew/sync', async (req, res) => {
     service.saveWorkspaceItems(updated);
     res.json({ success: true, message: 'Plan successfully synced to CREW context.' });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3236,7 +3251,7 @@ app.post('/api/integrations/github/fetch-issues', async (req, res) => {
 
     res.json({ success: true, issues });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3283,7 +3298,7 @@ app.post('/api/integrations/github/import-issues', async (req, res) => {
 
     res.json({ success: true, count: importedItems.length });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3359,7 +3374,7 @@ app.post('/api/docs/generate', async (req, res) => {
 
     res.json({ success: true, content: generatedContent, defaultPath: `.kryleos/docs/${templateId}.md` });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3423,7 +3438,7 @@ app.post('/api/docs/patch', async (req, res) => {
 
     res.json({ success: true, content: updatedContent });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3444,7 +3459,7 @@ app.post('/api/docs/write', async (req, res) => {
 
     res.json({ success: true, path: path.relative(root, absPath).replace(/\\/g, '/') });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3482,7 +3497,7 @@ app.post('/api/workflows/founder/generate', async (req, res) => {
 
     res.json({ success: true, content, defaultPath: `.kryleos/founder/${workflowId}.md` });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3521,7 +3536,7 @@ app.post('/api/workflows/agency/export', async (req, res) => {
     const ext = workflowId === 'branded_doc' ? 'html' : 'md';
     res.json({ success: true, content, defaultPath: `.kryleos/agency/${workflowId}.${ext}` });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3682,7 +3697,7 @@ app.post('/api/planning/import', async (req, res) => {
         : `Plan imported successfully. Files updated in ${targets.length} workspace(s).` 
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -3700,7 +3715,7 @@ app.get('/api/cost/history', async (req, res) => {
     const history = await costGuard.getHistory();
     res.json({ success: true, history, restricted: false });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3719,7 +3734,7 @@ app.post('/api/cost/estimate', async (req, res) => {
       provider: getProviderForModel(activeM)
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Operation failed.' });
   }
 });
 
@@ -3734,7 +3749,7 @@ app.get('/api/providers/detect', async (req, res) => {
       models: models || []
     });
   } catch (err: any) {
-    res.json({ success: true, ollamaAvailable: false, models: [], error: err.message });
+    res.json({ success: true, ollamaAvailable: false, models: [], error: 'Operation failed.' });
   }
 });
 
@@ -3773,7 +3788,7 @@ app.post('/api/providers/health-check', async (req, res) => {
 
     res.json({ success: true });
   } catch (err: any) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: 'Operation failed.' });
   }
 });
 
@@ -3803,7 +3818,7 @@ app.post('/api/providers/test', async (req, res) => {
 
     res.json({ success: true, response: fullResponse });
   } catch (err: any) {
-    res.json({ success: false, error: err.message });
+    res.json({ success: false, error: 'Operation failed.' });
   }
 });
 

@@ -378,7 +378,8 @@ export class CompanionHub {
             }
             this.broadcastToCompanions({ type: 'workflow_status', status: 'started', planItemId });
             runner(String(planItemId), (payload) => this.broadcastToCompanions(payload), this.activeCompanions.get(ws) ?? undefined).catch((err: any) => {
-              this.broadcastToCompanions({ type: 'error', message: `Remote FORGE run failed: ${err.message}` });
+              const forgeErrMsg = err instanceof Error && (err as any).code === 'ETIMEDOUT' ? 'timed out' : 'execution failed';
+              this.broadcastToCompanions({ type: 'error', message: `Remote FORGE run ${forgeErrMsg}.` });
             });
             break;
           }
@@ -387,7 +388,8 @@ export class CompanionHub {
             console.log('Unknown message from companion:', data);
         }
       } catch (err: any) {
-        ws.send(JSON.stringify({ type: 'error', message: err.message }));
+        ws.send(JSON.stringify({ type: 'error', message: 'An error occurred while processing the companion message.' }));
+        console.error('Companion message error:', err);
       }
     });
 
