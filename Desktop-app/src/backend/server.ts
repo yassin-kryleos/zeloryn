@@ -2609,7 +2609,7 @@ ${getResponseModeInstructions(responseMode)}`;
           break;
 
         case 'terminal_approval':
-          {
+          try {
             const aSession = terminalManager.getSession(data.sessionId);
             if (!aSession || aSession.ws !== ws) {
               ws.send(JSON.stringify({ type: 'error', code: 'forbidden', message: 'Not authorized for this session' }));
@@ -2619,17 +2619,23 @@ ${getResponseModeInstructions(responseMode)}`;
             if (resolve) {
               resolve(data.approved === true);
             }
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', code: 'terminal_approval_failed', message: 'Failed to process approval.' }));
+            console.error('Terminal approval failed:', err.message);
           }
           break;
 
         case 'terminal_close':
-          {
+          try {
             const cSession = terminalManager.getSession(data.sessionId);
             if (!cSession || cSession.ws !== ws) {
               ws.send(JSON.stringify({ type: 'error', code: 'forbidden', message: 'Not authorized for this session' }));
               break;
             }
             terminalManager.closeSession(data.sessionId);
+          } catch (err: any) {
+            ws.send(JSON.stringify({ type: 'error', code: 'terminal_close_failed', message: 'Failed to close terminal.' }));
+            console.error('Terminal close failed:', err.message);
           }
           break;
 
@@ -2645,8 +2651,17 @@ ${getResponseModeInstructions(responseMode)}`;
   ws.on('close', () => {
     companionHub.unregisterOrchestrator(currentSessionId);
     companionHub.unregisterForgeRunner(currentSessionId);
-    // Close any terminal sessions owned by this WebSocket
+    // Collect session IDs before closing so we can clean up pending approvals
+    const sessionIds = terminalManager.getSessionIdsByWs(ws);
     terminalManager.closeSessionByWs(ws);
+    // Reject any pending terminal approvals for this connection
+    for (const id of sessionIds) {
+      const resolve = pendingTerminalApprovals.get(id);
+      if (resolve) {
+        resolve(false);
+        pendingTerminalApprovals.delete(id);
+      }
+    }
     console.log('Client disconnected');
     activeSockets.delete(ws);
     const roomToken = (ws as any).collabRoomToken;

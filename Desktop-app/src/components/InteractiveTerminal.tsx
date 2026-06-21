@@ -13,8 +13,7 @@ export const InteractiveTerminal: React.FC<InteractiveTerminalProps> = ({ ws, is
   const fitAddonRef = useRef<FitAddon | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const [status, setStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
-
-  // Initialize xterm.js
+  const pendingBufferRef = useRef<string[]>([]);
   useEffect(() => {
     if (!terminalRef.current || xtermRef.current) return;
 
@@ -92,6 +91,12 @@ export const InteractiveTerminal: React.FC<InteractiveTerminalProps> = ({ ws, is
           } else {
             try { fitAddonRef.current?.fit(); } catch { /* ignore */ }
           }
+          // Flush any keystrokes buffered while session was pending
+          const buffer = pendingBufferRef.current;
+          pendingBufferRef.current = [];
+          for (const data of buffer) {
+            ws?.send(JSON.stringify({ type: 'terminal_input', sessionId: msg.sessionId, data }));
+          }
           break;
 
         case 'terminal_data':
@@ -144,8 +149,8 @@ export const InteractiveTerminal: React.FC<InteractiveTerminalProps> = ({ ws, is
     const disposable = term.onData((data: string) => {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       if (!sessionIdRef.current) {
+        pendingBufferRef.current.push(data);
         ws.send(JSON.stringify({ type: 'terminal_create' }));
-        ws.send(JSON.stringify({ type: 'terminal_input', sessionId: '__pending__', data }));
         return;
       }
       ws.send(JSON.stringify({

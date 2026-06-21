@@ -288,6 +288,15 @@ export class TerminalManager {
     }
   }
 
+  /** Return session IDs owned by a given WebSocket. */
+  getSessionIdsByWs(ws: WebSocket): string[] {
+    const ids: string[] = [];
+    for (const [id, session] of this.sessions) {
+      if (session.ws === ws) ids.push(id);
+    }
+    return ids;
+  }
+
   /** Close all sessions (e.g., on server shutdown). */
   closeAll(): void {
     for (const [id, session] of this.sessions) {
