@@ -205,9 +205,9 @@ jobs:
         with:
           name: distribution-manifests
           path: |
-            distribution/homebrew/Casks/kryleos-forge.rb
-            distribution/homebrew/Formula/forge.rb
-            distribution/winget/Kryleos.Forge.yaml
+            distribution/homebrew/Casks/zeloryn.rb
+            distribution/homebrew/Formula/zeloryn.rb
+            distribution/winget/Zeloryn.Zeloryn.yaml
 
       - name: Sync Homebrew Tap (Optional)
         if: env.HOMEBREW_TAP_TOKEN != ''
@@ -215,13 +215,13 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         shell: bash
         run: |
-          echo "Syncing updated Cask to homebrew-forge repository..."
+          echo "Syncing updated Cask to homebrew-zeloryn repository..."
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/thetimelord69/homebrew-forge.git" tap-repo
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/yassin-kryleos/homebrew-zeloryn.git" tap-repo
           mkdir -p tap-repo/Casks
-          cp distribution/homebrew/Casks/kryleos-forge.rb tap-repo/Casks/
+          cp distribution/homebrew/Casks/zeloryn.rb tap-repo/Casks/
           cd tap-repo
-          git add Casks/kryleos-forge.rb
-          git commit -m "Update kryleos-forge to ${GITHUB_REF#refs/tags/}" || echo "No changes to commit"
+          git add Casks/zeloryn.rb
+          git commit -m "Update zeloryn to ${GITHUB_REF#refs/tags/}" || echo "No changes to commit"
           git push origin main || echo "Failed to push to tap repo"

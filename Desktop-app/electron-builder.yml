@@ -13,8 +13,8 @@ asarUnpack:
   - node_modules/**/*
 publish:
   provider: github
-  owner: thetimelord69
-  repo: Kryleos-forge
+  owner: yassin-kryleos
+  repo: zeloryn
 win:
   target:
     - target: nsis

@@ -45,7 +45,7 @@ for (const file of files) {
 }
 
 // 1. Update Homebrew Cask
-const caskPath = path.join(rootDir, 'distribution', 'homebrew', 'Casks', 'kryleos-forge.rb');
+const caskPath = path.join(rootDir, 'distribution', 'homebrew', 'Casks', 'zeloryn.rb');
 if (fs.existsSync(caskPath)) {
   let content = fs.readFileSync(caskPath, 'utf8');
   content = content.replace(/version "([^"]+)"/, `version "${version}"`);
@@ -66,7 +66,7 @@ if (fs.existsSync(caskPath)) {
 }
 
 // 2. Update Winget manifest
-const wingetPath = path.join(rootDir, 'distribution', 'winget', 'Kryleos.Forge.yaml');
+const wingetPath = path.join(rootDir, 'distribution', 'winget', 'Zeloryn.Zeloryn.yaml');
 if (fs.existsSync(wingetPath)) {
   let content = fs.readFileSync(wingetPath, 'utf8');
   content = content.replace(/PackageVersion: .*/, `PackageVersion: ${version}`);
