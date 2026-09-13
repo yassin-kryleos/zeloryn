@@ -554,6 +554,82 @@ Verify the fix by running the test multiple times in a loop and confirming
 no orphaned process remains after each run (`ps aux | grep codex` or
 equivalent), not just that the test itself reports pass/skip.
 
+(Phase 11 — rename to Zeloryn and the `assembleOnly` merge-gate security
+fix — was executed directly, not via Antigravity, and isn't written up
+as a formal phase section here. See the "Phase 11" and "E2E audit"
+commit messages in git history for what changed.)
+
+### Phase 12 — Fix remaining dependency vulnerabilities
+
+**Found during the final security audit (2026-09-14).** Non-breaking
+`npm audit fix` was already applied to Desktop-app and Mobile-app,
+resolving most findings. What's left requires a breaking version bump
+in each case, which wasn't forced without verifying the dependent
+feature still works:
+
+- **Desktop-app — 2 high-severity** in `image-size`/`html-to-docx`
+  (infinite-loop DoS parsing malformed ICNS/JXL/HEIF images), used by
+  the doc-export feature. Fix available via `npm audit fix --force`,
+  which will install `html-to-docx@1.1.2` — a breaking change.
+- **Mobile-app — 4 high-severity**, deep in Expo's `metro` bundler
+  dependency chain (`metro`, `metro-config`, `metro-transform-worker`,
+  pulling in vulnerable `image-size`). Fix requires a metro/Expo version
+  bump — risk is breaking Expo SDK compatibility, not shipping a
+  vulnerable runtime (metro is build-tooling, not bundled into the
+  released app).
+- **Desktop-app dev-only** — 1 critical (`tar`) plus several high in
+  `node-gyp`'s own dependency chain (`cacache`, `make-fetch-happen`),
+  used only to compile native modules (`node-pty`, `tree-sitter`) during
+  development. Never present in the packaged app. Lower priority than
+  the two production-facing items above, but worth cleaning up if it
+  doesn't destabilize the native-module build step.
+
+**Deliverable:**
+- Apply the breaking `html-to-docx` bump in Desktop-app. After bumping,
+  actually exercise the doc-export feature (whatever generates a `.docx`
+  via `html-to-docx` — find the real call site, don't assume) and
+  confirm output is still correct, not just that the build compiles.
+- Investigate the minimum Expo/metro version bump that clears the 4
+  Mobile-app vulnerabilities. Confirm `npx expo-doctor` (or equivalent)
+  and a real Metro bundle/build still succeed after the bump — Expo SDK
+  compatibility is the real risk here, not just `npm test` passing.
+- Address the dev-only `node-gyp` chain in Desktop-app if it can be done
+  without breaking the native-module build (`node-pty`, `tree-sitter`
+  must still compile and their tests still pass).
+- Run the full test suite and build for all three apps after each
+  change, not just at the end — if a bump breaks something, you want to
+  know which one did it.
+
+When finished:
+1. Run the full relevant test suite(s) and build for each app touched.
+2. Run `npm audit --omit=dev` in each app and report the before/after
+   vulnerability counts.
+3. Run `git status` and `git diff --stat` and make sure nothing outside
+   this phase's scope changed.
+4. Produce the Exit Report in the exact format specified in §5:
+
+## Exit Report — Phase 12: Fix remaining dependency vulnerabilities
+
+### Changes made
+- <file path>: <what changed and why>
+
+### Deviations from plan
+- <anything done differently than the doc specified, and why>
+
+### Tests run
+- <command run> → <pass/fail, with failure detail if any>
+
+### Known gaps / follow-ups
+- <anything intentionally left unfinished, and why>
+
+### Verification needed from reviewer
+- <specific things the human/Claude reviewer should check manually,
+  especially the doc-export output and the Expo/Metro build itself,
+  not just unit test results>
+
+5. Stop. Do not commit or push — a human/Claude reviewer verifies this
+   phase before anything is committed or the project is made public.
+
 ## 5. Antigravity execution protocol
 
 Run each phase above as a separate Antigravity work cycle. Use the prompt in
