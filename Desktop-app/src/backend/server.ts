@@ -19,14 +19,15 @@ import { GoogleClient } from './google';
 import { AgentOrchestrator, type ChatClient, type ResponseMode } from './agents';
 import { ChatDatabase, type ChatSession, type ProjectTask } from './db';
 import { generateWorkspaceGraph } from './graph';
-import * as syncController from './sync';
 import { threeWayMerge } from './diff3';
 import { getPublicKey } from './security';
 import { PlanningV2Service } from './planningV2';
 import { CostGuard, estimateTokens, estimateCost, getProviderForModel } from './costGuard';
 import { scanSecrets } from './secretScanner';
 import { companionHub, type ForgeRunner } from './companionHub';
-import { claudeCodeRun, findClaudeCodeBinary } from './claudeCodeRunner';
+import { claudeCodeRun, findClaudeCodeBinary, cliAgentRegistry } from './cliAgentRunner';
+import { toolApiGateway } from './toolApiGateway';
+import { mcpClientManager } from './mcpClient';
 import {
   initDeviationStore,
   takeSnapshot,
@@ -34,16 +35,16 @@ import {
   getDeviations,
   updateDeviationStatus,
 } from './ccDeviationService';
-import Stripe from 'stripe';
 import { generateFounderWorkflow } from './founderWorkflows';
 import { generateAgencyWorkflow } from './agencyWorkflows';
 import { unresolvedBlockers } from '../shared/dependencies';
-import { TIER_PRICES, BUYABLE_TIER_IDS, type TierId } from '../pricing.generated';
-import { verifyLicenseKey } from './license';
-import { razorpayKeySecret, isMockRazorpay, createSubscription as createRazorpaySubscription, cancelSubscription as cancelRazorpaySubscription } from './razorpay';
 import * as crypto from 'crypto';
 import { SlidingWindowLimiter } from './slidingWindowLimiter';
 import { TerminalManager } from './terminalManager';
+import { AuditTrailService } from './auditTrail';
+import { handoffRegistry, executeHandoff } from './handoff';
+import { runPostExecutionReview } from './postExecutionReviewer';
+import { loadDecisions, recordDecision } from './decisionMemory';
 
 dotenv.config();
 
@@ -69,15 +70,6 @@ export function isValidLocalSessionSecret(candidate: unknown): boolean {
   const expected = Buffer.from(LOCAL_SESSION_SECRET);
   const provided = Buffer.from(candidate);
   return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
-}
-
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY || 'sk_test_mock_key';
-const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_mock_secret';
-const stripe = new Stripe(stripeSecretKey, {
-  apiVersion: '2025-01-27' as any,
-});
-if (process.env.NODE_ENV === 'production' && stripeSecretKey.startsWith('sk_test_')) {
-  throw new Error('FATAL: Production environment must not use a Stripe test key. Set STRIPE_SECRET_KEY.');
 }
 
 let globalZeroEgressMode = false;
@@ -242,11 +234,9 @@ const sensitiveLimiter = rateLimit({
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Exempt telemetry, companion websockets, and payment webhooks from origin restriction checks
+  // Exempt telemetry and companion websockets from origin restriction checks
   const isExempt = req.path === '/api/telemetry' ||
-                   req.path === '/api/companion/ws' ||
-                   req.path === '/api/billing/webhook' ||
-                   req.path === '/api/billing/razorpay/webhook';
+                   req.path === '/api/companion/ws';
   
   if (origin) {
     const isLocal = trustedHttpOrigins.has(origin) || /^vscode-webview:\/\/[a-z0-9-]+$/i.test(origin);
@@ -293,182 +283,11 @@ function requireLoopback(req: express.Request, res: express.Response, next: expr
   next();
 }
 
-function bearerToken(req: express.Request): string | null {
-  const match = req.headers.authorization?.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || null;
-}
-
-async function resolveRequestTier(
-  req: express.Request,
-  res: express.Response,
-  options: { required?: boolean } = {},
-): Promise<string | null> {
-  const token = bearerToken(req);
-  if (!token) {
-    if (options.required) {
-      res.status(401).json({ success: false, error: 'Unauthorized' });
-      return null;
-    }
-    return 'free';
-  }
-
-  const user = await syncController.getUserByToken(token);
-  if (!user) {
-    res.status(401).json({ success: false, error: 'Unauthorized' });
-    return null;
-  }
-  return user.tier || 'free';
-}
-
-app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
-  let event: any;
-  const sig = req.headers['stripe-signature'];
-  
-  // SEC-M2: fail closed. The unsigned-bypass path is permitted ONLY when running
-  // with mock billing keys AND outside production. Real keys are ALWAYS verified
-  // regardless of NODE_ENV, and production never accepts an unsigned webhook.
-  const usingMockBilling =
-    stripeSecretKey === 'sk_test_mock_key' || stripeWebhookSecret === 'whsec_mock_secret';
-  const allowUnsigned = usingMockBilling && process.env.NODE_ENV !== 'production';
-
-  if (!allowUnsigned) {
-    // Enforce real signature verification.
-    if (!sig) {
-      console.error('[Stripe Webhook] Rejected: missing signature with verification required.');
-      return res.status(400).send('Webhook Error: signature required');
-    }
-    if (usingMockBilling) {
-      // Production (or any non-dev) with mock keys is a misconfiguration — refuse.
-      console.error('[Stripe Webhook] Rejected: mock billing keys in a verifying environment.');
-      return res.status(400).send('Webhook Error: real Stripe keys required');
-    }
-    try {
-      event = stripe.webhooks.constructEvent(req.body, sig as string, stripeWebhookSecret);
-    } catch (err: any) {
-      return res.status(400).send('Webhook Error: Invalid payload.');
-    }
-  } else {
-    // Dev/test mock path only.
-    try {
-      event = JSON.parse(req.body.toString('utf8'));
-    } catch (err: any) {
-      return res.status(400).send('Webhook Error: Invalid JSON payload.');
-    }
-  }
-
-  try {
-    const obj = event.data.object;
-    let email = obj.metadata?.email || obj.customer_email;
-    let tier = obj.metadata?.tier || 'basic';
-
-    if (!email && obj.customer) {
-      try {
-        if (stripeSecretKey !== 'sk_test_mock_key') {
-          const customer = await stripe.customers.retrieve(obj.customer as string);
-          if (customer && !customer.deleted) {
-            email = customer.email;
-          }
-        } else {
-          email = obj.customer_email || 'test@example.com';
-        }
-      } catch {}
-    }
-
-    if (event.type === 'checkout.session.completed' || event.type === 'customer.subscription.updated') {
-      if (email) {
-        const subscriptionId = String(obj.subscription || obj.id || '');
-        await syncController.subscribeByEmail(email, tier, {
-          provider: 'stripe',
-          subscriptionId: subscriptionId || undefined,
-        });
-        console.log(`[Stripe Webhook] Subscribed ${email} to ${tier}`);
-      }
-    } else if (event.type === 'customer.subscription.deleted') {
-      if (email) {
-        await syncController.subscribeByEmail(email, 'free', {
-          provider: 'stripe',
-          subscriptionId: String(obj.id || ''),
-        });
-        console.log(`[Stripe Webhook] Subscription deleted. Demoted ${email} to free`);
-      }
-    }
-    res.json({ received: true });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
-
-// SEC-M2 (Razorpay variant): fail closed. Unsigned-bypass permitted ONLY with
-// mock keys outside production; real keys are always signature-verified, and
-// production never accepts an unsigned webhook.
-app.post('/api/billing/razorpay/webhook', express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
-  const sig = req.headers['x-razorpay-signature'];
-  const allowUnsigned = isMockRazorpay && process.env.NODE_ENV !== 'production';
-
-  let body: any;
-
-  if (!allowUnsigned) {
-    if (!sig) {
-      console.error('[Razorpay Webhook] Rejected: missing signature with verification required.');
-      return res.status(400).send('Webhook Error: signature required');
-    }
-    if (isMockRazorpay) {
-      console.error('[Razorpay Webhook] Rejected: mock billing keys in a verifying environment.');
-      return res.status(400).send('Webhook Error: real Razorpay keys required');
-    }
-    const expected = crypto.createHmac('sha256', razorpayKeySecret).update(req.body).digest('hex');
-    const sigBuf = Buffer.from(sig as string, 'utf8');
-    const expectedBuf = Buffer.from(expected, 'utf8');
-    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
-      return res.status(400).send('Webhook Error: invalid signature');
-    }
-  }
-
-  try {
-    body = JSON.parse(req.body.toString('utf8'));
-  } catch (err: any) {
-    return res.status(400).send('Webhook Error: Invalid JSON payload.');
-  }
-
-  try {
-    const subscription = body.payload?.subscription?.entity;
-    const subscriptionId = String(subscription?.id || '');
-    const notes = subscription?.notes || {};
-    const knownUser = subscriptionId
-      ? await syncController.getUserByBillingSubscription(subscriptionId)
-      : null;
-    const email = notes.email || knownUser?.email;
-    const tier = notes.tier || knownUser?.tier;
-
-    if (['subscription.activated', 'subscription.charged'].includes(body.event)) {
-      if (email && BUYABLE_TIER_IDS.includes(tier as TierId)) {
-        await syncController.subscribeByEmail(email, tier, {
-          provider: 'razorpay',
-          subscriptionId,
-        });
-        console.log(`[Razorpay Webhook] Subscribed ${email} to ${tier}`);
-      }
-    } else if (['subscription.cancelled', 'subscription.completed', 'subscription.expired', 'subscription.halted'].includes(body.event)) {
-      if (email) {
-        await syncController.subscribeByEmail(email, 'free', {
-          provider: 'razorpay',
-          subscriptionId,
-        });
-        console.log(`[Razorpay Webhook] Demoted ${email} to free after ${body.event}`);
-      }
-    }
-    res.json({ received: true });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
-
 app.use(express.json({ limit: '1mb' }));
 
 app.use((req, res, next) => {
   if (!LOCAL_AUTH_REQUIRED) return next();
   if (req.method === 'OPTIONS') return next();
-  if (req.path === '/api/billing/webhook' || req.path === '/api/billing/razorpay/webhook') return next();
   if (!isValidLocalSessionSecret(req.headers['x-kryleos-session'])) {
     console.warn(`[Security] Local session auth failed: ${req.method} ${req.path} from ${req.socket.remoteAddress}`);
     return res.status(401).json({ error: 'Unauthorized local client.' });
@@ -636,6 +455,16 @@ async function startForgeRun(opts: {
   source?: 'local' | 'remote';
 }): Promise<void> {
   const { orchestrator, queryText, originalText, sessionId, space, planItemId, zeroEgressMode, modelProxy, send, deviceId, source } = opts;
+
+  // 7e: Spend cap enforcement check
+  const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
+  const capCheck = await costGuard.checkSpendCap();
+  if (!capCheck.allowed) {
+    send({ type: 'error', message: `Execution blocked by CostGuard spend enforcement: ${capCheck.reason}` });
+    orchestrator.addLog('SYSTEM', 'user', `[SPEND CAP BLOCKED] ${capCheck.reason}`, 'error');
+    return;
+  }
+
   if (planItemId) {
     await logCommandInitiation(sandbox.getWorkspaceRoot(), { planItemId, deviceId, source: source || 'local' });
     const markerDir = path.join(sandbox.getWorkspaceRoot(), '.kryleos');
@@ -665,6 +494,26 @@ async function startForgeRun(opts: {
       if (fs.existsSync(markerPath)) fs.unlinkSync(markerPath);
       send({ type: 'execution_trace', trace, message: `Execution trace saved for plan item ${planItemId}.` });
       companionHub.broadcastSessionUpdate({ latestTrace: trace });
+
+      // 7a: Post-execution CREW reviewer triggered at FORGE completion
+      try {
+        const { task } = await planningV2().getCriteria(planItemId);
+        if (task) {
+          send({ type: 'status', message: 'Running Post-Execution CREW reviewer...' });
+          const review = await runPostExecutionReview(sandbox.getWorkspaceRoot(), task, modelProxy);
+          await planningV2().savePostExecutionReview(planItemId, review);
+          send({ type: 'post_execution_review', planItemId, review });
+          companionHub.broadcastSessionUpdate({ postExecutionReview: { planItemId, review } });
+          orchestrator.addLog(
+            'post_execution_reviewer',
+            'coordinator',
+            `[POST-EXECUTION REVIEW] Verdict: ${review.verdict}\nFindings: ${review.findings}`,
+            review.status === 'passed' ? 'result' : 'error'
+          );
+        }
+      } catch (revErr: any) {
+        console.warn('Post-execution review non-critical error:', revErr.message);
+      }
     } catch (traceErr: any) {
       send({ type: 'error', message: `Trace capture failed: ${traceErr.message}` });
     }
@@ -688,7 +537,7 @@ const terminalOnCommand = async (sessionId: string, command: string, classificat
     pendingTerminalApprovals.set(sessionId, resolve);
   });
   try {
-    if (session.ws.readyState === WebSocket.OPEN) {
+    if (session.ws && session.ws.readyState === WebSocket.OPEN) {
       session.ws.send(JSON.stringify({
         type: 'terminal_approval_required',
         sessionId,
@@ -1248,6 +1097,96 @@ app.post('/api/cc-deviations/status', async (req, res) => {
   }
 });
 
+// ── Tool API Gateway Endpoints ──────────────────────────────────────────────
+app.get('/api/tools', (_req, res) => {
+  try {
+    const tools = toolApiGateway.listTools();
+    res.json({ success: true, tools });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/tools/invoke', async (req, res) => {
+  const { toolId, args, planItemId, sessionId } = req.body;
+  if (!toolId) return res.status(400).json({ error: 'toolId is required' });
+  try {
+    const result = await toolApiGateway.invokeTool(
+      toolId,
+      args || {},
+      {
+        workspaceRoot: sandbox.getWorkspaceRoot(),
+        sandbox,
+        sessionId: sessionId || 'api_session',
+        planItemId,
+        zeroEgressMode: globalZeroEgressMode,
+      }
+    );
+    res.json({ success: true, result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── MCP Server Management Endpoints ─────────────────────────────────────────
+app.get('/api/mcp/servers', (_req, res) => {
+  try {
+    const servers = mcpClientManager.listServers();
+    res.json({ success: true, servers });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/mcp/servers', (req, res) => {
+  const config = req.body;
+  if (!config || !config.id || !config.name || !config.transport) {
+    return res.status(400).json({ error: 'id, name, and transport are required' });
+  }
+  try {
+    mcpClientManager.addServer({
+      id: config.id,
+      name: config.name,
+      transport: config.transport,
+      command: config.command,
+      args: config.args,
+      url: config.url,
+      authTokenRef: config.authTokenRef,
+      enabled: config.enabled ?? false,
+      discoveryStatus: config.discoveryStatus ?? 'not_started',
+      workspaceTrust: config.workspaceTrust ?? 'untrusted',
+      featureStatus: config.featureStatus ?? 'preview',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      allowedTools: config.allowedTools,
+      deniedTools: config.deniedTools,
+    });
+    res.json({ success: true, server: mcpClientManager.getServer(config.id) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/mcp/servers/:id/discover', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const tools = await mcpClientManager.discoverTools(id, toolApiGateway);
+    res.json({ success: true, count: tools.length, tools });
+  } catch (err: any) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/mcp/servers/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const deleted = await mcpClientManager.removeServer(id, toolApiGateway);
+    res.json({ success: deleted });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/git/commit', async (req, res) => {
   const { message } = req.body;
   if (!message) {
@@ -1311,290 +1250,6 @@ app.get('/api/workspace/graph', async (req, res) => {
     res.json(graphData);
   } catch (err: any) {
     res.status(500).json({ error: 'Operation failed.' });
-  }
-});
-
-app.post('/api/auth/register', sensitiveLimiter, async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email and password are required' });
-  }
-  if (email.includes('\x00') || password.includes('\x00')) {
-    return res.status(400).json({ error: 'Invalid input' });
-  }
-  if (password.length < 8) {
-    return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
-  }
-  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
-    return res.status(400).json({ error: 'Password must include at least one uppercase letter, one lowercase letter, and one digit.' });
-  }
-  try {
-    const user = await syncController.register(email, password);
-    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token, billingProvider: user.billingProvider } });
-  } catch (err: any) {
-    res.status(400).json({ error: 'Operation failed.' });
-  }
-});
-
-app.post('/api/auth/login', sensitiveLimiter, async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email and password are required' });
-  }
-  if (email.includes('\x00') || password.includes('\x00')) {
-    return res.status(400).json({ error: 'Invalid input' });
-  }
-  try {
-    const user = await syncController.login(email, password);
-    res.json({ success: true, user: { email: user.email, isPremium: user.isPremium, tier: user.tier, token: user.token, billingProvider: user.billingProvider } });
-  } catch (err: any) {
-    res.status(400).json({ error: 'Operation failed.' });
-  }
-});
-
-app.post('/api/auth/subscribe', sensitiveLimiter, async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  const user = await syncController.getUserByToken(token);
-  if (!user) return res.status(401).json({ error: 'Unauthorized' });
-  return res.status(410).json({ error: 'Use the billing cancellation flow; local tier changes are disabled.' });
-});
-
-app.post('/api/billing/create-checkout-session', sensitiveLimiter, async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-  const { tier } = req.body;
-  if (!tier) return res.status(400).json({ error: 'tier is required' });
-
-  try {
-    const user = await syncController.getUserByToken(token);
-    if (!user) return res.status(401).json({ error: 'User not found' });
-
-    if (!BUYABLE_TIER_IDS.includes(tier as TierId)) {
-      return res.status(400).json({ error: `tier '${tier}' is not purchasable` });
-    }
-    const amount = Math.round((TIER_PRICES[tier as TierId] ?? 0) * 100);
-
-    if (stripeSecretKey === 'sk_test_mock_key') {
-      return res.json({
-        success: true,
-        url: `http://localhost:5173/?mock_checkout=true&email=${encodeURIComponent(user.email)}&tier=${encodeURIComponent(tier)}`
-      });
-    }
-
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      customer_email: user.email,
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `Kryleos Forge ${tier.toUpperCase()} Plan`,
-              description: `Upgrade to Kryleos Forge ${tier.toUpperCase()}`,
-            },
-            unit_amount: amount,
-            recurring: { interval: 'month' },
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'subscription',
-      success_url: 'http://localhost:5173/?checkout=success',
-      cancel_url: 'http://localhost:5173/?checkout=cancel',
-      metadata: {
-        email: user.email,
-        tier
-      }
-    });
-
-    res.json({ success: true, url: session.url });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
-
-// Razorpay recurring-subscription creation for India. Plan IDs are configured
-// server-side; the client can select only a canonical buyable tier.
-app.post('/api/billing/razorpay/create-subscription', sensitiveLimiter, async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-  const { tier } = req.body;
-  if (!tier) return res.status(400).json({ error: 'tier is required' });
-
-  try {
-    const user = await syncController.getUserByToken(token);
-    if (!user) return res.status(401).json({ error: 'User not found' });
-
-    if (!BUYABLE_TIER_IDS.includes(tier as TierId)) {
-      return res.status(400).json({ error: `tier '${tier}' is not purchasable` });
-    }
-    const subscription = await createRazorpaySubscription({
-      tier: tier as Exclude<TierId, 'free' | 'agency'>,
-      email: user.email,
-    });
-    await syncController.setBillingSubscription(token, 'razorpay', subscription.subscriptionId);
-    res.json({ success: true, subscriptionId: subscription.subscriptionId, keyId: subscription.keyId });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
-
-app.post('/api/billing/create-portal-session', sensitiveLimiter, async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    const user = await syncController.getUserByToken(token);
-    if (!user) return res.status(401).json({ error: 'User not found' });
-
-    if (stripeSecretKey === 'sk_test_mock_key') {
-      return res.json({
-        success: true,
-        url: `http://localhost:5173/?mock_portal=true&email=${encodeURIComponent(user.email)}`
-      });
-    }
-
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId = customers.data[0]?.id;
-    if (!customerId) {
-      const customer = await stripe.customers.create({ email: user.email });
-      customerId = customer.id;
-    }
-
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: 'http://localhost:5173/',
-    });
-
-    res.json({ success: true, url: session.url });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
-
-app.post('/api/billing/cancel-subscription', sensitiveLimiter, async (req, res) => {
-  const token = bearerToken(req);
-  if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    const user = await syncController.getUserByToken(token);
-    if (!user) return res.status(401).json({ error: 'Unauthorized' });
-    if (user.billingProvider === 'license') {
-      return res.status(400).json({ error: 'Offline lifetime licenses are not recurring subscriptions.' });
-    }
-
-    if (user.billingProvider === 'razorpay' && user.billingSubscriptionId) {
-      await cancelRazorpaySubscription(user.billingSubscriptionId);
-      return res.json({ success: true, provider: 'razorpay', scheduledAtCycleEnd: true });
-    }
-
-    if (user.billingProvider === 'stripe' && user.billingSubscriptionId && stripeSecretKey !== 'sk_test_mock_key') {
-      await stripe.subscriptions.update(user.billingSubscriptionId, { cancel_at_period_end: true });
-      return res.json({ success: true, provider: 'stripe', scheduledAtCycleEnd: true });
-    }
-
-    return res.status(409).json({
-      error: 'No recurring subscription is linked to this account. Open the billing portal or contact support.',
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
-
-// SEC-M3: license activation is offline-signature-based (Ed25519, see
-// license.ts). The tier is applied to the AUTHENTICATED caller's own account
-// only — never to a client-supplied email — and only if the key's signature
-// verifies against our embedded public key and it has not expired.
-app.post('/api/license/activate', sensitiveLimiter, async (req, res) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ success: false, error: 'Unauthorized' });
-  }
-
-  const { licenseKey } = req.body;
-  if (!licenseKey || typeof licenseKey !== 'string') {
-    return res.status(400).json({ success: false, error: 'licenseKey is required' });
-  }
-
-  try {
-    const user = await syncController.getUserByToken(token);
-    if (!user) {
-      return res.status(401).json({ success: false, error: 'Unauthorized' });
-    }
-
-    const result = verifyLicenseKey(licenseKey);
-    if (!result.ok) {
-      const message = result.reason === 'expired'
-        ? `This license expired on ${result.expiry}.`
-        : result.reason === 'hwid_mismatch'
-          ? 'This license is bound to a different device.'
-          : 'Invalid license key.';
-      return res.status(400).json({ success: false, error: message });
-    }
-
-    const updated = await syncController.subscribeByEmail(user.email, result.tier, { provider: 'license' });
-    res.json({ success: true, user: { email: updated.email, isPremium: updated.isPremium, tier: updated.tier, token: updated.token, billingProvider: updated.billingProvider } });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: 'Operation failed.' });
-  }
-});
-
-app.post('/api/sync/push', async (req, res) => {
-  if (globalPrivacyMode) {
-    return res.status(400).json({ error: 'Sync is disabled when Privacy Mode is active.' });
-  }
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  
-  const { bypassSecrets, ...rest } = req.body;
-  if (!bypassSecrets) {
-    const payloadStr = JSON.stringify(rest);
-    const foundSecrets = scanSecrets(payloadStr);
-    if (foundSecrets.length > 0) {
-      return res.status(400).json({
-        error: 'Secrets detected in synchronization payload. Please review and remove secrets or bypass to proceed.',
-        secrets: foundSecrets,
-        requiresBypass: true
-      });
-    }
-  }
-
-  try {
-    const lastUpdated = await syncController.pushSync(token, req.body);
-    broadcastSyncUpdate(token, req.body, lastUpdated);
-    res.json({ success: true, lastUpdated });
-  } catch (err: any) {
-    res.status(400).json({ error: 'Operation failed.' });
-  }
-});
-
-app.get('/api/sync/pull', async (req, res) => {
-  if (globalPrivacyMode) {
-    return res.status(400).json({ error: 'Sync is disabled when Privacy Mode is active.' });
-  }
-  const authHeader = req.headers.authorization;
-  const token = authHeader?.split(' ')[1];
-  if (!token) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  try {
-    const syncData = await syncController.pullSync(token);
-    res.json({ success: true, syncData });
-  } catch (err: any) {
-    res.status(400).json({ error: 'Operation failed.' });
   }
 });
 
@@ -1722,7 +1377,7 @@ app.post('/api/security/scan', (req, res) => {
   }
 });
 
-app.get('/api/companion/pairing-code', requireLoopback, (req, res) => {
+app.get('/api/companion/pairing-code', requireLoopback, sensitiveLimiter, (req, res) => {
   try {
     const code = companionHub.generatePairingCode();
     res.json({ success: true, code });
@@ -1765,20 +1420,7 @@ app.delete('/api/companion/devices/:deviceId', (req, res) => {
   }
 });
 
-const activeSockets = new Map<WebSocket, string>();
 const collabRooms = new Map<string, Set<WebSocket>>();
-
-function broadcastSyncUpdate(token: string, payload: any, lastUpdated: string) {
-  for (const [socket, socketToken] of activeSockets.entries()) {
-    if (socketToken === token && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: 'sync_update',
-        lastUpdated,
-        payload
-      }));
-    }
-  }
-}
 
 wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
   console.log('Client connected to Kryleos Forge WS server');
@@ -1835,19 +1477,15 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
           // Save cost record to CostGuard
           try {
             const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
-            const tier = sandbox.getUserTier() || 'free';
-            const tierLadder = ['free', 'solo', 'solo_plus', 'founder', 'agency'];
-            if (tierLadder.indexOf(tier) >= 2) { // solo_plus or higher
-              await costGuard.addRecord({
-                sessionId: currentSessionId,
-                model: currentModel,
-                provider: getProviderForModel(currentModel),
-                inputTokens,
-                outputTokens,
-                cost: totalCost,
-                tokenSavings
-              });
-            }
+            await costGuard.addRecord({
+              sessionId: currentSessionId,
+              model: currentModel,
+              provider: getProviderForModel(currentModel),
+              inputTokens,
+              outputTokens,
+              cost: totalCost,
+              tokenSavings
+            });
           } catch (err) {
             console.error('Failed to log cost record in chatStream completion:', err);
           }
@@ -1888,18 +1526,87 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
     }
   };
 
-  let orchestrator = new AgentOrchestrator(sandbox, modelProxy, (update) => {
-    ws.send(JSON.stringify({
-      type: 'update',
-      ...update
-    }));
-    try {
-      companionHub.broadcastToCompanions({
+  let currentFastModel: string = '';
+
+  const fastModelProxy: ChatClient = {
+    chatStream: async (messages, callbacks) => {
+      const targetModel = currentFastModel || currentModel;
+      const adaptedCallbacks = {
+        onReasoningChunk: callbacks.onReasoningChunk,
+        onContentChunk: callbacks.onContentChunk,
+        onComplete: async (content: string, reasoning?: string) => {
+          let inputTokens = 0;
+          for (const msg of messages) {
+            inputTokens += estimateTokens(msg.content);
+          }
+          const outputTokens = estimateTokens(content);
+          const inputCost = estimateCost(messages.map(m => m.content).join(' '), targetModel, false);
+          const outputCost = estimateCost(content, targetModel, true);
+          const totalCost = inputCost + outputCost;
+
+          try {
+            const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
+            await costGuard.addRecord({
+              sessionId: currentSessionId,
+              model: targetModel,
+              provider: getProviderForModel(targetModel),
+              inputTokens,
+              outputTokens,
+              cost: totalCost,
+              tokenSavings: 0
+            });
+          } catch {}
+
+          try {
+            ws.send(JSON.stringify({
+              type: 'cost_update',
+              cost: totalCost,
+              inputTokens,
+              outputTokens,
+              model: targetModel,
+              provider: getProviderForModel(targetModel),
+              isFastRoute: true
+            }));
+          } catch (e) {}
+          callbacks.onComplete?.(content, reasoning || '');
+        },
+        onError: callbacks.onError
+      };
+
+      if (targetModel.startsWith('gemini')) {
+        return geminiClient.chatStream(messages, adaptedCallbacks);
+      } else if (targetModel.startsWith('gpt')) {
+        return openaiClient.chatStream(messages, adaptedCallbacks);
+      } else if (targetModel.startsWith('claude')) {
+        return anthropicClient.chatStream(messages, adaptedCallbacks);
+      } else if (isOllamaModel(targetModel)) {
+        ollamaClient.setModel(normalizeOllamaModel(targetModel));
+        return ollamaClient.chatStream(messages, adaptedCallbacks);
+      } else if (targetModel.includes('/') || targetModel.startsWith('meta-') || targetModel.startsWith('qwen/')) {
+        return openrouterClient.chatStream(messages, adaptedCallbacks);
+      } else {
+        return deepseekClient.chatStream(messages, adaptedCallbacks);
+      }
+    }
+  };
+
+  let orchestrator = new AgentOrchestrator(
+    sandbox,
+    modelProxy,
+    (update) => {
+      ws.send(JSON.stringify({
         type: 'update',
         ...update
-      });
-    } catch (e) {}
-  });
+      }));
+      try {
+        companionHub.broadcastToCompanions({
+          type: 'update',
+          ...update
+        });
+      } catch (e) {}
+    },
+    currentFastModel ? fastModelProxy : undefined
+  );
   companionHub.registerOrchestrator(currentSessionId, orchestrator);
 
   // Phase 5.4: lets a paired companion launch a FORGE run for a plan item via
@@ -1956,9 +1663,10 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       });
       return;
     }
-    const claudePath = findClaudeCodeBinary();
-    if (!claudePath) {
-      send({ type: 'error', code: 'claude_code_not_found', message: 'Claude Code CLI not found.' });
+    const runner = cliAgentRegistry.getDefault();
+    const runnerBin = runner.findBinary();
+    if (!runnerBin) {
+      send({ type: 'error', code: 'claude_code_not_found', message: `${runner.name} CLI not found.` });
       return;
     }
     let snapshotId: string | undefined;
@@ -1970,12 +1678,18 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       });
       snapshotId = snapshot.id;
 
-      const result = await claudeCodeRun({
+      const runOpts = {
         queryText: task.title,
         workspaceRoot: sandbox.getWorkspaceRoot(),
         planItemId,
-      });
-      send({ type: 'status', message: 'Claude Code execution complete.', durationMs: result.durationMs });
+        onOutput: (chunk: string) => {
+          send({ type: 'claude_code_output', output: chunk, isStderr: false });
+        },
+      };
+      const result = runner.runPty
+        ? await runner.runPty(runOpts, terminalManager)
+        : await runner.run(runOpts);
+      send({ type: 'status', message: `${runner.name} execution complete.`, durationMs: result.durationMs });
       send({ type: 'claude_code_output', output: result.stdout, isStderr: false });
       if (result.stderr) send({ type: 'claude_code_output', output: result.stderr, isStderr: true });
 
@@ -1985,8 +1699,8 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         console.error('Deviation analysis error:', err.message);
       });
     } catch (err: any) {
-      send({ type: 'error', code: 'claude_code_error', message: 'Claude Code execution failed.' });
-      console.error('Claude Code error:', err.message);
+      send({ type: 'error', code: 'claude_code_error', message: `${runner.name} execution failed.` });
+      console.error(`${runner.name} error:`, err.message);
     }
   };
   companionHub.registerForgeRunner(currentSessionId + '_claude', remoteClaudeCodeRunner);
@@ -2064,6 +1778,10 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
             }
             orchestrator.setLocalModel(isOllamaModel(currentModel));
           }
+          if (data.fastModel !== undefined) {
+            currentFastModel = data.fastModel;
+            orchestrator.setFastClient(currentFastModel ? fastModelProxy : undefined);
+          }
           if (data.thinkingCapability) {
             openaiClient.setThinkingCapability(data.thinkingCapability);
             deepseekClient.setThinkingCapability(data.thinkingCapability);
@@ -2076,17 +1794,6 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
               code: 'workspace_change_requires_local_api',
               message: 'Workspace changes must use the local workspace or project API.'
             }));
-          }
-          if (data.token) {
-            activeSockets.set(ws, data.token);
-            syncController.getUserTier(data.token).then(tier => {
-              sandbox.setUserTier(tier);
-            }).catch(() => {
-              sandbox.setUserTier('free');
-            });
-          } else {
-            activeSockets.delete(ws);
-            sandbox.setUserTier('free');
           }
           if (data.zeroEgressMode !== undefined) {
             zeroEgressMode = data.zeroEgressMode;
@@ -2275,12 +1982,14 @@ ${getResponseModeInstructions(responseMode)}`;
                   console.error('Chat Error:', err.message);
                 }
               });
-            } else if (data.runner === 'claude-code') {
-              ws.send(JSON.stringify({ type: 'status', message: 'Launching Claude Code CLI, please wait...' }));
+            } else if (data.runner === 'claude-code' || (data.runner && cliAgentRegistry.has(data.runner)) || data.useClaudeCode) {
+              const runnerId = data.runner || 'claude-code';
+              const runner = cliAgentRegistry.get(runnerId) || cliAgentRegistry.getDefault();
+              ws.send(JSON.stringify({ type: 'status', message: `Launching ${runner.name} CLI, please wait...` }));
               try {
-                const claudePath = findClaudeCodeBinary();
-                if (!claudePath) {
-                  ws.send(JSON.stringify({ type: 'error', message: 'Claude Code CLI not found. Install it or set KRYLEOS_CLAUDE_CODE_PATH.' }));
+                const runnerBin = runner.findBinary();
+                if (!runnerBin) {
+                  ws.send(JSON.stringify({ type: 'error', message: `${runner.name} CLI not found. Install it or set the binary path.` }));
                   break;
                 }
 
@@ -2294,20 +2003,69 @@ ${getResponseModeInstructions(responseMode)}`;
                   deviationSnapshotId = snap.id;
                 } catch { /* snapshot is optional; proceed anyway */ }
 
-                const ccResult = await claudeCodeRun({
-                  queryText,
-                  workspaceRoot: sandbox.getWorkspaceRoot(),
-                  planItemId: data.planItemId,
-                });
+                // 7e: Spend cap check for Tier 1 runners
+                const runnerCostGuard = new CostGuard(sandbox.getWorkspaceRoot());
+                const capCheck = await runnerCostGuard.checkSpendCap();
+                if (!capCheck.allowed) {
+                  ws.send(JSON.stringify({
+                    type: 'error',
+                    message: `Execution blocked by CostGuard spend enforcement: ${capCheck.reason}`
+                  }));
+                  return;
+                }
+
+                let streamedContent = '';
                 ws.send(JSON.stringify({
                   type: 'update',
                   logs: [{
                     timestamp: new Date().toLocaleTimeString(),
-                    sender: 'claude-code',
+                    sender: runner.id,
+                    recipient: 'user',
+                    message: `Starting ${runner.name}...`,
+                    type: 'info',
+                  }],
+                  streamingContent: '',
+                  isStreaming: true,
+                }));
+
+                const ptyOpts = {
+                  queryText,
+                  workspaceRoot: sandbox.getWorkspaceRoot(),
+                  planItemId: data.planItemId,
+                  onOutput: (chunk: string) => {
+                    streamedContent += chunk;
+                    try {
+                      ws.send(JSON.stringify({
+                        type: 'update',
+                        streamingContent: streamedContent,
+                        isStreaming: true,
+                      }));
+                    } catch { /* ws closed */ }
+                  },
+                  onToolUse: (toolUse: any) => {
+                    try {
+                      ws.send(JSON.stringify({
+                        type: 'agent_tool_use',
+                        runner: runner.id,
+                        toolUse,
+                      }));
+                    } catch { /* ignore */ }
+                  },
+                };
+                const ccResult = runner.runPty
+                  ? await runner.runPty(ptyOpts, terminalManager, ws)
+                  : await runner.run(ptyOpts);
+
+                ws.send(JSON.stringify({
+                  type: 'update',
+                  logs: [{
+                    timestamp: new Date().toLocaleTimeString(),
+                    sender: runner.id,
                     recipient: 'user',
                     message: ccResult.stdout + (ccResult.stderr ? `\n--- stderr ---\n${ccResult.stderr}` : ''),
                     type: 'info',
                   }],
+                  streamingContent: '',
                   isStreaming: false,
                 }));
 
@@ -2315,8 +2073,28 @@ ${getResponseModeInstructions(responseMode)}`;
                 if (deviationSnapshotId) {
                   computeDeviations(deviationSnapshotId, ccResult.stdout).catch(() => { /* non-critical */ });
                 }
+
+                // 7a: Post-execution review after runner completes if planItemId is present
+                if (data.planItemId) {
+                  try {
+                    const { task } = await planningV2().getCriteria(data.planItemId);
+                    if (task) {
+                      const review = await runPostExecutionReview(sandbox.getWorkspaceRoot(), task, modelProxy);
+                      await planningV2().savePostExecutionReview(data.planItemId, review);
+                      ws.send(JSON.stringify({ type: 'post_execution_review', planItemId: data.planItemId, review }));
+                      companionHub.broadcastSessionUpdate({ postExecutionReview: { planItemId: data.planItemId, review } });
+                    }
+                  } catch (revErr: any) {
+                    console.warn('Post-execution review warning:', revErr.message);
+                  }
+                }
               } catch (ccErr: any) {
-                ws.send(JSON.stringify({ type: 'error', message: `Claude Code CLI error: ${ccErr.message}` }));
+                ws.send(JSON.stringify({
+                  type: 'update',
+                  streamingContent: '',
+                  isStreaming: false,
+                }));
+                ws.send(JSON.stringify({ type: 'error', message: `${runner.name} CLI error: ${ccErr.message}` }));
               }
             } else {
               await startForgeRun({
@@ -2663,7 +2441,6 @@ ${getResponseModeInstructions(responseMode)}`;
       }
     }
     console.log('Client disconnected');
-    activeSockets.delete(ws);
     const roomToken = (ws as any).collabRoomToken;
     if (roomToken && collabRooms.has(roomToken)) {
       collabRooms.get(roomToken)!.delete(ws);
@@ -2913,6 +2690,167 @@ app.post('/api/artifacts/deploy', async (req, res) => {
   }
 });
 
+// --- COMPLIANCE AUDIT TRAIL API (Phase 5) ---
+const getAuditTrailService = () => new AuditTrailService(sandbox.getWorkspaceRoot());
+
+app.get('/api/audit/report', async (_req, res) => {
+  try {
+    const service = getAuditTrailService();
+    const data = await service.generateReportData();
+    const markdown = service.toMarkdownReport(data);
+    res.json({ success: true, data, markdown });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to generate audit report' });
+  }
+});
+
+app.post('/api/audit/export', async (req, res) => {
+  try {
+    const service = getAuditTrailService();
+    const result = await service.exportAuditPackage(req.body?.targetDir);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to export audit package' });
+  }
+});
+
+// --- WORKTREE ISOLATION API (Phase 5) ---
+app.get('/api/worktrees', async (_req, res) => {
+  try {
+    const worktrees = await sandbox.listCardWorktrees();
+    res.json({ success: true, worktrees });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/worktrees/card/:taskId', async (req, res) => {
+  try {
+    const result = await sandbox.createCardWorktree(req.params.taskId, req.body?.branch);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/worktrees/merge/:taskId', async (req, res) => {
+  try {
+    let cardData = req.body?.cardData;
+    if (!cardData) {
+      const task = await findTaskById(req.params.taskId);
+      if (task) {
+        cardData = {
+          title: task.title,
+          category: task.category,
+          description: (task as any).description || task.title,
+          acceptanceCriteria: task.acceptanceCriteria,
+          postExecutionReview: task.postExecutionReview
+        };
+      }
+    }
+    const result = await sandbox.mergeCardWorktree(req.params.taskId, req.body?.targetBranch, cardData);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/worktrees/:taskId', async (req, res) => {
+  try {
+    const result = await sandbox.removeCardWorktree(req.params.taskId, req.query?.force === 'true');
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/worktrees/revert/:taskId', async (req, res) => {
+  try {
+    const result = await sandbox.revertCardWorktree(req.params.taskId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- CROSS-CARD DECISION MEMORY API (Phase 9a) ---
+app.get('/api/decisions', async (_req, res) => {
+  try {
+    const decisions = await loadDecisions(sandbox.getWorkspaceRoot());
+    res.json({ success: true, decisions });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/decisions', async (req, res) => {
+  try {
+    const { taskId, taskTitle, decision, rationale, category } = req.body || {};
+    if (!decision) {
+      return res.status(400).json({ success: false, error: 'decision text is required' });
+    }
+    await recordDecision(sandbox.getWorkspaceRoot(), {
+      taskId,
+      taskTitle,
+      decision,
+      rationale,
+      category
+    });
+    res.json({ success: true, message: 'Decision recorded successfully' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// --- TIER 1 RUNNERS & TIER 2 HANDOFF API (Phase 6) ---
+app.get('/api/runners', (_req, res) => {
+  try {
+    const runners = cliAgentRegistry.list().map(runner => ({
+      id: runner.id,
+      name: runner.name,
+      binaryName: runner.binaryName,
+      available: !!runner.findBinary(),
+      tier: 1 as const,
+    }));
+    res.json({ success: true, runners, defaultRunner: cliAgentRegistry.getDefault().id });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/handoff/targets', (_req, res) => {
+  try {
+    const targets = handoffRegistry.list();
+    res.json({ success: true, targets });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/handoff/export', async (req, res) => {
+  try {
+    const { taskId, taskTitle, taskCategory, taskAssignee, taskStatus, description, acceptanceCriteria, workspaceRoot, targetAppId } = req.body || {};
+    if (!taskId || !taskTitle) {
+      return res.status(400).json({ success: false, error: 'taskId and taskTitle are required' });
+    }
+    const wsRoot = workspaceRoot || sandbox.getWorkspaceRoot() || process.cwd();
+    const result = await executeHandoff({
+      taskId,
+      taskTitle,
+      taskCategory,
+      taskAssignee,
+      taskStatus,
+      description,
+      acceptanceCriteria,
+      workspaceRoot: wsRoot,
+      targetAppId: targetAppId || 'clipboard',
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Handoff export failed' });
+  }
+});
+
 app.get('/api/telemetry', (req, res) => {
   res.json({
     bytesSent: totalBytesSent,
@@ -3041,6 +2979,27 @@ app.patch('/api/plan/items/:id/criteria', async (req, res) => {
   }
 });
 
+app.post('/api/plan/items/:id/review', async (req, res) => {
+  try {
+    const { task } = await planningV2().getCriteria(req.params.id);
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' });
+    const review = await runPostExecutionReview(sandbox.getWorkspaceRoot(), task, getModelClient());
+    const updatedTask = await planningV2().savePostExecutionReview(req.params.id, review);
+    res.json({ success: true, task: updatedTask, review });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/plan/items/:id/review/override', async (req, res) => {
+  try {
+    const updatedTask = await planningV2().overridePostExecutionReview(req.params.id);
+    res.json({ success: true, task: updatedTask });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/traces/:itemId', (req, res) => {
   try {
     res.json({ success: true, traces: planningV2().listTraces(req.params.itemId) });
@@ -3058,35 +3017,10 @@ app.post('/api/traces', async (req, res) => {
   }
 });
 
-// Tier → "What's Left" item cap. Legacy tier names map to the new ladder:
-// free=5, basic(Solo)=25, pro(Solo Plus)=50, enterprise(Founder)=unlimited.
-const whatsLeftLimitForTier = (tier: string): number | null => {
-  switch ((tier || 'free').toLowerCase()) {
-    case 'basic':
-    case 'solo':
-      return 25;
-    case 'pro':
-    case 'solo_plus':
-      return 50;
-    case 'enterprise':
-    case 'founder':
-    case 'agency':
-    case 'team':
-      return null;
-    default:
-      return 5;
-  }
-};
-const whatsLeftExportAllowed = (tier: string): boolean => whatsLeftLimitForTier(tier) === null;
-
 app.get('/api/plan/whats-left', async (req, res) => {
   try {
-    const tier = await resolveRequestTier(req, res);
-    if (tier === null) return;
-    // Bootstrap grants one free unlimited run regardless of tier.
-    const limit = req.query.bootstrap === '1' ? null : whatsLeftLimitForTier(tier);
-    const report = await planningV2().whatsLeft(getModelClient(), limit);
-    res.json({ success: true, report, tier, exportAllowed: whatsLeftExportAllowed(tier) });
+    const report = await planningV2().whatsLeft(getModelClient(), null);
+    res.json({ success: true, report, exportAllowed: true });
   } catch (err: any) {
     res.status(500).json({ success: false, error: 'Operation failed.' });
   }
@@ -3155,15 +3089,10 @@ app.post('/api/plan/workspace/feasibility', async (req, res) => {
 });
 
 app.post('/api/crew/sync', async (req, res) => {
-  const tier = await resolveRequestTier(req, res, { required: true });
-  if (tier === null) return;
   if (globalPrivacyMode) {
     return res.status(400).json({ error: 'PLAN->CREW Sync is disabled when Privacy Mode is active.' });
   }
   const { items } = req.body;
-  if (tier.toLowerCase() === 'free') {
-    return res.status(403).json({ success: false, error: 'PLAN->CREW direct sync is only available on paid tiers. Please upgrade.' });
-  }
   try {
     const service = planningV2();
     const currentItems = service.getWorkspaceItems();
@@ -3183,28 +3112,20 @@ app.post('/api/crew/sync', async (req, res) => {
 
 // --- GitHub & Docs Autopilot Integrations ---
 const templates = [
-  { id: 'project_brief', name: 'Project Brief', requiredTier: 'free', description: 'High-level project goals, features, and non-goals.' },
-  { id: 'user_guide', name: 'User Guide', requiredTier: 'free', description: 'Step-by-step user onboarding and workflow instructions.' },
-  { id: 'architecture', name: 'System Architecture', requiredTier: 'solo', description: 'Core components, data flow, and directory layout.' },
-  { id: 'release_checklist', name: 'Release Checklist', requiredTier: 'solo', description: 'Sanity checks, build steps, and verification commands.' },
-  { id: 'api_integrations', name: 'API & Integrations', requiredTier: 'solo_plus', description: 'REST endpoints, payload models, and integration specs.' },
-  { id: 'data_storage', name: 'Data & Storage', requiredTier: 'solo_plus', description: 'Database schema, caching layout, and persistency rules.' },
-  { id: 'security_privacy', name: 'Security & Privacy', requiredTier: 'solo_plus', description: 'Threat modeling, access control, and credential handling.' },
-  { id: 'test_plan', name: 'Test Plan', requiredTier: 'solo_plus', description: 'Unit/integration testing strategy and coverage targets.' },
-  { id: 'prd', name: 'Product Requirements (PRD)', requiredTier: 'founder', description: 'Product goals, user personas, roadmap, and edge cases.' },
-  { id: 'technical_design', name: 'Technical Design Document', requiredTier: 'founder', description: 'Detailed technical specs, algorithmic loops, and tradeoffs.' },
-  { id: 'founder_summary', name: 'Founder Summary', requiredTier: 'founder', description: 'Elevator pitch, MRR prospects, and investor readiness status.' },
-  { id: 'project_brochure', name: 'Project Brochure', requiredTier: 'agency', description: 'Sales copy, premium value proposition, and branding overview.' },
-  { id: 'client_handoff', name: 'Client Handoff Pack', requiredTier: 'agency', description: 'Branded deliverable details, system credentials, and maintenance guide.' }
+  { id: 'project_brief', name: 'Project Brief', description: 'High-level project goals, features, and non-goals.' },
+  { id: 'user_guide', name: 'User Guide', description: 'Step-by-step user onboarding and workflow instructions.' },
+  { id: 'architecture', name: 'System Architecture', description: 'Core components, data flow, and directory layout.' },
+  { id: 'release_checklist', name: 'Release Checklist', description: 'Sanity checks, build steps, and verification commands.' },
+  { id: 'api_integrations', name: 'API & Integrations', description: 'REST endpoints, payload models, and integration specs.' },
+  { id: 'data_storage', name: 'Data & Storage', description: 'Database schema, caching layout, and persistency rules.' },
+  { id: 'security_privacy', name: 'Security & Privacy', description: 'Threat modeling, access control, and credential handling.' },
+  { id: 'test_plan', name: 'Test Plan', description: 'Unit/integration testing strategy and coverage targets.' },
+  { id: 'prd', name: 'Product Requirements (PRD)', description: 'Product goals, user personas, roadmap, and edge cases.' },
+  { id: 'technical_design', name: 'Technical Design Document', description: 'Detailed technical specs, algorithmic loops, and tradeoffs.' },
+  { id: 'founder_summary', name: 'Founder Summary', description: 'Elevator pitch, MRR prospects, and investor readiness status.' },
+  { id: 'project_brochure', name: 'Project Brochure', description: 'Sales copy, premium value proposition, and branding overview.' },
+  { id: 'client_handoff', name: 'Client Handoff Pack', description: 'Branded deliverable details, system credentials, and maintenance guide.' }
 ];
-
-const tierLadder = ['free', 'solo', 'solo_plus', 'founder', 'agency'];
-function isTierAllowed(userTier: string, requiredTier: string): boolean {
-  const userIndex = tierLadder.indexOf(userTier.toLowerCase());
-  const reqIndex = tierLadder.indexOf(requiredTier.toLowerCase());
-  if (userIndex === -1 || reqIndex === -1) return false;
-  return userIndex >= reqIndex;
-}
 
 function parseGithubRepo(url: string): { owner: string; repo: string } | null {
   if (!url) return null;
@@ -3327,13 +3248,6 @@ app.post('/api/docs/generate', async (req, res) => {
 
   const selectedTemplate = templates.find(t => t.id === templateId);
   if (!selectedTemplate) return res.status(404).json({ success: false, error: 'Template not found' });
-
-  // SEC: tier must come from the server-validated session, never from a
-  // client-supplied request body field.
-  const userTier = String(sandbox.getUserTier() || 'free');
-  if (!isTierAllowed(userTier, selectedTemplate.requiredTier)) {
-    return res.status(403).json({ success: false, error: `This template is gated to ${selectedTemplate.requiredTier} tier. Your tier is ${userTier}.` });
-  }
 
   try {
     const root = sandbox.getWorkspaceRoot();
@@ -3482,13 +3396,6 @@ app.post('/api/workflows/founder/generate', async (req, res) => {
   const { workflowId, customPrompt, bypassSecrets } = req.body;
   if (!workflowId) return res.status(400).json({ success: false, error: 'workflowId is required' });
 
-  // SEC: tier must come from the server-validated session, never from a
-  // client-supplied request body field.
-  const userTier = String(sandbox.getUserTier() || 'free');
-  if (!isTierAllowed(userTier, 'founder')) {
-    return res.status(403).json({ success: false, error: `This utility is gated to FOUNDER tier. Your tier is ${userTier}.` });
-  }
-
   try {
     const root = sandbox.getWorkspaceRoot();
     const service = planningV2();
@@ -3519,13 +3426,6 @@ app.post('/api/workflows/founder/generate', async (req, res) => {
 app.post('/api/workflows/agency/export', async (req, res) => {
   const { workflowId, customPrompt, branding, bypassSecrets } = req.body;
   if (!workflowId) return res.status(400).json({ success: false, error: 'workflowId is required' });
-
-  // SEC: tier must come from the server-validated session, never from a
-  // client-supplied request body field.
-  const userTier = String(sandbox.getUserTier() || 'free');
-  if (!isTierAllowed(userTier, 'agency')) {
-    return res.status(403).json({ success: false, error: `This utility is gated to AGENCY tier. Your tier is ${userTier}.` });
-  }
 
   try {
     const root = sandbox.getWorkspaceRoot();
@@ -3718,19 +3618,32 @@ app.post('/api/planning/import', async (req, res) => {
 
 app.get('/api/cost/history', async (req, res) => {
   try {
-    const resolvedTier = await resolveRequestTier(req, res);
-    if (resolvedTier === null) return;
-    const tier = resolvedTier.toLowerCase();
-    const tierLadder = ['free', 'solo', 'solo_plus', 'founder', 'agency'];
-    const userIndex = tierLadder.indexOf(tier);
-    if (userIndex < 2) { // Less than solo_plus
-      return res.json({ success: true, history: [], restricted: true });
-    }
     const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
     const history = await costGuard.getHistory();
     res.json({ success: true, history, restricted: false });
   } catch (err: any) {
     res.status(500).json({ success: false, error: 'Operation failed.' });
+  }
+});
+
+app.get('/api/cost/spend-cap', async (_req, res) => {
+  try {
+    const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
+    const status = await costGuard.checkSpendCap();
+    res.json({ success: true, ...status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/cost/spend-cap', async (req, res) => {
+  try {
+    const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
+    const updated = await costGuard.setSpendCap(req.body);
+    const status = await costGuard.checkSpendCap();
+    res.json({ success: true, ...status, cap: updated });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

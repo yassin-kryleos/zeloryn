@@ -28,37 +28,6 @@ interface SessionMeta {
   title: string;
   createdAt: string;
 }
-
-// Region-based payment routing: India-locale users pay via Razorpay (INR),
-// everyone else via Stripe (USD). Defaults to Stripe if locale is undetermined.
-function isIndianLocale(): boolean {
-  try {
-    const locale = Intl.NumberFormat().resolvedOptions().locale;
-    return locale === 'en-IN' || locale === 'hi-IN' || locale.toLowerCase().endsWith('-in');
-  } catch {
-    return false;
-  }
-}
-
-let razorpayScriptPromise: Promise<boolean> | null = null;
-
-function loadRazorpayCheckoutScript(): Promise<boolean> {
-  if ((window as any).Razorpay) return Promise.resolve(true);
-  if (razorpayScriptPromise) return razorpayScriptPromise;
-
-  razorpayScriptPromise = new Promise((resolve) => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => {
-      razorpayScriptPromise = null;
-      resolve(false);
-    };
-    document.body.appendChild(script);
-  });
-  return razorpayScriptPromise;
-}
  
 class ErrorBoundary extends Component<
   { children: ReactNode },
@@ -113,6 +82,9 @@ function App() {
   const [model, setModel] = useState<string>(() => {
     return localStorage.getItem('matrix_model') || 'ollama:qwen2.5-coder';
   });
+  const [fastModel, setFastModel] = useState<string>(() => {
+    return localStorage.getItem('matrix_fast_model') || '';
+  });
   const [ollamaDetected, setOllamaDetected] = useState(false);
   const [activationRevision, setActivationRevision] = useState(0);
   const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
@@ -147,7 +119,6 @@ function App() {
   const [pendingDisclosure, setPendingDisclosure] = useState<{ provider: string; query: string; options: SendQueryOptions } | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const notificationIdRef = useRef<number>(1);
-  const loginInFlightRef = useRef(false);
 
   const notify = useCallback((message: string, kind: NotificationKind = 'info') => {
     const id = notificationIdRef.current++;
@@ -211,12 +182,6 @@ function App() {
   const [appGraphPreviewFile, setAppGraphPreviewFile] = useState<{ path: string; content: string } | null>(null);
   const [isAppGraphEditing, setIsAppGraphEditing] = useState<boolean>(false);
   const [appGraphEditedContent, setAppGraphEditedContent] = useState<string>('');
-  const [user, setUser] = useState<{ email: string; token: string; isPremium: boolean; tier?: string; billingProvider?: 'stripe' | 'razorpay' | 'license' } | null>(() => {
-    const saved = localStorage.getItem('matrix_user');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [syncStatus, setSyncStatus] = useState<string>('idle');
-  const [lastSyncedAt, setLastSyncedAt] = useState<string>(() => localStorage.getItem('matrix_last_sync') || '');
   const socketRef = useRef<WebSocket | null>(null);
   const [collabActive, setCollabActive] = useState<boolean>(false);
 
@@ -241,7 +206,6 @@ function App() {
 
   const selectedSessionIdRef = useRef<string | null>(null);
   const wsConfigRef = useRef({
-    token: user?.token || '',
     apiKey,
     geminiApiKey,
     openaiApiKey,
@@ -250,6 +214,7 @@ function App() {
     ollamaUrl,
     useSearch,
     model,
+    fastModel,
     customInstructions,
     responseMode,
     thinkingCapability,
@@ -262,7 +227,6 @@ function App() {
 
   useEffect(() => {
     wsConfigRef.current = {
-      token: user?.token || '',
       apiKey,
       geminiApiKey,
       openaiApiKey,
@@ -271,13 +235,13 @@ function App() {
       ollamaUrl,
       useSearch,
       model,
+      fastModel,
       customInstructions,
       responseMode,
       thinkingCapability,
       workspaceRoot: workspaceRoot || undefined
     };
   }, [
-    user?.token,
     apiKey,
     geminiApiKey,
     openaiApiKey,
@@ -286,6 +250,7 @@ function App() {
     ollamaUrl,
     useSearch,
     model,
+    fastModel,
     customInstructions,
     responseMode,
     thinkingCapability,
@@ -751,29 +716,6 @@ function App() {
             if (!animationFrameId) {
               animationFrameId = requestAnimationFrame(processPendingUpdate);
             }
-          } else if (data.type === 'sync_update') {
-            if (data.payload) {
-              const { config, checklist: syncedChecklist, tasks: syncedTasks } = data.payload;
-              if (config) {
-                // Synced secrets persist via the encrypted credential store, never plaintext localStorage.
-                if (config.apiKey !== undefined) { setApiKey(config.apiKey); saveCredentials({ apiKey: config.apiKey }); }
-                if (config.geminiApiKey !== undefined) { setGeminiApiKey(config.geminiApiKey); saveCredentials({ geminiApiKey: config.geminiApiKey }); }
-                if (config.openaiApiKey !== undefined) { setOpenaiApiKey(config.openaiApiKey); saveCredentials({ openaiApiKey: config.openaiApiKey }); }
-                if (config.anthropicApiKey !== undefined) { setAnthropicApiKey(config.anthropicApiKey); saveCredentials({ anthropicApiKey: config.anthropicApiKey }); }
-                if (config.openrouterApiKey !== undefined) { setOpenrouterApiKey(config.openrouterApiKey); saveCredentials({ openrouterApiKey: config.openrouterApiKey }); }
-                if (config.ollamaUrl !== undefined) { setOllamaUrl(config.ollamaUrl); localStorage.setItem('matrix_ollama_url', config.ollamaUrl); }
-                if (config.workspaceRoot !== undefined) { setWorkspaceRoot(config.workspaceRoot); }
-                if (config.theme !== undefined) { setTheme(config.theme); localStorage.setItem('matrix_theme', config.theme); }
-                if (config.customInstructions !== undefined) { setCustomInstructions(config.customInstructions); localStorage.setItem('matrix_custom_instructions', config.customInstructions); }
-              }
-              if (syncedChecklist !== undefined) setChecklist(syncedChecklist);
-              if (syncedTasks !== undefined) setTasks(syncedTasks);
-            }
-            if (data.lastUpdated) {
-              setLastSyncedAt(data.lastUpdated);
-              localStorage.setItem('matrix_last_sync', data.lastUpdated);
-              setSyncStatus('success');
-            }
           } else if (data.type === 'status') {
             setLogs(prev => [
               ...prev,
@@ -912,6 +854,7 @@ function App() {
     ollamaUrl?: string;
     useSearch?: boolean;
     model?: string; 
+    fastModel?: string;
     workspaceRoot?: string;
     theme?: string;
     customInstructions?: string;
@@ -954,6 +897,10 @@ function App() {
     if (newConfig.model !== undefined) {
       setModel(newConfig.model);
       localStorage.setItem('matrix_model', newConfig.model);
+    }
+    if (newConfig.fastModel !== undefined) {
+      setFastModel(newConfig.fastModel);
+      localStorage.setItem('matrix_fast_model', newConfig.fastModel);
     }
     if (newConfig.workspaceRoot !== undefined) {
       setWorkspaceRoot(newConfig.workspaceRoot);
@@ -1011,6 +958,7 @@ function App() {
         ollamaUrl: newConfig.ollamaUrl ?? ollamaUrl,
         useSearch: newConfig.useSearch ?? useSearch,
         model: newConfig.model ?? model,
+        fastModel: newConfig.fastModel ?? fastModel,
         customInstructions: newConfig.customInstructions ?? customInstructions,
         responseMode: newConfig.responseMode ?? responseMode,
         zeroEgressMode: isZeroEgress,
@@ -1042,6 +990,7 @@ function App() {
     spaceOverride?: 'code' | 'chat' | 'cowork' | 'project';
     planItemId?: string;
     workspace?: string;
+    runner?: string;
   };
 
   const handleSendQuery = (query: string, spaceOverrideOrOptions?: 'code' | 'chat' | 'cowork' | 'project' | SendQueryOptions) => {
@@ -1119,7 +1068,8 @@ function App() {
         sessionId: activeId,
         space: sendOptions.spaceOverride || activeSpace,
         planItemId: sendOptions.planItemId,
-        workspace: sendOptions.workspace
+        workspace: sendOptions.workspace,
+        runner: sendOptions.runner
       }));
     }
   };
@@ -1412,292 +1362,6 @@ function App() {
     }
   };
 
-  const handleRegister = async (email: string, pass: string) => {
-    try {
-      const res = await fetch('http://localhost:3001/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pass })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setUser(data.user);
-        localStorage.setItem('matrix_user', JSON.stringify(data.user));
-        notify('Account created successfully. Free Tier is active.', 'success');
-      } else {
-        notify(`Registration failed: ${data.error}`, 'error');
-      }
-    } catch (err: any) {
-      notify(`Error registering: ${err.message}`, 'error');
-    }
-  };
-
-  const handleLogin = async (email: string, pass: string) => {
-    if (loginInFlightRef.current) return;
-    loginInFlightRef.current = true;
-    try {
-      const res = await fetch('http://localhost:3001/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: pass })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setUser(data.user);
-        localStorage.setItem('matrix_user', JSON.stringify(data.user));
-        notify('Logged in successfully.', 'success');
-      } else {
-        notify(`Login failed: ${data.error}`, 'error');
-      }
-    } catch (err: any) {
-      notify(`Error logging in: ${err.message}`, 'error');
-    } finally {
-      loginInFlightRef.current = false;
-    }
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('matrix_user');
-    notify('Logged out from Kryleos Sync.', 'info');
-  };
-
-  const handleActivateLicense = async (licenseKey: string): Promise<boolean> => {
-    if (!user) {
-      notify('Sign in to activate a license key.', 'error');
-      return false;
-    }
-    try {
-      const res = await fetch('http://localhost:3001/api/license/activate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({ licenseKey })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setUser(data.user);
-        localStorage.setItem('matrix_user', JSON.stringify(data.user));
-        notify(`License activated — ${String(data.user?.tier).replace('_', ' ').toUpperCase()} tier unlocked.`, 'success');
-        return true;
-      }
-      notify(data.error || 'License activation failed.', 'error');
-      return false;
-    } catch (err: any) {
-      notify(`License activation error: ${err.message}`, 'error');
-      return false;
-    }
-  };
-
-  const handleCancelSubscription = async () => {
-    if (!user) return;
-    try {
-      const res = await fetch('http://localhost:3001/api/billing/cancel-subscription', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${user.token}` },
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        notify('Cancellation scheduled for the end of the current billing cycle.', 'success');
-      } else {
-        notify(`Cancellation failed: ${data.error || 'Unknown billing account'}`, 'error');
-      }
-    } catch (err: any) {
-      notify(`Cancellation error: ${err.message}`, 'error');
-    }
-  };
-
-  const handleSubscribe = async (tier: string = 'basic') => {
-    if (!user) return;
-    if (tier === 'free') return handleCancelSubscription();
-    if (isIndianLocale()) {
-      return handleSubscribeRazorpay(tier);
-    }
-    try {
-      const res = await fetch('http://localhost:3001/api/billing/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({ tier })
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.url) {
-        const electronAPI = (window as any).electronAPI;
-        if (electronAPI && electronAPI.openExternal) {
-          await electronAPI.openExternal(data.url);
-        } else {
-          window.open(data.url, '_blank');
-        }
-        notify(`Redirecting to Stripe checkout for ${tier.toUpperCase()} plan...`, 'info');
-      } else {
-        notify(`Upgrade failed: ${data.error || 'No checkout URL returned'}`, 'error');
-      }
-    } catch (err: any) {
-      notify(`Upgrade error: ${err.message}`, 'error');
-    }
-  };
-
-  const handleSubscribeRazorpay = async (tier: string) => {
-    if (!user) return;
-    try {
-      const res = await fetch('http://localhost:3001/api/billing/razorpay/create-subscription', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({ tier })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        notify(`Upgrade failed: ${data.error || 'Could not create Razorpay subscription'}`, 'error');
-        return;
-      }
-
-      const loaded = await loadRazorpayCheckoutScript();
-      if (!loaded || !(window as any).Razorpay) {
-        notify('Could not load Razorpay checkout. Check your connection and try again.', 'error');
-        return;
-      }
-
-      const checkout = new (window as any).Razorpay({
-        key: data.keyId,
-        subscription_id: data.subscriptionId,
-        name: 'Kryleos Forge',
-        description: `Upgrade to ${tier.toUpperCase()} plan`,
-        prefill: { email: user.email },
-        handler: () => {
-          notify(`Payment received — ${tier.toUpperCase()} plan will activate shortly.`, 'success');
-        },
-        modal: {
-          ondismiss: () => notify('Checkout closed.', 'info'),
-        },
-      });
-      checkout.open();
-    } catch (err: any) {
-      notify(`Upgrade error: ${err.message}`, 'error');
-    }
-  };
-
-  const handleOpenBillingPortal = async () => {
-    if (!user) return;
-    try {
-      const res = await fetch('http://localhost:3001/api/billing/create-portal-session', {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${user.token}`
-        }
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.url) {
-        const electronAPI = (window as any).electronAPI;
-        if (electronAPI && electronAPI.openExternal) {
-          await electronAPI.openExternal(data.url);
-        } else {
-          window.open(data.url, '_blank');
-        }
-        notify('Redirecting to your Stripe billing customer portal...', 'info');
-      } else {
-        notify(`Error loading portal: ${data.error}`, 'error');
-      }
-    } catch (err: any) {
-      notify(`Portal error: ${err.message}`, 'error');
-    }
-  };
-
-  const handleForceSync = useCallback(async () => {
-    if (!user || !user.isPremium) return;
-    try {
-      setSyncStatus('syncing');
-      
-      const configState = {
-        apiKey,
-        geminiApiKey,
-        openaiApiKey,
-        anthropicApiKey,
-        openrouterApiKey,
-        ollamaUrl,
-        workspaceRoot,
-        theme,
-        customInstructions,
-        responseMode
-      };
-
-      const res = await fetch('http://localhost:3001/api/sync/push', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({
-          config: configState,
-          checklist,
-          tasks
-        })
-      });
-      
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setSyncStatus('success');
-        setLastSyncedAt(data.lastUpdated);
-        localStorage.setItem('matrix_last_sync', data.lastUpdated);
-      } else if (data.requiresBypass) {
-        setSyncStatus('error');
-        const proceed = window.confirm(`WARNING: Secrets detected during sync:\n${data.secrets.map((s: any) => `- ${s.secretType} (line ${s.line || 'unknown'})`).join('\n')}\n\nForce sync anyway?`);
-        if (proceed) {
-          setSyncStatus('syncing');
-          const retryRes = await fetch('http://localhost:3001/api/sync/push', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${user.token}`
-            },
-            body: JSON.stringify({
-              config: configState,
-              checklist,
-              tasks,
-              bypassSecrets: true
-            })
-          });
-          const retryData = await retryRes.json();
-          if (retryRes.ok && retryData.success) {
-            setSyncStatus('success');
-            setLastSyncedAt(retryData.lastUpdated);
-            localStorage.setItem('matrix_last_sync', retryData.lastUpdated);
-            notify('Sync completed with secrets bypass.', 'info');
-            return;
-          }
-        }
-        notify(`Sync aborted: secrets detected.`, 'error');
-      } else {
-        setSyncStatus('error');
-        notify(`Sync failed: ${data.error}`, 'error');
-      }
-    } catch (err: any) {
-      setSyncStatus('error');
-      notify(`Sync error: ${err.message}`, 'error');
-    }
-  }, [
-    user,
-    apiKey,
-    geminiApiKey,
-    openaiApiKey,
-    anthropicApiKey,
-    openrouterApiKey,
-    ollamaUrl,
-    workspaceRoot,
-    theme,
-    customInstructions,
-    responseMode,
-    checklist,
-    tasks,
-    notify
-  ]);
-
   const handleStartCollabSession = () => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
       notify('WebSocket connection is not open.', 'warning');
@@ -1707,68 +1371,16 @@ function App() {
       socketRef.current.send(JSON.stringify({ type: 'leave_collab_room' }));
       setCollabActive(false);
     } else {
-      if (!user?.token) {
-        notify('You must be signed in to start a collaboration session.', 'warning');
-        return;
-      }
       socketRef.current.send(JSON.stringify({
-        type: 'join_collab_room',
-        token: user.token
+        type: 'join_collab_room'
       }));
     }
   };
-
-  const handlePullSync = useCallback(async (userToken: string) => {
-    try {
-      const res = await fetch('http://localhost:3001/api/sync/pull', {
-        method: 'GET',
-        headers: { 
-          'Authorization': `Bearer ${userToken}`
-        }
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.syncData) {
-        const { payload, lastUpdated } = data.syncData;
-        if (payload) {
-          const { config, checklist: syncedChecklist, tasks: syncedTasks } = payload;
-          if (config) {
-            // Synced secrets persist via the encrypted credential store, never plaintext localStorage.
-            if (config.apiKey !== undefined) { setApiKey(config.apiKey); saveCredentials({ apiKey: config.apiKey }); }
-            if (config.geminiApiKey !== undefined) { setGeminiApiKey(config.geminiApiKey); saveCredentials({ geminiApiKey: config.geminiApiKey }); }
-            if (config.openaiApiKey !== undefined) { setOpenaiApiKey(config.openaiApiKey); saveCredentials({ openaiApiKey: config.openaiApiKey }); }
-            if (config.anthropicApiKey !== undefined) { setAnthropicApiKey(config.anthropicApiKey); saveCredentials({ anthropicApiKey: config.anthropicApiKey }); }
-            if (config.openrouterApiKey !== undefined) { setOpenrouterApiKey(config.openrouterApiKey); saveCredentials({ openrouterApiKey: config.openrouterApiKey }); }
-            if (config.ollamaUrl !== undefined) { setOllamaUrl(config.ollamaUrl); localStorage.setItem('matrix_ollama_url', config.ollamaUrl); }
-            if (config.workspaceRoot !== undefined) { setWorkspaceRoot(config.workspaceRoot); }
-            if (config.theme !== undefined) { setTheme(config.theme); localStorage.setItem('matrix_theme', config.theme); }
-            if (config.customInstructions !== undefined) { setCustomInstructions(config.customInstructions); localStorage.setItem('matrix_custom_instructions', config.customInstructions); }
-            if (config.responseMode !== undefined) { setResponseMode(config.responseMode); localStorage.setItem('matrix_response_mode', config.responseMode); }
-          }
-          if (syncedChecklist !== undefined) setChecklist(syncedChecklist);
-          if (syncedTasks !== undefined) setTasks(syncedTasks);
-        }
-        if (lastUpdated) {
-          setLastSyncedAt(lastUpdated);
-          localStorage.setItem('matrix_last_sync', lastUpdated);
-          setSyncStatus('success');
-        }
-      }
-    } catch (err) {
-      console.error('Failed to pull sync data:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (user && user.isPremium) {
-      handlePullSync(user.token);
-    }
-  }, [handlePullSync, user]);
 
   useEffect(() => {
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({
         type: 'config',
-        token: user?.token || '',
         apiKey,
         geminiApiKey,
         openaiApiKey,
@@ -1777,13 +1389,13 @@ function App() {
         ollamaUrl,
         useSearch,
         model,
+        fastModel,
         customInstructions,
         responseMode,
         workspaceRoot
       }));
     }
   }, [
-    user,
     apiKey,
     geminiApiKey,
     openaiApiKey,
@@ -1792,19 +1404,11 @@ function App() {
     ollamaUrl,
     useSearch,
     model,
+    fastModel,
     customInstructions,
     responseMode,
     workspaceRoot
   ]);
-
-  useEffect(() => {
-    if (user && user.isPremium) {
-      const delayDebounce = setTimeout(() => {
-        handleForceSync();
-      }, 5000);
-      return () => clearTimeout(delayDebounce);
-    }
-  }, [handleForceSync, user]);
 
   return (
     <ErrorBoundary>
@@ -1907,6 +1511,7 @@ function App() {
             ollamaUrl={ollamaUrl}
             useSearch={useSearch}
             model={model}
+            fastModel={fastModel}
             workspaceRoot={workspaceRoot}
             isConnected={isConnected}
             theme={theme}
@@ -1919,16 +1524,6 @@ function App() {
             githubToken={githubToken}
             githubRepoUrl={githubRepoUrl}
             onOpenGuide={() => setIsTutorialOpen(true)}
-            user={user}
-            syncStatus={syncStatus}
-            lastSyncedAt={lastSyncedAt}
-            onRegister={handleRegister}
-            onLogin={handleLogin}
-            onLogout={handleLogout}
-            onSubscribe={handleSubscribe}
-            onActivateLicense={handleActivateLicense}
-            onOpenBillingPortal={handleOpenBillingPortal}
-            onForceSync={handleForceSync}
             onUpdateConfig={handleUpdateConfig}
             piiFilterEnabled={piiFilterEnabled}
             onTogglePiiFilter={(val) => {
@@ -2120,7 +1715,6 @@ function App() {
                 streamingContent={streamingContent}
                 activeAgent={activeAgent}
                 workspaceRoot={workspaceRoot}
-                userTier={user?.tier || (user?.isPremium ? 'basic' : 'free')}
                 onSaveTasks={handleSaveTasks}
                 onSaveAgents={handleSaveAgents}
                 onSendQuery={handleSendQuery}
@@ -2174,8 +1768,6 @@ function App() {
                 onSendPlanItemToForge={handleSendPlanItemToForge}
                 tasks={tasks}
                 onConfirmComplete={handleConfirmTraceComplete}
-                userTier={user?.tier || (user?.isPremium ? 'basic' : 'free')}
-                authToken={user?.token || ''}
                 onNotify={notify}
                 onAbort={handleAbortWorkflow}
                 resetKey={planningResetKey}

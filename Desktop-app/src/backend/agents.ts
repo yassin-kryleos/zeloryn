@@ -3,6 +3,7 @@ import * as path from 'path';
 import { WorkspaceSandbox } from './tools';
 import { type Message } from './deepseek';
 import { ChatDatabase } from './db';
+import { recordDecisionSync } from './decisionMemory';
 
 export interface ChatClient {
   chatStream(
@@ -22,7 +23,7 @@ export type ResponseMode = 'balanced' | 'concise' | 'critical' | 'brutal_audit' 
 export interface AgentAction {
   type: 'delegate' | 'tool' | 'respond' | 'spawn_agent';
   agent?: AgentRole;
-  tool?: 'readFile' | 'writeFile' | 'modifyFile' | 'listDir' | 'grepSearch' | 'runCommand';
+  tool?: 'readFile' | 'writeFile' | 'modifyFile' | 'listDir' | 'grepSearch' | 'runCommand' | 'recordDecision';
   arguments?: any;
   plan?: string[];
   message?: string;
@@ -96,15 +97,22 @@ export class AgentOrchestrator {
   // approval resolved as 'aborted' by abortExecution without going through
   // either path).
   public pendingApprovalSource: { source: 'local' | 'remote'; deviceId?: string } | null = null;
+  public fastClient?: ChatClient;
 
   constructor(
     sandbox: WorkspaceSandbox,
     client: ChatClient,
-    onUpdate: (data: any) => void
+    onUpdate: (data: any) => void,
+    fastClient?: ChatClient
   ) {
     this.sandbox = sandbox;
     this.client = client;
     this.onUpdate = onUpdate;
+    this.fastClient = fastClient;
+  }
+
+  public setFastClient(fastClient?: ChatClient) {
+    this.fastClient = fastClient;
   }
 
   public setCustomAgents(agents: Array<{ name: string; role: string; prompt: string }>) {
@@ -435,6 +443,16 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
       }
     }
 
+    // Load cross-card architectural decisions if present (Phase 9a)
+    try {
+      const decisions = await this.sandbox.readFile('.kryleos/decisions.md');
+      if (decisions && decisions.trim()) {
+        this.workspaceInstructions += `\n=== CROSS-CARD ARCHITECTURAL DECISIONS (.kryleos/decisions.md) ===\n${decisions.trim()}\n==================================================================\n`;
+      }
+    } catch {
+      // file doesn't exist
+    }
+
     if (this.space === 'cowork') {
       try {
         const workspaceFile = '.kryleos/plan-workspace.json';
@@ -615,6 +633,9 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
       }
     }
 
+    // Final Sentinel verification check
+    await this.runFailsafeCompilationCheck();
+
     if (this.stepCount >= this.maxSteps) {
       this.addLog('SYSTEM', 'user', 'Max iteration steps reached. Stopping coordination loop.', 'error');
     }
@@ -628,6 +649,9 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
     const reasons: string[] = [];
     if (this.stepCount >= this.maxSteps) reasons.push(`maximum ${this.maxSteps} orchestration steps reached`);
     if (this.historyCompressed) reasons.push('history compression was required');
+    if (this.lastSentinelResult && !this.lastSentinelResult.passed) {
+      reasons.push(`Sentinel verification check failed after ${this.lastSentinelResult.attempts} attempt(s)`);
+    }
     if (this.runAborted) reasons.push('run was stopped before completion');
     if (this.runFailed) reasons.push('model or orchestration error interrupted the run');
     return reasons.length > 0 ? { incomplete: true, reason: reasons.join('; ') } : { incomplete: false };
@@ -823,6 +847,16 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
           );
           return `Command "${args.command}" completed with code ${cmdResult.code}.\nStdout summary:\n${cmdResult.stdout.slice(-1000)}\nStderr summary:\n${cmdResult.stderr}`;
 
+        case 'recordDecision':
+          if (!args.decision && !args.text) return 'Error: Missing decision argument';
+          const decisionStr = args.decision || args.text;
+          recordDecisionSync(this.sandbox.getWorkspaceRoot(), {
+            taskId: args.taskId,
+            decision: decisionStr,
+            rationale: args.rationale
+          });
+          return `Architectural decision recorded to .kryleos/decisions.md: "${decisionStr}"`;
+
         default:
           const localSkill = this.localSkillsList.find(s => s.name === tool);
           if (localSkill) {
@@ -887,6 +921,9 @@ ${customAgent.prompt}
       systemPrompt = this.getSystemPrompt(role as AgentRole);
     }
 
+    // 9b Cost-aware model routing: route lower-stakes steps (Scope Guard) to fast model if configured
+    const clientToUse = (role === 'scope_guard' && this.fastClient) ? this.fastClient : this.client;
+
     const messages: Message[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `TASK ASSIGNED: ${taskDescription}` }
@@ -896,7 +933,7 @@ ${customAgent.prompt}
     let responseReasoning = '';
 
     try {
-      await this.client.chatStream(messages, {
+      await clientToUse.chatStream(messages, {
         onReasoningChunk: (chunk) => {
           responseReasoning += chunk;
           this.broadcastUpdate(true, responseReasoning, responseContent);
@@ -934,7 +971,7 @@ ${customAgent.prompt}
       responseContent = '';
       responseReasoning = '';
 
-      await this.client.chatStream(messages, {
+      await clientToUse.chatStream(messages, {
         onReasoningChunk: (chunk) => {
           responseReasoning += chunk;
           this.broadcastUpdate(true, responseReasoning, responseContent);
@@ -1045,9 +1082,101 @@ ${customSystemPrompt}
     return responseContent;
   }
 
-  // Anti-Hallucination reviewer failsafe check
+  private inFailsafeCheck: boolean = false;
+  private lastSentinelResult: {
+    passed: boolean;
+    attempts: number;
+    compileCommand: string;
+    testCommand?: string;
+    testStats?: { total?: number; passed?: number; failed?: number; command: string };
+    lastError?: string;
+  } | null = null;
+
+  public getSentinelResult() {
+    return this.lastSentinelResult;
+  }
+
+  private parseTestOutput(command: string, stdout: string, stderr: string, code: number | null): { total?: number; passed?: number; failed?: number; command: string } {
+    const text = `${stdout}\n${stderr}`;
+    let passed: number | undefined;
+    let failed: number | undefined;
+    let total: number | undefined;
+
+    const passMatch = text.match(/(\d+)\s+passed/i);
+    if (passMatch) passed = parseInt(passMatch[1], 10);
+    const failMatch = text.match(/(\d+)\s+failed/i);
+    if (failMatch) failed = parseInt(failMatch[1], 10);
+    const totalMatch = text.match(/Tests\s+(\d+)\s+total/i) || text.match(/\((\d+)\s+tests?\)/i);
+    if (totalMatch) total = parseInt(totalMatch[1], 10);
+
+    if (code === 0 && failed === undefined) failed = 0;
+    else if (code !== 0 && failed === undefined) failed = 1;
+
+    return { command, passed, failed, total };
+  }
+
+  private async executeCoordinatorTurn(): Promise<void> {
+    let coordContent = '';
+    let coordReasoning = '';
+
+    await this.client.chatStream(this.coordinatorHistory, {
+      onReasoningChunk: (chunk) => {
+        if (this.isAborted) return;
+        coordReasoning += chunk;
+        this.broadcastUpdate(true, coordReasoning, coordContent);
+      },
+      onContentChunk: (chunk) => {
+        if (this.isAborted) return;
+        coordContent += chunk;
+        this.broadcastUpdate(true, coordReasoning, coordContent);
+      },
+      onComplete: (content, reasoning) => {
+        if (this.isAborted) return;
+        coordContent = content;
+        coordReasoning = reasoning;
+      },
+      onError: (err) => {
+        throw err;
+      }
+    });
+
+    if (coordReasoning) {
+      this.addLog('coordinator', 'thought', coordReasoning, 'thought');
+    }
+
+    const action = this.parseActionBlock(coordContent);
+    if (!action) {
+      this.addLog('coordinator', 'user', coordContent, 'action');
+      this.coordinatorHistory.push({ role: 'assistant', content: coordContent });
+      return;
+    }
+
+    this.addLog('coordinator', action.agent || action.tool || 'user',
+      `Recovery Action: ${action.type.toUpperCase()}${action.tool ? ` (${action.tool})` : ''}${action.agent ? ` -> ${action.agent}` : ''}\nMessage: ${action.message || ''}`,
+      'action'
+    );
+
+    if (action.type === 'respond') {
+      this.addLog('coordinator', 'user', action.message || coordContent, 'action');
+      this.coordinatorHistory.push({ role: 'assistant', content: coordContent });
+    } else if (action.type === 'tool') {
+      const toolResult = await this.executeTool(action.tool!, action.arguments);
+      this.addLog(action.tool!, 'coordinator', toolResult, 'result');
+      this.coordinatorHistory.push({ role: 'assistant', content: coordContent });
+      this.coordinatorHistory.push({ role: 'user', content: `TOOL RESULT (${action.tool}):\n${toolResult}` });
+    } else if (action.type === 'delegate') {
+      const specialistResponse = await this.invokeSpecialist(action.agent!, action.message || '');
+      this.addLog(action.agent!, 'coordinator', specialistResponse, 'result');
+      this.coordinatorHistory.push({ role: 'assistant', content: coordContent });
+      this.coordinatorHistory.push({ role: 'user', content: `SPECIALIST RESPONSE (${action.agent}):\n${specialistResponse}` });
+    }
+  }
+
+  // Anti-Hallucination reviewer failsafe check with bounded retry loop (cap at 3 attempts)
   private async runFailsafeCompilationCheck(): Promise<void> {
-    this.addLog('SYSTEM', 'sentinel', 'Running Anti-Hallucination compilation check...', 'info');
+    if (this.inFailsafeCheck) return;
+    this.inFailsafeCheck = true;
+
     try {
       let verifyCmd = '';
       try {
@@ -1057,21 +1186,101 @@ ${customSystemPrompt}
         verifyCmd = 'npm run build';
       }
 
-      // Check compile code
-      const res = await this.sandbox.runCommand(verifyCmd);
-      if (res.code !== 0) {
-        const errors = (res.stderr || res.stdout).slice(-600);
-        const warningMsg = `[FAILSAFE WARNING] Last code modifications introduced compile errors:\n${errors}`;
-        this.addLog('sentinel', 'coordinator', warningMsg, 'error');
-        this.coordinatorHistory.push({ 
-          role: 'user', 
-          content: `CRITICAL INTEGRITY FAILURE:\nCompilation check failed with exit code ${res.code}.\nErrors:\n${errors}\n\nPlease repair this compilation error immediately before proceeding with the remaining task steps.` 
+      const testCmd = await this.sandbox.detectTestCommand();
+
+      const MAX_ATTEMPTS = 3;
+      let attempt = 1;
+      let checkPassed = false;
+
+      while (attempt <= MAX_ATTEMPTS && !checkPassed) {
+        this.addLog('SYSTEM', 'sentinel', `Running Sentinel verification check (attempt ${attempt}/${MAX_ATTEMPTS})...`, 'info');
+
+        let compilePassed = false;
+        let compileErrors = '';
+        try {
+          const res = await this.sandbox.runCommand(verifyCmd);
+          if (res.code === 0) {
+            compilePassed = true;
+          } else {
+            compileErrors = (res.stderr || res.stdout).slice(-800);
+          }
+        } catch (err: any) {
+          compileErrors = err.message;
+        }
+
+        let testsPassed = true;
+        let testErrors = '';
+        let testStats: { total?: number; passed?: number; failed?: number; command: string } | undefined = undefined;
+
+        if (compilePassed && testCmd) {
+          try {
+            this.addLog('SYSTEM', 'sentinel', `Running project test suite: ${testCmd} (attempt ${attempt}/${MAX_ATTEMPTS})...`, 'info');
+            const testRes = await this.sandbox.runCommand(testCmd);
+            testStats = this.parseTestOutput(testCmd, testRes.stdout, testRes.stderr, testRes.code);
+            if (testRes.code === 0) {
+              testsPassed = true;
+            } else {
+              testsPassed = false;
+              testErrors = (testRes.stderr || testRes.stdout).slice(-800);
+            }
+          } catch (tErr: any) {
+            testsPassed = false;
+            testErrors = tErr.message;
+          }
+        }
+
+        if (compilePassed && testsPassed) {
+          checkPassed = true;
+          this.lastSentinelResult = {
+            passed: true,
+            attempts: attempt,
+            compileCommand: verifyCmd,
+            testCommand: testCmd || undefined,
+            testStats
+          };
+          const testMsg = testStats ? ` | Tests: ${testStats.passed ?? 0} passed, ${testStats.failed ?? 0} failed` : '';
+          this.addLog('sentinel', 'coordinator', `Integrity check passed on attempt ${attempt}/${MAX_ATTEMPTS}. Code compiles and tests pass${testMsg}.`, 'result');
+          break;
+        }
+
+        // Failure on this attempt
+        const failureDetails = !compilePassed
+          ? `Compilation check failed (${verifyCmd}):\n${compileErrors}`
+          : `Test execution failed (${testCmd}):\n${testErrors}`;
+
+        this.addLog('sentinel', 'coordinator', `[FAILSAFE WARNING: ATTEMPT ${attempt}/${MAX_ATTEMPTS}] ${failureDetails}`, 'error');
+
+        this.coordinatorHistory.push({
+          role: 'user',
+          content: `CRITICAL INTEGRITY FAILURE (Attempt ${attempt}/${MAX_ATTEMPTS}):\n${failureDetails}\n\nPlease repair this error immediately.`
         });
-      } else {
-        this.addLog('sentinel', 'coordinator', 'Integrity check passed. Code compiles successfully.', 'result');
+
+        if (attempt < MAX_ATTEMPTS) {
+          this.addLog('SYSTEM', 'sentinel', `Triggering coordinator recovery turn for attempt ${attempt + 1}/${MAX_ATTEMPTS}...`, 'info');
+          try {
+            await this.executeCoordinatorTurn();
+          } catch (recErr: any) {
+            this.addLog('SYSTEM', 'coordinator', `Recovery turn error: ${recErr.message}`, 'error');
+          }
+          attempt++;
+        } else {
+          // Capped out!
+          this.lastSentinelResult = {
+            passed: false,
+            attempts: MAX_ATTEMPTS,
+            compileCommand: verifyCmd,
+            testCommand: testCmd || undefined,
+            testStats,
+            lastError: failureDetails
+          };
+          this.addLog('sentinel', 'coordinator', `[FAILSAFE CAPPED OUT: ${MAX_ATTEMPTS}/${MAX_ATTEMPTS} ATTEMPTS EXHAUSTED] Integrity check failed. Code remains unverified.`, 'error');
+          break;
+        }
       }
     } catch (err: any) {
       this.addLog('SYSTEM', 'sentinel', `Verification check skipped: ${err.message}`, 'info');
+    } finally {
+      this.inFailsafeCheck = false;
     }
   }
 
@@ -1102,7 +1311,8 @@ ${customSystemPrompt}
 
     let summaryContent = '';
     try {
-      await this.client.chatStream(compressionQuery, {
+      const clientToUse = this.fastClient || this.client;
+      await clientToUse.chatStream(compressionQuery, {
         onContentChunk: (chunk) => {
           summaryContent += chunk;
         },
