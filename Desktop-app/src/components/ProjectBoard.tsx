@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square } from 'lucide-react';
+import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square, GitBranch, GitFork, ExternalLink, RotateCcw, ShieldCheck } from 'lucide-react';
 import type { AcceptanceCriterion, AcceptanceCriterionType, CriterionPhase, ProjectTask } from '../backend/db';
 import { scoreTodayTasks } from '../shared/todayScore';
 import { driftClass } from '../shared/driftClassification';
 import { getAssigneeColor } from '../shared/assigneeColor';
-import { wouldCreateDependencyCycle } from '../shared/dependencies';
+import { wouldCreateDependencyCycle, findUnblockedTasks, getNextSchedulableTask, isTaskUnblocked } from '../shared/dependencies';
 import { resolveAgentForCategory, type InstalledAgent, type ItemCategory } from '../shared/agentCapabilities';
 import { FileBrowser } from './FileBrowser';
 import { SafeMarkdown } from './SafeMarkdown';
@@ -14,7 +14,7 @@ interface ProjectBoardProps {
   isStreaming: boolean;
   workspaceRoot: string;
   onSaveTasks: (updatedTasks: ProjectTask[]) => void;
-  onSendQuery: (query: string, options?: { spaceOverride?: 'code' | 'chat' | 'cowork' | 'project'; planItemId?: string; workspace?: string }) => void;
+  onSendQuery: (query: string, options?: { spaceOverride?: 'code' | 'chat' | 'cowork' | 'project'; planItemId?: string; workspace?: string; runner?: string }) => void;
   onUpdateWorkspaceRoot?: (newRoot: string) => void;
   onNotify?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
   onAbort?: () => void;
@@ -60,6 +60,151 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   const [todayOpen, setTodayOpen] = useState(true);
   const [blockerTask, setBlockerTask] = useState<ProjectTask | null>(null);
   const [blockerDraft, setBlockerDraft] = useState<string[]>([]);
+  const [worktrees, setWorktrees] = useState<Record<string, { branch: string; isClean: boolean }>>({});
+  const [taskRunners, setTaskRunners] = useState<Record<string, string>>({});
+  const [handoffModalTask, setHandoffModalTask] = useState<ProjectTask | null>(null);
+  const [handoffTargets, setHandoffTargets] = useState<any[]>([]);
+  const [availableRunners, setAvailableRunners] = useState<any[]>([]);
+
+  const loadWorktrees = async () => {
+    try {
+      const res = await fetch('http://localhost:3001/api/worktrees');
+      if (res.ok) {
+        const data = await res.json();
+        const map: Record<string, { branch: string; isClean: boolean }> = {};
+        for (const wt of (data.worktrees || [])) {
+          map[wt.taskId] = { branch: wt.branch, isClean: wt.isClean };
+        }
+        setWorktrees(map);
+      }
+    } catch { /* ignore if backend not available */ }
+  };
+
+  const loadRunnersAndTargets = async () => {
+    try {
+      const [runnersRes, targetsRes] = await Promise.all([
+        fetch('http://localhost:3001/api/runners'),
+        fetch('http://localhost:3001/api/handoff/targets'),
+      ]);
+      if (runnersRes.ok) {
+        const data = await runnersRes.json();
+        if (Array.isArray(data.runners)) setAvailableRunners(data.runners);
+      }
+      if (targetsRes.ok) {
+        const data = await targetsRes.json();
+        if (Array.isArray(data.targets)) setHandoffTargets(data.targets);
+      }
+    } catch { /* ignore if backend not available */ }
+  };
+
+  useEffect(() => {
+    loadWorktrees();
+    loadRunnersAndTargets();
+  }, [workspaceRoot]);
+
+  const handleExecuteHandoff = async (task: ProjectTask, targetAppId: string) => {
+    try {
+      const res = await fetch('http://localhost:3001/api/handoff/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: task.id,
+          taskTitle: task.title,
+          taskCategory: task.category,
+          taskAssignee: task.assignee,
+          taskStatus: task.status,
+          workspaceRoot,
+          targetAppId,
+          acceptanceCriteria: (task.acceptanceCriteria || []).map(c => c.description || ''),
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (navigator?.clipboard && data.bundleContent) {
+          try {
+            await navigator.clipboard.writeText(data.bundleContent);
+          } catch { /* ignore */ }
+        }
+        onNotify?.(data.instructions || `Handoff bundle exported to ${data.handoffFilePath}`, 'success');
+        setHandoffModalTask(null);
+      } else {
+        onNotify?.(data.error || 'Failed to export handoff bundle', 'error');
+      }
+    } catch (e: any) {
+      onNotify?.(e.message || 'Handoff export failed', 'error');
+    }
+  };
+
+  const handleCreateWorktree = async (task: ProjectTask) => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/worktrees/card/${encodeURIComponent(task.id)}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        onNotify?.(data.message || `Created isolated worktree on branch ${data.branch}`, 'success');
+        loadWorktrees();
+      } else {
+        onNotify?.(data.message || 'Failed to create worktree', 'error');
+      }
+    } catch (e: any) {
+      onNotify?.(e.message, 'error');
+    }
+  };
+
+  const handleMergeWorktree = async (task: ProjectTask) => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/worktrees/merge/${encodeURIComponent(task.id)}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        onNotify?.(data.message || 'Merged card worktree into workspace', 'success');
+        loadWorktrees();
+      } else {
+        onNotify?.(data.message || 'Failed to merge worktree', 'error');
+      }
+    } catch (e: any) {
+      onNotify?.(e.message, 'error');
+    }
+  };
+
+  const handleRevertWorktree = async (task: ProjectTask) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to revert card "${task.title}"?\n\nThis will remove the isolated worktree directory and delete its branch permanently.`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`http://localhost:3001/api/worktrees/revert/${encodeURIComponent(task.id)}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        onNotify?.(data.message || `Reverted worktree and branch for card ${task.id}`, 'success');
+        loadWorktrees();
+      } else {
+        onNotify?.(data.message || 'Failed to revert worktree', 'error');
+      }
+    } catch (e: any) {
+      onNotify?.(e.message, 'error');
+    }
+  };
+
+  const handleRunPostExecutionReview = async (task: ProjectTask) => {
+    try {
+      onNotify?.(`Running Post-Execution CREW Review on "${task.title}"...`, 'info');
+      const res = await fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(task.id)}/review`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.task) {
+        const updated = tasks.map(t => t.id === task.id ? data.task : t);
+        onSaveTasks(updated);
+        const review = data.review;
+        onNotify?.(
+          `Review complete: ${review.verdict} — ${review.status === 'passed' ? 'Acceptance criteria verified' : 'Issues flagged'}`,
+          review.status === 'passed' ? 'success' : 'error'
+        );
+      } else {
+        onNotify?.(data.error || 'Failed to run review', 'error');
+      }
+    } catch (e: any) {
+      onNotify?.(e.message, 'error');
+    }
+  };
 
   const taskMap = useMemo(() => new Map(tasks.map(task => [task.id, task])), [tasks]);
 
@@ -136,6 +281,22 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   };
 
   const moveTask = (taskId: string, direction: 'forward' | 'backward') => {
+    const target = tasks.find(t => t.id === taskId);
+    const willBeDone = direction === 'forward' && target?.status === 'in_progress';
+
+    // 7a: Post-execution reviewer blocking gate on marking Done
+    if (willBeDone && target?.postExecutionReview?.status === 'failed' && !target.postExecutionReview.override) {
+      const confirmOverride = window.confirm(
+        `Post-Execution CREW Reviewer flagged issues on "${target.title}":\n\n${target.postExecutionReview.findings || 'Acceptance criteria check failed.'}\n\nDo you want to explicitly override the reviewer and mark this card as Done?`
+      );
+      if (!confirmOverride) {
+        onNotify?.('Card completion blocked by Post-Execution Reviewer. Resolve issues or explicitly confirm override to mark Done.', 'error');
+        return;
+      }
+      target.postExecutionReview.override = true;
+      fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(taskId)}/review/override`, { method: 'POST' }).catch(() => {});
+    }
+
     const updated = tasks.map(t => {
       if (t.id === taskId) {
         let nextStatus: ProjectTask['status'] = t.status;
@@ -155,6 +316,14 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
       }
       return t;
     });
+
+    if (willBeDone) {
+      const unblocked = findUnblockedTasks(updated, taskId);
+      if (unblocked.length > 0) {
+        onNotify?.(`Prerequisite completed! Auto-unblocked: ${unblocked.map(u => u.title).join(', ')}`, 'success');
+      }
+    }
+
     onSaveTasks(updated);
   };
 
@@ -173,7 +342,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
     return resolveAgentForCategory(category, installedAgents);
   };
 
-  const runTaskQuery = (task: ProjectTask) => {
+  const runTaskQuery = (task: ProjectTask, overrideRunner?: string) => {
     const blockers = unresolvedBlockers(task);
     if (isStreaming || blockers.length > 0) return;
     const routing = routeForTask(task);
@@ -191,10 +360,12 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
     if (routing.matchType === 'fallback') {
       onNotify?.(`No ${routing.category} specialist installed — using the general agent.`, 'info');
     }
+    const runner = overrideRunner || taskRunners[task.id] || 'claude-code';
     onSendQuery(queryText, {
       spaceOverride: 'code',
       planItemId: task.id,
-      workspace: task.workspace
+      workspace: task.workspace,
+      runner
     });
   };
 
@@ -455,11 +626,12 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
     return (
       <div
         key={task.id}
+        data-testid={`task-card-${task.id}`}
         className={`bg-forge-very-dark bg-opacity-40 border p-2 rounded transition-colors group relative ${
           isBlocked ? 'border-red-900 opacity-65' : 'border-forge-dark hover:border-forge-dim'
         }`}
       >
-        <div className={`text-xs break-words select-text font-bold mb-1 ${task.status === 'done' ? 'text-forge-dark line-through' : 'text-forge-text'}`}>
+        <div className={`text-xs break-words select-text font-bold mb-1 ${task.status === 'done' ? 'text-forge-dim line-through opacity-75' : 'text-forge-text'}`}>
           <SafeMarkdown text={task.title} />
         </div>
         <div className="flex flex-wrap gap-1 mb-1.5 text-[8px] uppercase font-bold">
@@ -479,6 +651,30 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           {task.latestTraceId && <span className="border border-forge-neon text-forge-neon rounded px-1 py-0.5">trace</span>}
           {task.bootstrapLikelyComplete && task.status !== 'done' && <span className="border border-forge-neon text-forge-neon rounded px-1 py-0.5" title="Structural criteria already pass — confirm to complete">likely complete</span>}
           {isBlocked && <span className="border border-red-700 text-red-300 rounded px-1 py-0.5">blocked</span>}
+          {!isBlocked && (task.blockedBy || []).length > 0 && task.status !== 'done' && (
+            <span className="border border-green-700 text-green-300 rounded px-1 py-0.5 font-bold" title="All blockers completed — ready to schedule">unblocked</span>
+          )}
+          {worktrees[task.id.replace(/[^a-zA-Z0-9_-]/g, '_')] && (
+            <span className="border border-purple-700 text-purple-300 rounded px-1 py-0.5" title={`Isolated on branch ${worktrees[task.id.replace(/[^a-zA-Z0-9_-]/g, '_')].branch}`}>
+              wt: {worktrees[task.id.replace(/[^a-zA-Z0-9_-]/g, '_')].branch.replace('forge/card-', '')}
+            </span>
+          )}
+          {task.postExecutionReview && (
+            <span
+              className={`border rounded px-1 py-0.5 ${
+                task.postExecutionReview.status === 'passed'
+                  ? 'border-emerald-600 text-emerald-400'
+                  : 'border-red-600 text-red-400'
+              }`}
+              title={
+                task.postExecutionReview.findings
+                  ? `Review: ${task.postExecutionReview.status.toUpperCase()}\n${task.postExecutionReview.findings}`
+                  : `Review: ${task.postExecutionReview.status}`
+              }
+            >
+              review: {task.postExecutionReview.status === 'passed' ? 'pass' : 'fail'}
+            </span>
+          )}
         </div>
         {isBlocked && (
           <div className="text-[8px] text-red-300 mb-1.5">
@@ -506,22 +702,73 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
               <ListChecks size={8} />
             </button>
             <button
+              onClick={() => handleRunPostExecutionReview(task)}
+              title="Run post-execution CREW review"
+              className="text-emerald-400 hover:text-white"
+            >
+              <ShieldCheck size={8} />
+            </button>
+            <button
               onClick={() => openBlockerEditor(task)}
               title="Edit dependencies (blockers)"
               className={`hover:text-white ${(task.blockedBy || []).length > 0 ? 'text-amber-300' : 'text-forge-dim'}`}
             >
               <Link2 size={8} />
             </button>
+            {worktrees[task.id.replace(/[^a-zA-Z0-9_-]/g, '_')] ? (
+              <>
+                <button
+                  onClick={() => handleMergeWorktree(task)}
+                  title="Merge isolated card worktree into workspace"
+                  className="text-purple-300 hover:text-white"
+                >
+                  <GitFork size={8} />
+                </button>
+                <button
+                  onClick={() => handleRevertWorktree(task)}
+                  title="Revert and delete isolated card worktree"
+                  className="text-amber-400 hover:text-red-400"
+                >
+                  <RotateCcw size={8} />
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => handleCreateWorktree(task)}
+                title="Create isolated Git worktree for this card"
+                className="text-forge-dim hover:text-purple-300"
+              >
+                <GitBranch size={8} />
+              </button>
+            )}
+            {task.status !== 'done' && (
+              <select
+                value={taskRunners[task.id] || 'claude-code'}
+                onChange={(e) => setTaskRunners(prev => ({ ...prev, [task.id]: e.target.value }))}
+                title="Select Tier 1 Execution Runner"
+                className="bg-forge-very-dark border border-forge-dark text-[8px] text-forge-neon rounded px-1 py-0.5 font-mono cursor-pointer hover:border-forge-neon"
+              >
+                <option value="claude-code">⚡ Claude</option>
+                <option value="codex-cli">⚡ Codex</option>
+              </select>
+            )}
             {task.status !== 'done' && (
               <button
                 onClick={() => runTaskQuery(task)}
-                title={isBlocked ? 'Blocked by unfinished dependency' : 'Run Task Agent'}
+                title={isBlocked ? 'Blocked by unfinished dependency' : `Run Task Agent with ${taskRunners[task.id] || 'claude-code'}`}
                 disabled={isBlocked || isStreaming}
                 className="text-forge-neon hover:text-white disabled:text-forge-dark"
               >
                 <Play size={8} />
               </button>
             )}
+            <button
+              onClick={() => setHandoffModalTask(task)}
+              title="Push to... (Tier 1 In-App Runner or Tier 2 External Handoff)"
+              className="text-cyan-400 hover:text-white"
+            >
+              <ExternalLink size={8} />
+            </button>
             <button onClick={() => handleDeleteTask(task.id)} title="Delete Task" className="text-red-400 hover:text-white">
               <Trash2 size={8} />
             </button>
@@ -554,6 +801,21 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
             <span className="text-forge-dim">
               {driftSummary.complete || 0} complete / {driftSummary.in_progress || 0} in progress / {driftSummary.blocked || 0} blocked
             </span>
+            {(() => {
+              const nextSchedulable = getNextSchedulableTask(tasks);
+              if (!nextSchedulable || isStreaming) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => runTaskQuery(nextSchedulable)}
+                  className="forge-btn text-[9px] px-2 py-1 flex items-center gap-1 border-green-500 text-green-400"
+                  title={`Run next ready card: ${nextSchedulable.title}`}
+                >
+                  <Play size={9} />
+                  <span>Next Ready</span>
+                </button>
+              );
+            })()}
             {isStreaming && (
               <button
                 type="button"
@@ -925,6 +1187,120 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                   SAVE DEPENDENCIES
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PUSH TO / HANDOFF MODAL (Phase 6) --- */}
+      {handoffModalTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-mono select-none">
+          <div className="w-full max-w-lg border border-forge-neon rounded bg-forge-panel-bg p-5 flex flex-col max-h-[85vh] overflow-hidden shadow-2xl">
+            <div className="flex justify-between items-center border-b border-forge-dark pb-2 mb-3">
+              <span className="text-xs font-bold text-forge-neon uppercase tracking-wider flex items-center gap-1.5">
+                <ExternalLink size={14} /> Push / Handoff: {handoffModalTask.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setHandoffModalTask(null)}
+                className="text-forge-dim hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="text-[10px] text-forge-dim mb-3 leading-relaxed">
+              Choose an execution path for this card. Run locally inside Forge via genuine BYOK CLI agents (Tier 1), or export a spec bundle and launch your desktop editor (Tier 2).
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
+              {/* Tier 1 In-App Runners */}
+              <div className="border border-forge-dark rounded p-3 bg-forge-very-dark/60">
+                <div className="flex items-center justify-between mb-2 border-b border-forge-dark pb-1">
+                  <span className="text-[10px] font-bold text-forge-neon flex items-center gap-1">
+                    ⚡ TIER 1: IN-APP RUNNERS
+                  </span>
+                  <span className="text-[8px] border border-green-700 text-green-300 rounded px-1 font-bold">Runs inside Forge</span>
+                </div>
+                <div className="text-[9px] text-forge-dim mb-2.5">
+                  Automated by Forge with live PTY terminal output, safety approval gates for destructive commands, and exportable audit trail logging.
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const task = handoffModalTask;
+                      setHandoffModalTask(null);
+                      runTaskQuery(task, 'claude-code');
+                    }}
+                    className="border border-forge-dark hover:border-forge-neon bg-forge-dark/30 hover:bg-forge-dark/60 p-2.5 rounded text-left transition-colors flex flex-col gap-1"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-white">Claude Code</span>
+                      <span className="text-[8px] text-forge-neon">Default</span>
+                    </div>
+                    <span className="text-[8px] text-forge-dim">Anthropic terminal coding agent CLI via your provider key.</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const task = handoffModalTask;
+                      setHandoffModalTask(null);
+                      runTaskQuery(task, 'codex-cli');
+                    }}
+                    className="border border-forge-dark hover:border-forge-neon bg-forge-dark/30 hover:bg-forge-dark/60 p-2.5 rounded text-left transition-colors flex flex-col gap-1"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-white">Codex CLI</span>
+                      <span className="text-[8px] text-cyan-300">BYOK</span>
+                    </div>
+                    <span className="text-[8px] text-forge-dim">OpenAI / local model terminal coding agent CLI.</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Tier 2 External Handoff */}
+              <div className="border border-forge-dark rounded p-3 bg-forge-very-dark/60">
+                <div className="flex items-center justify-between mb-2 border-b border-forge-dark pb-1">
+                  <span className="text-[10px] font-bold text-cyan-400 flex items-center gap-1">
+                    🚀 TIER 2: EXTERNAL HANDOFF
+                  </span>
+                  <span className="text-[8px] border border-cyan-700 text-cyan-300 rounded px-1 font-bold">Opens externally</span>
+                </div>
+                <div className="text-[9px] text-forge-dim mb-2.5">
+                  Generates a structured specification in <code className="text-white">.kryleos/handoff/{handoffModalTask.id.replace(/[^a-zA-Z0-9_-]/g, '_')}.md</code> and opens your editor. Forge does NOT drive external agents.
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { id: 'cursor', name: 'Cursor', desc: 'Opens workspace in Cursor editor' },
+                    { id: 'antigravity', name: 'Antigravity', desc: 'Opens workspace in Antigravity' },
+                    { id: 'vscode', name: 'VS Code', desc: 'Opens workspace in Visual Studio Code' },
+                    { id: 'windsurf', name: 'Windsurf', desc: 'Opens workspace in Windsurf' },
+                    { id: 'clipboard', name: 'Clipboard Only', desc: 'Copies specification bundle to clipboard' },
+                  ].map(target => (
+                    <button
+                      key={target.id}
+                      type="button"
+                      onClick={() => handleExecuteHandoff(handoffModalTask, target.id)}
+                      className="border border-forge-dark hover:border-cyan-400 bg-forge-dark/20 hover:bg-forge-dark/50 p-2 rounded text-left transition-colors flex flex-col gap-0.5"
+                    >
+                      <span className="text-[11px] font-bold text-white">{target.name}</span>
+                      <span className="text-[8px] text-forge-dim">{target.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end border-t border-forge-dark pt-3 mt-3">
+              <button
+                type="button"
+                onClick={() => setHandoffModalTask(null)}
+                className="forge-btn text-[10px] py-1 px-4 border-forge-dark text-forge-dim hover:text-white"
+              >
+                CANCEL
+              </button>
             </div>
           </div>
         </div>

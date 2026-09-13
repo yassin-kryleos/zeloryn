@@ -29,7 +29,6 @@ const FEATURE_STATUS_COLORS: Record<FeatureStatus, { color: string; borderColor:
 
 import { redactSensitiveData } from './src/utils/redact';
 import { generateDeviceKeypair, buildSignedMessage, signMessage, generateNonce, verifyDesktopSignature, type DeviceKeypair } from './src/utils/deviceIdentity';
-import { TIER_LABELS, TIER_PRICES, type TierId } from './src/pricing.generated';
 
 const TOAST_COLORS = {
   success: '#34d399',
@@ -137,7 +136,6 @@ export default function App() {
   const [responseMode, setResponseMode] = useState<'balanced' | 'concise' | 'critical' | 'brutal_audit'>('balanced');
   const [backendUrl, setBackendUrl] = useState('http://localhost:3001');
   const [isSyncEnabled, setIsSyncEnabled] = useState(false);
-  const [userTier, setUserTier] = useState<Exclude<TierId, 'agency'>>('free');
 
   // Offline Scoping Queue States
   const [isOnline, setIsOnline] = useState(true);
@@ -180,7 +178,6 @@ export default function App() {
     `# Mobile Scoping Plan\n\n- [ ] Design custom authentication forms\n- [x] Configure socket client bindings\n- [/] Integrate layout tabs`
   );
 
-  const [showSyncModal, setShowSyncModal] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [pendingApprovalCommand, setPendingApprovalCommand] = useState('npm run test -- --watchAll=false');
   const [pendingApprovalCommandId, setPendingApprovalCommandId] = useState<string | null>(null);
@@ -548,14 +545,13 @@ export default function App() {
   // Back button interception for Android
   useEffect(() => {
     const handleBackButton = () => {
-      if (showSyncModal) { setShowSyncModal(false); return true; }
       if (showApprovalModal) { setShowApprovalModal(false); return true; }
       if (activeTab !== 'dashboard') { setActiveTab('dashboard'); return true; }
       return false; // Let OS handle it (exits app)
     };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', handleBackButton);
     return () => backHandler.remove();
-  }, [activeTab, showSyncModal, showApprovalModal]);
+  }, [activeTab, showApprovalModal]);
 
   const handleShortcutCommand = (commandName: string) => {
     setActiveSpecialist('Reviewer');
@@ -566,7 +562,40 @@ export default function App() {
     }, 3000);
   };
 
-  const getWsUrl = () => backendUrl.replace(/^http/i, 'ws');
+  const getWsUrl = () => {
+    const trimmed = backendUrl.trim().replace(/\/+$/, '');
+    if (trimmed.startsWith('https://')) {
+      return trimmed.replace(/^https:/i, 'wss:');
+    }
+    return trimmed.replace(/^http:/i, 'ws:');
+  };
+
+  const syncOfflineQueue = () => {
+    if (offlineQueue.length === 0) {
+      notify('info', 'No queued offline scoping items to sync.');
+      return;
+    }
+    if (companionStatus !== 'connected' || !companionWsRef.current) {
+      notify('warning', 'Desktop companion not connected. Connect via LAN, Tailscale, or Tunnel first.');
+      return;
+    }
+    let notesText = '';
+    offlineQueue.forEach(item => {
+      notesText += `\n- ${item.text}`;
+    });
+    companionWsRef.current.send(JSON.stringify({
+      type: 'SYNC_PLANNING_NOTES',
+      notes: notesText
+    }));
+
+    let additionalSpec = '';
+    offlineQueue.forEach(item => {
+      additionalSpec += `\n- [ ] Implemented (Synced): ${item.text}`;
+    });
+    setPlanDraft(prev => prev + additionalSpec);
+    setOfflineQueue([]);
+    notify('success', `Synchronized ${offlineQueue.length} offline scoping item(s) to desktop.`);
+  };
 
   const sendQueryToBackend = (text: string, space: 'chat' | 'plan') => {
     return new Promise<string>((resolve, reject) => {
@@ -691,18 +720,24 @@ export default function App() {
       if (filtered !== planInput) piiWarning = true;
     }
 
-    if (!isOnline) {
-      // Offline queue caching
-      setOfflineQueue(prev => [...prev, { text: filtered, timestamp: new Date().toLocaleTimeString() }]);
+    if (!isOnline || companionStatus !== 'connected') {
+      // Offline queue caching & plan draft update
+      const timestamp = new Date().toLocaleTimeString();
+      setOfflineQueue(prev => [...prev, { text: filtered, timestamp }]);
+      setPlanDraft(prev => prev + `\n- [ ] Queued (Offline): ${filtered}`);
       setPlanMessages(prev => {
         const list = [...prev, { role: 'user' as const, content: filtered }];
-        list.push({ role: 'assistant' as const, content: '📡 [OFFLINE MODE]: Scoping request cached locally. Will sync when link is re-established.' });
+        list.push({
+          role: 'assistant' as const,
+          content: '📡 [OFFLINE MODE]: Scoping request cached locally. Will sync when link to desktop/tunnel is restored.'
+        });
         if (piiWarning) {
           list.push({ role: 'assistant' as const, content: '⚠️ [PII SHIELD ACTIVE]: Sensitive data redacted.' });
         }
         return list;
       });
       setPlanInput('');
+      notify('info', 'Offline ideation note queued locally.');
       return;
     }
 
@@ -725,14 +760,13 @@ export default function App() {
         setPlanDraft(prev => prev + `\n- [ ] Implemented: ${query}`);
       })
       .catch(() => {
-        setTimeout(() => {
-          setBytesReceived(p => p + 140);
-          setPlanMessages(prev => [...prev, {
-            role: 'assistant' as const,
-            content: `Backend unavailable. Updated local plan simulator with [${query}].`
-          }]);
-          setPlanDraft(prev => prev + `\n- [ ] Implemented: ${query}`);
-        }, 1000);
+        setOfflineQueue(prev => [...prev, { text: query, timestamp: new Date().toLocaleTimeString() }]);
+        setPlanMessages(prev => [...prev, {
+          role: 'assistant' as const,
+          content: `Backend unavailable. Saved [${query}] to offline ideation queue.`
+        }]);
+        setPlanDraft(prev => prev + `\n- [ ] Queued (Offline Fallback): ${query}`);
+        notify('warning', 'Backend unreachable. Saved to offline ideation queue.');
       });
   };
 
@@ -774,63 +808,55 @@ export default function App() {
   };
 
   const handleImportPlan = () => {
-    if (userTier === 'free') {
-      setShowSyncModal(true);
-    } else {
-      confirm(
-        'Simulate Sync Conflict?',
-        'Would you like to simulate a Sync Conflict (3-way merge) for this import?',
-        [
-          {
-            text: 'No (Normal Sync)',
-            onPress: () => {
-              notify('success', 'Draft plan successfully written to implementation_plan.md on desktop.');
-            }
-          },
-          {
-            text: 'Yes (Trigger Conflict)',
-            onPress: () => {
-              confirm(
-                'Sync Conflict Detected',
-                'Your local mobile scoping draft conflicts with updates made on the desktop server.',
-                [
-                  {
-                    text: 'Keep Mobile Version',
-                    onPress: () => {
-                      notify('success', 'Desktop version overwritten with your mobile version.');
-                    }
-                  },
-                  {
-                    text: 'Keep Desktop Version',
-                    onPress: () => {
-                      const desktopMockPlan = planDraft + "\n- [ ] Implemented (Desktop): Core auth socket modules";
-                      setPlanDraft(desktopMockPlan);
-                      notify('success', 'Mobile draft replaced with desktop version.');
-                    }
-                  },
-                  {
-                    text: 'Inject Markers',
-                    onPress: () => {
-                      const conflictedText = planDraft + "\n\n<<<<<<< CLIENT (OURS)\n- [ ] Synced: Mobile offline scope\n=======\n- [ ] Synced: Conflicting desktop update\n>>>>>>> SERVER (THEIRS)";
-                      setPlanDraft(conflictedText);
-                      notify('warning', 'Merge conflict markers injected. Resolve directly in the plan.');
-                    }
-                  }
-                ]
-              );
-            }
+    confirm(
+      'Simulate Sync Conflict?',
+      'Would you like to simulate a Sync Conflict (3-way merge) for this import?',
+      [
+        {
+          text: 'No (Normal Sync)',
+          onPress: () => {
+            notify('success', 'Draft plan successfully written to implementation_plan.md on desktop.');
           }
-        ]
-      );
-    }
+        },
+        {
+          text: 'Yes (Trigger Conflict)',
+          onPress: () => {
+            confirm(
+              'Sync Conflict Detected',
+              'Your local mobile scoping draft conflicts with updates made on the desktop server.',
+              [
+                {
+                  text: 'Keep Mobile Version',
+                  onPress: () => {
+                    notify('success', 'Desktop version overwritten with your mobile version.');
+                  }
+                },
+                {
+                  text: 'Keep Desktop Version',
+                  onPress: () => {
+                    const desktopMockPlan = planDraft + "\n- [ ] Implemented (Desktop): Core auth socket modules";
+                    setPlanDraft(desktopMockPlan);
+                    notify('success', 'Mobile draft replaced with desktop version.');
+                  }
+                },
+                {
+                  text: 'Inject Markers',
+                  onPress: () => {
+                    const conflictedText = planDraft + "\n\n<<<<<<< CLIENT (OURS)\n- [ ] Synced: Mobile offline scope\n=======\n- [ ] Synced: Conflicting desktop update\n>>>>>>> SERVER (THEIRS)";
+                    setPlanDraft(conflictedText);
+                    notify('warning', 'Merge conflict markers injected. Resolve directly in the plan.');
+                  }
+                }
+              ]
+            );
+          }
+        }
+      ]
+    );
   };
 
   const handleToggleSync = (value: boolean) => {
-    if (userTier === 'free') {
-      setShowSyncModal(true);
-    } else {
-      setIsSyncEnabled(value);
-    }
+    setIsSyncEnabled(value);
   };
 
   const toggleTask = (id: number) => {
@@ -1142,6 +1168,38 @@ export default function App() {
               <RNText style={styles.planDoc}>{planDraft}</RNText>
             </RNView>
 
+            {/* Offline Ideation Queue */}
+            <RNView style={styles.card}>
+              <RNView style={styles.rowSpaceBetween}>
+                <RNText style={styles.cardHeader}>
+                  📝 OFFLINE IDEATION QUEUE ({offlineQueue.length})
+                </RNText>
+                {offlineQueue.length > 0 && (
+                  <TouchableOpacity
+                    onPress={syncOfflineQueue}
+                    disabled={!isOnline || companionStatus !== 'connected'}
+                    style={[styles.syncBtn, (!isOnline || companionStatus !== 'connected') && { opacity: 0.5 }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sync queued offline plans to desktop"
+                  >
+                    <RNText style={styles.syncBtnText}>🔄 SYNC TO DESKTOP</RNText>
+                  </TouchableOpacity>
+                )}
+              </RNView>
+              {offlineQueue.length === 0 ? (
+                <RNText style={{ color: '#888888', fontSize: 12, fontFamily: 'Courier', paddingVertical: 4 }}>
+                  All ideation notes synced. You can draft feature scopes offline; they will auto-queue and sync when connected.
+                </RNText>
+              ) : (
+                offlineQueue.map((item, idx) => (
+                  <RNView key={idx} style={{ paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#222222' }}>
+                    <RNText style={{ color: '#00ff66', fontSize: 12, fontFamily: 'Courier' }}>• {item.text}</RNText>
+                    <RNText style={{ color: '#666666', fontSize: 10, marginTop: 2 }}>Queued at: {item.timestamp}</RNText>
+                  </RNView>
+                ))
+              )}
+            </RNView>
+
             {/* Architect chat pane */}
             <RNView style={[styles.card, { minHeight: 220 }]}>
               <RNText style={styles.cardHeader}>ARCHITECT CHAT CHANNEL</RNText>
@@ -1306,7 +1364,7 @@ export default function App() {
               <TextInput
                 value={backendUrl}
                 onChangeText={setBackendUrl}
-                placeholder="http://100.x.y.z:3001 (Tailscale)"
+                placeholder="http://100.x.y.z:3001 (Tailscale) or https://tunnel.domain"
                 placeholderTextColor="#004411"
                 style={styles.inputField}
                 autoCapitalize="none"
@@ -1315,9 +1373,7 @@ export default function App() {
                 accessibilityLabel="Desktop backend URL configuration input"
               />
               <RNText style={[styles.syncSub, { marginBottom: 8 }]}>
-                Use your desktop's LAN or Tailscale (100.x.y.z) address. Do not expose this
-                port via a public tunnel or Tailscale Funnel — remote command execution
-                must stay on a private network only.
+                Connect via LAN (http://192.168.x.x:3001), Tailscale mesh VPN (http://100.x.y.z:3001), or Cloudflare Tunnel (https://forge.domain.com). Zero hosting costs.
               </RNText>
               <RNText style={[styles.syncSub, { color: serverOnline ? '#00ff66' : '#ff3333', marginBottom: 8 }]}>
                 Backend status: {serverOnline ? 'ONLINE' : 'OFFLINE / SIMULATOR FALLBACK'}
@@ -1399,7 +1455,7 @@ export default function App() {
                     <RNText style={styles.syncLabel}>SETTINGS CLOUD SYNC</RNText>
                     <StatusBadge status="preview" />
                   </RNView>
-                  <RNText style={styles.syncSub}>Solo Plan feature. Sync keys & checklists.</RNText>
+                  <RNText style={styles.syncSub}>Sync keys & checklists across devices.</RNText>
                 </RNView>
                 <TouchableOpacity onPress={() => handleToggleSync(!isSyncEnabled)} style={styles.toggleBtn}>
                   <RNText style={styles.toggleBtnText}>{isSyncEnabled ? 'ON' : 'OFF'}</RNText>
@@ -1413,17 +1469,13 @@ export default function App() {
                     <RNText style={styles.syncLabel}>SEMANTIC CACHE INDEXER</RNText>
                     <StatusBadge status="preview" />
                   </RNView>
-                  <RNText style={styles.syncSub}>Solo Plus/Founder: Index workspace symbols for fast queries.</RNText>
+                  <RNText style={styles.syncSub}>Index workspace symbols for fast local queries.</RNText>
                 </RNView>
                 <TouchableOpacity
                   onPress={() => {
-                    if (userTier !== 'solo_plus' && userTier !== 'founder') {
-                      notify('error', `Access denied — upgrade to Solo Plus ($${TIER_PRICES.solo_plus}/mo) to enable Semantic Cache Indexer.`);
-                    } else {
-                      setSemanticCacheEnabled(!semanticCacheEnabled);
-                      if (!semanticCacheEnabled) {
-                        notify('success', 'Indexed 47 symbols across workspace.');
-                      }
+                    setSemanticCacheEnabled(!semanticCacheEnabled);
+                    if (!semanticCacheEnabled) {
+                      notify('success', 'Indexed 47 symbols across workspace.');
                     }
                   }} 
                   style={[styles.toggleBtn, semanticCacheEnabled && { borderColor: '#00ff66', backgroundColor: '#003311' }]}
@@ -1439,15 +1491,11 @@ export default function App() {
                     <RNText style={styles.syncLabel}>SELF-HEALING ROLLBACKS</RNText>
                     <StatusBadge status="preview" />
                   </RNView>
-                  <RNText style={styles.syncSub}>Solo Plus/Founder preview: monitor command execution failures and rollback indicators.</RNText>
+                  <RNText style={styles.syncSub}>Monitor command execution failures and rollback indicators.</RNText>
                 </RNView>
                 <TouchableOpacity
                   onPress={() => {
-                    if (userTier !== 'solo_plus' && userTier !== 'founder') {
-                      notify('error', `Access denied — upgrade to Solo Plus ($${TIER_PRICES.solo_plus}/mo) for Self-Healing Rollbacks.`);
-                    } else {
-                      setSelfHealingEnabled(!selfHealingEnabled);
-                    }
+                    setSelfHealingEnabled(!selfHealingEnabled);
                   }} 
                   style={[styles.toggleBtn, selfHealingEnabled && { borderColor: '#00ff66', backgroundColor: '#003311' }]}
                 >
@@ -1467,15 +1515,11 @@ export default function App() {
                     <RNText style={styles.syncLabel}>RBAC COMMAND POLICY</RNText>
                     <StatusBadge status="simulator" />
                   </RNView>
-                  <RNText style={styles.syncSub}>Founder simulator: demonstrate command restrictions by role.</RNText>
+                  <RNText style={styles.syncSub}>Demonstrate command restrictions by role.</RNText>
                 </RNView>
                 <TouchableOpacity
                   onPress={() => {
-                    if (userTier !== 'founder') {
-                      notify('error', `Access denied — upgrade to Founder ($${TIER_PRICES.founder}/mo) for the RBAC Command Policy Simulator.`);
-                    } else {
-                      setRbacEnabled(!rbacEnabled);
-                    }
+                    setRbacEnabled(!rbacEnabled);
                   }} 
                   style={[styles.toggleBtn, rbacEnabled && { borderColor: '#00ff66', backgroundColor: '#003311' }]}
                 >
@@ -1527,69 +1571,25 @@ export default function App() {
               </RNView>
             </RNView>
 
-            {/* Profile Plan select */}
+            {/* Free & Open Source License Card */}
             <RNView style={styles.card}>
               <RNView style={styles.featureTitleRow}>
-                <RNText style={styles.cardHeader}>ACCOUNT & BILLING PLAN</RNText>
-                <StatusBadge status="mock" label="Mock billing" />
+                <RNText style={styles.cardHeader}>FREE & OPEN SOURCE (BYOK)</RNText>
+                <StatusBadge status="production" label="Full Access" />
               </RNView>
               <RNView style={styles.row}>
-                <RNText style={styles.label}>Active Tier:</RNText>
-                <RNText style={[styles.value, { color: userTier !== 'free' ? '#00ff66' : '#00aa44' }]}>{TIER_LABELS[userTier].toUpperCase()}</RNText>
+                <RNText style={styles.label}>Access Mode:</RNText>
+                <RNText style={[styles.value, { color: '#00ff66' }]}>COMMUNITY EDITION</RNText>
               </RNView>
-              <RNView style={styles.planBtnRow}>
-                {(['free', 'solo', 'solo_plus', 'founder'] as const).map(t => (
-                  <TouchableOpacity
-                    key={t}
-                    onPress={() => setUserTier(t)}
-                    style={[styles.planBtn, userTier === t && styles.planBtnActive]}
-                  >
-                    <RNText style={[styles.planBtnText, userTier === t && styles.planBtnTextActive]}>
-                      {TIER_LABELS[t].toUpperCase()}
-                    </RNText>
-                  </TouchableOpacity>
-                ))}
-              </RNView>
+              <RNText style={[styles.syncSub, { marginTop: 6, color: colors.mutedText }]}>
+                All features, semantic cache, drift detection, and companion syncing are 100% free and open source. Bring your own API keys or use local models (Ollama).
+              </RNText>
             </RNView>
           </RNView>
         )}
 
       </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Sync Lock Modal Overlay */}
-      <Modal visible={showSyncModal} transparent animationType="fade">
-        <RNView style={styles.modalBg}>
-          <RNView style={styles.modalPanel}>
-            <RNText style={styles.modalHeader}>⚠️ PREMIUM LOCK OUT</RNText>
-            <RNText style={styles.modalText}>
-              To sync your mobile scoping planning session directly to your desktop workspace, you must activate **Settings Cloud Sync** (Solo Tier or higher).
-            </RNText>
-            <TouchableOpacity
-              onPress={() => {
-                setUserTier('solo');
-                setShowSyncModal(false);
-                notify('success', 'Unlocked Solo Plan successfully!');
-              }}
-              style={styles.modalUpgradeBtn}
-            >
-              <RNText style={styles.modalUpgradeText}>{`UPGRADE TO SOLO ($${TIER_PRICES.solo}/MO)`}</RNText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => {
-                setShowSyncModal(false);
-                notify('success', 'Markdown plan copied to native clipboard!');
-              }}
-              style={styles.modalCopyBtn}
-            >
-              <RNText style={styles.modalCopyText}>COPY DRAFT MANUALLY</RNText>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setShowSyncModal(false)} style={{ marginTop: 10 }}>
-              <RNText style={{ color: '#00aa44', fontSize: 11 }}>CANCEL</RNText>
-            </TouchableOpacity>
-          </RNView>
-        </RNView>
-      </Modal>
 
       {/* Command Approval Modal Notification */}
       <Modal visible={showApprovalModal} transparent animationType="slide">

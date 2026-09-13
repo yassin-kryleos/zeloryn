@@ -12,11 +12,13 @@ import type {
   DriftClassification,
   ExecutionTrace,
   ProjectTask,
-  PlanWorkspaceItem
+  PlanWorkspaceItem,
+  PostExecutionReview
 } from './db';
 import { ChatDatabase } from './db';
 import type { AgentLog } from './agents';
 import type { Message } from './deepseek';
+import { unresolvedBlockers } from '../shared/dependencies';
 
 // Minimal structural contract for the model client used by post-run trace
 // extraction. Kept local so planningV2 stays decoupled from the orchestrator.
@@ -655,7 +657,7 @@ export class PlanningV2Service {
       if (meta.id === this.flowSessionId) continue;
       const session = await this.chatDb.getSession(meta.id);
       if (!session) continue;
-      idx = (session.tasks || []).findIndex(task => task.id === taskId);
+      idx = (session.tasks || []).findIndex((task: ProjectTask) => task.id === taskId);
       if (idx !== -1) return { session, idx };
     }
     return null;
@@ -927,6 +929,31 @@ export class PlanningV2Service {
     }));
   }
 
+  public async savePostExecutionReview(taskId: string, review: PostExecutionReview): Promise<ProjectTask> {
+    return this.updateTask(taskId, task => ({
+      ...task,
+      postExecutionReview: review,
+      lastModified: new Date().toISOString()
+    }));
+  }
+
+  public async overridePostExecutionReview(taskId: string): Promise<ProjectTask> {
+    return this.updateTask(taskId, task => ({
+      ...task,
+      postExecutionReview: task.postExecutionReview ? {
+        ...task.postExecutionReview,
+        override: true
+      } : {
+        status: 'passed',
+        verdict: 'OVERRIDDEN',
+        findings: 'Manually overridden by human reviewer.',
+        reviewedAt: new Date().toISOString(),
+        override: true
+      },
+      lastModified: new Date().toISOString()
+    }));
+  }
+
   public async enrichCriteria(taskId: string): Promise<CriteriaEnrichmentResult> {
     const { task } = await this.getCriteria(taskId);
     const root = resolveWorkspace(this.workspaceRoot, task);
@@ -1015,8 +1042,11 @@ export class PlanningV2Service {
     });
   }
 
-  public classify(task: ProjectTask, results: CriterionResult[], latestTrace?: ExecutionTrace): DriftClassification {
-    if ((task.blockedBy || []).length > 0) return 'blocked';
+  public classify(task: ProjectTask, results: CriterionResult[], latestTrace?: ExecutionTrace, allTasks?: ProjectTask[]): DriftClassification {
+    const hasUnresolved = allTasks
+      ? unresolvedBlockers(allTasks, task.id).length > 0
+      : (task.blockedBy || []).length > 0;
+    if (hasUnresolved) return 'blocked';
     if (task.status === 'done') return 'complete';
     if (results.length === 0) return latestTrace ? 'needs_review' : 'not_started';
     const passCount = results.filter(result => result.status === 'pass').length;
@@ -1130,7 +1160,8 @@ export class PlanningV2Service {
         evidence: `Incomplete run: ${traceInput.incompleteReason}`
       }));
     }
-    const status = traceInput.incompleteReason ? 'in_progress' : this.classify(task, evaluated);
+    const session = await this.getFlowSession();
+    const status = traceInput.incompleteReason ? 'in_progress' : this.classify(task, evaluated, undefined, session.tasks);
     const trace: ExecutionTrace = {
       id: `${timestamp}-${slugPart(traceInput.planItemId)}`,
       planItemId: traceInput.planItemId,
@@ -1461,7 +1492,7 @@ export class PlanningV2Service {
       const criteria = task.acceptanceCriteria || [];
       const latestTrace = this.latestTrace(task.id);
       const results = criteria.length > 0 ? this.evaluateCriteria(task, criteria) : [];
-      const status = this.classify(task, results, latestTrace);
+      const status = this.classify(task, results, latestTrace, session.tasks);
       return {
         taskId: task.id,
         title: task.title,
@@ -1532,7 +1563,7 @@ export class PlanningV2Service {
         }
 
         if (changed) {
-          item.status = this.classify(task, item.results, item.latestTrace);
+          item.status = this.classify(task, item.results, item.latestTrace, session.tasks);
           item.suggestedStatus = this.suggestedStatus(item.status);
         }
       }

@@ -30,3 +30,34 @@ export function wouldCreateDependencyCycle(
   }
   return false;
 }
+
+/** Check if a task has all its dependency cards resolved (completed/done). */
+export function isTaskUnblocked(task: ProjectTask, allTasks: ProjectTask[]): boolean {
+  return unresolvedBlockers(allTasks, task.id).length === 0;
+}
+
+/** Given a newly completed task id, returns all tasks that were previously waiting
+ *  on it and are now completely unblocked (all prerequisites are 'done'). */
+export function findUnblockedTasks(tasks: ProjectTask[], completedTaskId: string): ProjectTask[] {
+  const byId = new Map(tasks.map(t => [t.id, t]));
+  // Only tasks that directly depended on completedTaskId and are not already done
+  return tasks.filter(task => {
+    if (task.status === 'done') return false;
+    const deps = task.blockedBy || [];
+    if (!deps.includes(completedTaskId)) return false;
+    // Check if ALL deps are now done
+    return deps.every(depId => byId.get(depId)?.status === 'done');
+  });
+}
+
+/** Returns the next schedulable task: an incomplete task (todo / not_started) whose
+ *  dependencies are completely satisfied, prioritized by order in list or priority. */
+export function getNextSchedulableTask(tasks: ProjectTask[]): ProjectTask | null {
+  for (const task of tasks) {
+    if (task.status === 'done' || task.status === 'in_progress') continue;
+    if (isTaskUnblocked(task, tasks)) {
+      return task;
+    }
+  }
+  return null;
+}
