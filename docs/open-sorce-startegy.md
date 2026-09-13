@@ -22,7 +22,7 @@ untouched by this plan.
 ## 2. Current state (audit findings, 2026-09-13)
 
 **Completeness: beta, not production.** The project's own QA docs
-(`RELEASE_QA_REPORT.md`) already concluded this — an earlier "9.5/10 ready"
+(`qa/reports/re-audit/RELEASE_QA_REPORT.md`) already concluded this — an earlier "9.5/10 ready"
 self-assessment was retracted as overstated. Core loop is more built than a
 rewrite would need:
 

@@ -211,7 +211,7 @@ npm.cmd run package -- --out kryleos-forge-0.1.0.vsix
 
 **Everything below is committed and pushed.** Working tree clean; `main` in sync with origin.
 
-- Remote: `origin` = `https://github.com/thetimelord69/Kryleos-forge.git`
+- Remote: `origin` = `https://github.com/yassin-kryleos/zeloryn.git`
 - Latest commit: `66fe21c` (deterministic command-approval smoke path)
 - This session's commits (newest first):
   - `66fe21c` feat: deterministic command-approval smoke path (no model)
@@ -470,7 +470,7 @@ Likely fix if needed:
 - VS Code may keep a stale extension host after reinstalling the VSIX; reload the window or restart VS Code.
 - Windows CRLF warnings are expected.
 - `Project-Documents` are outside the `Desktop-app` git repo.
-- Remote IS configured: `origin` → `thetimelord69/Kryleos-forge`, `main`. Pull before starting; push after each green slice.
+- Remote IS configured: `origin` → `yassin-kryleos/zeloryn`, `main`. Pull before starting; push after each green slice.
 
 ## 12. Suggested Claude Code Opening Move
 
