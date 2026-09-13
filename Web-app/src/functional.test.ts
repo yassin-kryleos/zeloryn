@@ -69,6 +69,7 @@ describe('Web Companion Client Functional Test Suite', () => {
   });
 
   describe('3. Unconditional Feature Permissions (BYOK)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- args kept for test-call readability
     const checkFeatureAccess = (_tier: string, _feature: string): boolean => {
       // In BYOK open-source mode, all features are unconditionally unlocked
       return true;

@@ -75,9 +75,18 @@ export interface SpendCapConfig {
 
 export class CostGuard {
   private workspaceRoot: string;
+  // SEC-M5: serialize read-modify-write ops on cost_history.json / spend_cap.json
+  // so concurrent card executions cannot lost-update each other's writes.
+  private opChain: Promise<unknown> = Promise.resolve();
 
   constructor(workspaceRoot: string) {
     this.workspaceRoot = workspaceRoot;
+  }
+
+  private runExclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const result = this.opChain.then(fn, fn);
+    this.opChain = result.then(() => undefined, () => undefined);
+    return result;
   }
 
   private getHistoryFilePath(): string {
@@ -102,16 +111,18 @@ export class CostGuard {
   }
 
   public async setSpendCap(cap: Partial<SpendCapConfig>): Promise<SpendCapConfig> {
-    const current = await this.getSpendCap();
-    const updated: SpendCapConfig = {
-      ...current,
-      ...cap,
-      enabled: cap.enabled !== undefined ? cap.enabled : (current.enabled ?? true)
-    };
-    const filePath = this.getSpendCapFilePath();
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    await fs.promises.writeFile(filePath, JSON.stringify(updated, null, 2), 'utf-8');
-    return updated;
+    return this.runExclusive(async () => {
+      const current = await this.getSpendCap();
+      const updated: SpendCapConfig = {
+        ...current,
+        ...cap,
+        enabled: cap.enabled !== undefined ? cap.enabled : (current.enabled ?? true)
+      };
+      const filePath = this.getSpendCapFilePath();
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      await fs.promises.writeFile(filePath, JSON.stringify(updated, null, 2), 'utf-8');
+      return updated;
+    });
   }
 
   public async checkSpendCap(): Promise<{
@@ -166,22 +177,24 @@ export class CostGuard {
   }
 
   public async addRecord(record: Omit<CostRecord, 'id' | 'timestamp'>): Promise<CostRecord> {
-    const history = await this.getHistory();
-    const newRecord: CostRecord = {
-      ...record,
-      id: `cost_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`,
-      timestamp: new Date().toISOString()
-    };
-    history.push(newRecord);
-    
-    const filePath = this.getHistoryFilePath();
-    try {
-      fs.mkdirSync(path.dirname(filePath), { recursive: true });
-      await fs.promises.writeFile(filePath, JSON.stringify(history, null, 2), 'utf-8');
-    } catch (err) {
-      console.error('Failed to save cost record:', err);
-    }
-    return newRecord;
+    return this.runExclusive(async () => {
+      const history = await this.getHistory();
+      const newRecord: CostRecord = {
+        ...record,
+        id: `cost_${Math.random().toString(36).substring(2, 9)}_${Date.now()}`,
+        timestamp: new Date().toISOString()
+      };
+      history.push(newRecord);
+
+      const filePath = this.getHistoryFilePath();
+      try {
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
+        await fs.promises.writeFile(filePath, JSON.stringify(history, null, 2), 'utf-8');
+      } catch (err) {
+        console.error('Failed to save cost record:', err);
+      }
+      return newRecord;
+    });
   }
 
   public async getStatsBySession(sessionId?: string): Promise<{

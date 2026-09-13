@@ -139,4 +139,33 @@ describe('CostGuard Class', () => {
     const check4 = await costGuard.checkSpendCap();
     expect(check4.allowed).toBe(true);
   });
+
+  it('persists all 50 records written concurrently (SEC-M5, no lost updates)', async () => {
+    const costGuard = new CostGuard(testWorkspace);
+    const N = 50;
+
+    // Fire all addRecord calls at once — before runExclusive serialization,
+    // each would read the same pre-write history and the last writer's
+    // JSON.stringify would silently drop every other concurrent write.
+    await Promise.all(
+      Array.from({ length: N }, (_, i) =>
+        costGuard.addRecord({
+          sessionId: `concurrent_${i}`,
+          model: 'gpt-4o-mini',
+          provider: 'OpenAI',
+          inputTokens: 1,
+          outputTokens: 1,
+          cost: 0.0001,
+          tokenSavings: 0
+        })
+      )
+    );
+
+    const history = await costGuard.getHistory();
+    expect(history.length).toBe(N);
+    const sessionIds = new Set(history.map(r => r.sessionId));
+    for (let i = 0; i < N; i++) {
+      expect(sessionIds.has(`concurrent_${i}`)).toBe(true);
+    }
+  });
 });
