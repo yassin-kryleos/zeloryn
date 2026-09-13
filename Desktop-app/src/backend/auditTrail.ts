@@ -39,9 +39,7 @@ export class AuditTrailService {
 
   private readJsonSafe<T>(filePath: string, fallback: T): T {
     try {
-      if (!fs.existsSync(filePath)) return fallback;
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return JSON.parse(content || 'null') ?? fallback;
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8') || 'null') ?? fallback;
     } catch {
       return fallback;
     }
@@ -49,15 +47,9 @@ export class AuditTrailService {
 
   private readJsonlSafe(filePath: string): any[] {
     try {
-      if (!fs.existsSync(filePath)) return [];
-      const content = fs.readFileSync(filePath, 'utf-8');
-      return content
+      return fs.readFileSync(filePath, 'utf-8')
         .split('\n')
-        .map(line => line.trim())
-        .filter(Boolean)
-        .map(line => {
-          try { return JSON.parse(line); } catch { return null; }
-        })
+        .map(line => { try { return JSON.parse(line.trim()); } catch { return null; } })
         .filter(Boolean);
     } catch {
       return [];
@@ -267,10 +259,7 @@ export class AuditTrailService {
   }> {
     const data = await this.generateReportData();
     const exportDir = targetDir || path.join(this.workspaceRoot, '.kryleos', 'audit');
-
-    if (!fs.existsSync(exportDir)) {
-      fs.mkdirSync(exportDir, { recursive: true });
-    }
+    fs.mkdirSync(exportDir, { recursive: true });
 
     const reportMarkdownPath = path.join(exportDir, 'AUDIT_REPORT.md');
     const reportJsonPath = path.join(exportDir, 'audit_trail_export.json');

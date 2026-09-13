@@ -4,11 +4,12 @@ import type { ProjectTask, PostExecutionReview } from './db';
 import type { ChatClient } from './agents';
 import { crewPersonas } from '../shared/crewPersonas';
 import { recordDecisionSync, parseDecisionsFromReview } from './decisionMemory';
+import { sanitizeTaskId } from './tools';
 
 const execFileAsync = promisify(execFile);
 
 export async function getCardDiff(workspaceRoot: string, taskId: string): Promise<string> {
-  const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const cleanId = sanitizeTaskId(taskId);
   const cardBranch = `forge/card-${cleanId}`;
 
   try {

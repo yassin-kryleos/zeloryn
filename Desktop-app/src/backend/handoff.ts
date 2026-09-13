@@ -11,6 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
+import { sanitizeTaskId } from './tools';
 
 export interface HandoffTarget {
   id: string;
@@ -88,20 +89,12 @@ export const TIER_2_HANDOFF_TARGETS: HandoffTarget[] = [
 ];
 
 export class HandoffRegistry {
-  private targets = new Map<string, HandoffTarget>();
-
-  constructor() {
-    for (const t of TIER_2_HANDOFF_TARGETS) {
-      this.targets.set(t.id, t);
-    }
-  }
-
   get(id: string): HandoffTarget | undefined {
-    return this.targets.get(id);
+    return TIER_2_HANDOFF_TARGETS.find(t => t.id === id);
   }
 
   list(): Array<HandoffTarget & { installed: boolean }> {
-    return Array.from(this.targets.values()).map(target => ({
+    return TIER_2_HANDOFF_TARGETS.map(target => ({
       ...target,
       installed: target.manualOnly ? true : !!this.findBinary(target.binaryName),
     }));
@@ -109,20 +102,12 @@ export class HandoffRegistry {
 
   findBinary(binaryName?: string): string | null {
     if (!binaryName) return null;
-    const pathDirs = (process.env.PATH || '').split(path.delimiter);
-    const localBin = path.join(os.homedir(), '.local', 'bin');
-    if (!pathDirs.includes(localBin)) pathDirs.push(localBin);
-
-    const candidates = os.platform() === 'win32'
-      ? [`${binaryName}.cmd`, `${binaryName}.exe`, binaryName]
-      : [binaryName];
-
-    for (const dir of pathDirs) {
-      for (const name of candidates) {
-        const full = path.join(dir, name);
-        try {
-          if (fs.existsSync(full)) return full;
-        } catch { /* skip */ }
+    const dirs = [...(process.env.PATH || '').split(path.delimiter), path.join(os.homedir(), '.local', 'bin')];
+    const exts = os.platform() === 'win32' ? ['.cmd', '.exe', ''] : [''];
+    for (const dir of dirs) {
+      for (const ext of exts) {
+        const full = path.join(dir, `${binaryName}${ext}`);
+        if (fs.existsSync(full)) return full;
       }
     }
     return null;
@@ -200,11 +185,9 @@ export async function executeHandoff(payload: CardHandoffPayload): Promise<Hando
 
   // Write bundle to .kryleos/handoff/<safeTaskId>.md
   const handoffDir = path.join(payload.workspaceRoot, '.kryleos', 'handoff');
-  try {
-    fs.mkdirSync(handoffDir, { recursive: true });
-  } catch { /* ignore */ }
+  fs.mkdirSync(handoffDir, { recursive: true });
 
-  const safeTaskId = payload.taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeTaskId = sanitizeTaskId(payload.taskId);
   const handoffFilePath = path.join(handoffDir, `${safeTaskId}.md`);
   fs.writeFileSync(handoffFilePath, bundleContent, 'utf-8');
 

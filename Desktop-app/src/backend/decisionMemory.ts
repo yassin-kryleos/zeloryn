@@ -33,11 +33,9 @@ export function loadDecisionsSync(workspaceRoot: string): string {
 }
 
 /**
- * Loads decision memory from `.kryleos/decisions.md` asynchronously.
+ * Async alias of loadDecisionsSync.
  */
-export async function loadDecisions(workspaceRoot: string): Promise<string> {
-  return loadDecisionsSync(workspaceRoot);
-}
+export const loadDecisions = async (workspaceRoot: string): Promise<string> => loadDecisionsSync(workspaceRoot);
 
 /**
  * Appends a decision entry to `.kryleos/decisions.md`.
@@ -45,10 +43,7 @@ export async function loadDecisions(workspaceRoot: string): Promise<string> {
  */
 export function recordDecisionSync(workspaceRoot: string, entry: DecisionEntry): void {
   const filePath = getDecisionsPath(workspaceRoot);
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
 
   const dateStr = entry.date || new Date().toISOString().split('T')[0];
   const cardId = entry.taskId ? `[${entry.taskId}] ` : '';
@@ -65,11 +60,9 @@ export function recordDecisionSync(workspaceRoot: string, entry: DecisionEntry):
 }
 
 /**
- * Async version of recordDecisionSync.
+ * Async alias of recordDecisionSync.
  */
-export async function recordDecision(workspaceRoot: string, entry: DecisionEntry): Promise<void> {
-  recordDecisionSync(workspaceRoot, entry);
-}
+export const recordDecision = async (workspaceRoot: string, entry: DecisionEntry): Promise<void> => recordDecisionSync(workspaceRoot, entry);
 
 /**
  * Formats decision memory for prompt context injection.

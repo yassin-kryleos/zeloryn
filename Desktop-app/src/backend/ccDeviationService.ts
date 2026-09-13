@@ -13,6 +13,7 @@
 import { execFile } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { findGitBinary } from './tools';
 
 const MAX_BUFFER = 5 * 1024 * 1024;
 
@@ -53,24 +54,7 @@ function normalizePath(p: string): string {
   return path.resolve(p).replace(/\\/g, '/');
 }
 
-const gitBin: string = (() => {
-  if (process.platform !== 'win32') {
-    const unixCandidates = ['/usr/bin/git', '/usr/local/bin/git', '/bin/git'];
-    for (const p of unixCandidates) {
-      try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
-    }
-    return 'git';
-  }
-  const candidates = [
-    'C:\\Program Files\\Git\\mingw64\\bin\\git.exe',
-    'C:\\Program Files\\Git\\cmd\\git.exe',
-    'C:\\Program Files\\Git\\bin\\git.exe',
-  ];
-  for (const p of candidates) {
-    try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
-  }
-  return 'git';
-})();
+const gitBin: string = findGitBinary();
 
 function execGit(
   cwd: string,

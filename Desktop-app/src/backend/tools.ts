@@ -1,9 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec, execFile, type ChildProcess } from 'child_process';
-import mammoth from 'mammoth';
-// @ts-ignore
-import HTMLtoDOCX from 'html-to-docx';
+
 import { scanSecrets } from './secretScanner';
 import { SemanticIndexer } from './semanticIndex';
 
@@ -48,100 +46,27 @@ export interface CardPrData {
   };
 }
 
-function markdownToHtml(markdown: string): string {
-  let html = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+export function sanitizeTaskId(taskId: string): string {
+  return taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
 
-  // Escape raw HTML tags to protect math symbols and code tags from stripping
-  html = html
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  // Code blocks (```lang ... ```)
-  html = html.replace(/```([\s\S]*?)```/g, (match, code) => {
-    return `<pre><code>${code.trim()}</code></pre>`;
-  });
-
-  // Headings
-  html = html.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
-  html = html.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
-  html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
-  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-
-  // Inline bold/italic/code
-  html = html.replace(/(\*\*|__)(.*?)\1/g, '<strong>$2</strong>');
-  html = html.replace(/(\*|_)(.*?)\1/g, '<em>$2</em>');
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-  // Process lists and paragraphs
-  const lines = html.split('\n');
-  let inUl = false;
-  let inOl = false;
-  const processedLines: string[] = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Check if line is already an HTML block tag we created
-    const isHtmlBlock = /^(<h[1-6]>|<pre>|<\/pre>|<code>|<\/code>|<ul>|<\/ul>|<ol>|<\/ol>|<li>|<\/li>)/i.test(trimmed);
-
-    // Unordered lists
-    const ulMatch = line.match(/^[-*+]\s+(.*)$/);
-    if (ulMatch) {
-      if (inOl) {
-        processedLines.push('</ol>');
-        inOl = false;
+export function findGitBinary(): string {
+  if (process.platform === 'win32') {
+    const candidates = ['git.exe', 'git.cmd'];
+    const pathDirs = (process.env.PATH || '').split(path.delimiter);
+    for (const dir of pathDirs) {
+      for (const name of candidates) {
+        const full = path.join(dir, name);
+        try { if (fs.existsSync(full)) return full; } catch {}
       }
-      if (!inUl) {
-        processedLines.push('<ul>');
-        inUl = true;
-      }
-      processedLines.push(`<li>${ulMatch[1]}</li>`);
-      continue;
     }
-
-    // Ordered lists
-    const olMatch = line.match(/^\d+\.\s+(.*)$/);
-    if (olMatch) {
-      if (inUl) {
-        processedLines.push('</ul>');
-        inUl = false;
-      }
-      if (!inOl) {
-        processedLines.push('<ol>');
-        inOl = true;
-      }
-      processedLines.push(`<li>${olMatch[1]}</li>`);
-      continue;
-    }
-
-    if ((inUl || inOl) && trimmed === '') {
-      if (inUl) {
-        processedLines.push('</ul>');
-        inUl = false;
-      }
-      if (inOl) {
-        processedLines.push('</ol>');
-        inOl = false;
-      }
-      processedLines.push('');
-      continue;
-    }
-
-    if (trimmed !== '' && !isHtmlBlock && !inUl && !inOl) {
-      processedLines.push(`<p>${trimmed}</p>`);
-    } else {
-      processedLines.push(line);
-    }
+    return 'git';
   }
-
-  if (inUl) processedLines.push('</ul>');
-  if (inOl) processedLines.push('</ol>');
-
-  return processedLines.join('\n');
+  const unixCandidates = ['/usr/bin/git', '/usr/local/bin/git', '/bin/git'];
+  for (const p of unixCandidates) {
+    try { if (fs.existsSync(p)) return p; } catch {}
+  }
+  return 'git';
 }
 
 // ─── Command classification (security sandbox) ──────────────────────────────
@@ -556,11 +481,6 @@ export class WorkspaceSandbox {
 
   public async readFile(filePath: string): Promise<string> {
     const resolved = this.resolvePath(filePath);
-    if (filePath.toLowerCase().endsWith('.docx')) {
-      // @ts-ignore
-      const result = await mammoth.convertToMarkdown({ path: resolved });
-      return result.value;
-    }
     return fs.promises.readFile(resolved, 'utf-8');
   }
 
@@ -575,13 +495,7 @@ export class WorkspaceSandbox {
 
     if (!currentContent) {
       await fs.promises.mkdir(path.dirname(resolved), { recursive: true });
-      if (filePath.toLowerCase().endsWith('.docx')) {
-        const html = markdownToHtml(newContent);
-        const docxBuffer = await HTMLtoDOCX(html);
-        await fs.promises.writeFile(resolved, docxBuffer);
-      } else {
-        await fs.promises.writeFile(resolved, newContent, 'utf-8');
-      }
+      await fs.promises.writeFile(resolved, newContent, 'utf-8');
       return newContent;
     }
 
@@ -627,13 +541,7 @@ export class WorkspaceSandbox {
 
     const mergedContent = finalLines.join('\n');
     await fs.promises.mkdir(path.dirname(resolved), { recursive: true });
-    if (filePath.toLowerCase().endsWith('.docx')) {
-      const html = markdownToHtml(mergedContent);
-      const docxBuffer = await HTMLtoDOCX(html);
-      await fs.promises.writeFile(resolved, docxBuffer);
-    } else {
-      await fs.promises.writeFile(resolved, mergedContent, 'utf-8');
-    }
+    await fs.promises.writeFile(resolved, mergedContent, 'utf-8');
     return mergedContent;
   }
 
@@ -649,13 +557,7 @@ export class WorkspaceSandbox {
     }
     const resolved = this.resolvePath(filePath);
     const originalContent = this.snapshots.get(filePath)!;
-    if (filePath.toLowerCase().endsWith('.docx')) {
-      const html = markdownToHtml(originalContent);
-      const docxBuffer = await HTMLtoDOCX(html);
-      await fs.promises.writeFile(resolved, docxBuffer);
-    } else {
-      await fs.promises.writeFile(resolved, originalContent, 'utf-8');
-    }
+    await fs.promises.writeFile(resolved, originalContent, 'utf-8');
     this.snapshots.delete(filePath);
     return true;
   }
@@ -1153,7 +1055,7 @@ export class WorkspaceSandbox {
 
   /** Checks if card worktree has overlapping file modifications with other open worktrees */
   public async detectWorktreeCollisions(taskId: string, targetBranch: string = 'main'): Promise<string[]> {
-    const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanId = sanitizeTaskId(taskId);
     const branch = `forge/card-${cleanId}`;
 
     try {
@@ -1192,7 +1094,7 @@ export class WorkspaceSandbox {
       return { success: false, worktreePath: '', branch: '', message: 'Workspace is not a git repository.' };
     }
 
-    const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanId = sanitizeTaskId(taskId);
     const branch = branchName || `forge/card-${cleanId}`;
     const worktreesDir = path.join(this.workspaceRoot, '.kryleos', 'worktrees');
     const worktreePath = path.join(worktreesDir, `card-${cleanId}`);
@@ -1276,7 +1178,7 @@ export class WorkspaceSandbox {
 
   /** Removes a card's isolated worktree and prunes git metadata */
   public async removeCardWorktree(taskId: string, force: boolean = false): Promise<{ success: boolean; message?: string }> {
-    const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanId = sanitizeTaskId(taskId);
     const worktreePath = path.join(this.workspaceRoot, '.kryleos', 'worktrees', `card-${cleanId}`);
 
     if (!fs.existsSync(worktreePath)) {
@@ -1316,7 +1218,7 @@ export class WorkspaceSandbox {
     testCmd?: string | null
   ): Promise<{ prDescription?: string; prPath?: string; changelogPath?: string }> {
     try {
-      const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const cleanId = sanitizeTaskId(taskId);
       const prDir = path.join(this.workspaceRoot, '.kryleos', 'pull_requests');
       await fs.promises.mkdir(prDir, { recursive: true });
       const prPath = path.join(prDir, `${cleanId}.md`);
@@ -1375,11 +1277,8 @@ export class WorkspaceSandbox {
         ''
       ].join('\n');
 
-      if (!fs.existsSync(changelogPath)) {
-        await fs.promises.writeFile(changelogPath, `# Project Changelog\n<!-- Auto-generated from completed cards upon merge -->\n\n${changelogEntry}`, 'utf-8');
-      } else {
-        await fs.promises.appendFile(changelogPath, `\n${changelogEntry}`, 'utf-8');
-      }
+      const header = fs.existsSync(changelogPath) ? '\n' : '# Project Changelog\n<!-- Auto-generated from completed cards upon merge -->\n\n';
+      await fs.promises.appendFile(changelogPath, `${header}${changelogEntry}`, 'utf-8');
 
       return { prDescription, prPath, changelogPath };
     } catch {
@@ -1401,7 +1300,7 @@ export class WorkspaceSandbox {
     prPath?: string;
     changelogPath?: string;
   }> {
-    const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanId = sanitizeTaskId(taskId);
     const branch = `forge/card-${cleanId}`;
     const worktreePath = path.join(this.workspaceRoot, '.kryleos', 'worktrees', `card-${cleanId}`);
     const stagingBranch = `forge/staging-${cleanId}`;
@@ -1522,7 +1421,7 @@ export class WorkspaceSandbox {
 
   /** Reverts a card's worktree and deletes its branch permanently (7e durable per-card rollback) */
   public async revertCardWorktree(taskId: string): Promise<{ success: boolean; message: string }> {
-    const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanId = sanitizeTaskId(taskId);
     const branch = `forge/card-${cleanId}`;
 
     // Remove worktree directory

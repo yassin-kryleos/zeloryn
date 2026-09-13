@@ -58,3 +58,101 @@ export function streamSseLines(
 
   res.on('end', () => onEnd(buffer));
 }
+
+import * as https from 'https';
+
+export interface OpenAiStreamOptions {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  errorPrefix: string;
+  endpointPath?: string;
+  extraBody?: Record<string, any>;
+  extraHeaders?: Record<string, string>;
+  onContentChunk?: (chunk: string) => void;
+  onReasoningChunk?: (chunk: string) => void;
+  onComplete?: (fullContent: string, fullReasoning: string) => void;
+  onError?: (err: Error) => void;
+}
+
+export function streamOpenAiCompatibleChat(opts: OpenAiStreamOptions): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (!opts.apiKey) {
+      const err = new Error(`${opts.errorPrefix} Key is missing. Configure it in settings.`);
+      opts.onError?.(err);
+      reject(err);
+      return;
+    }
+
+    const postData = JSON.stringify({
+      model: opts.model,
+      messages: opts.messages,
+      stream: true,
+      ...opts.extraBody
+    });
+
+    const endpoint = opts.endpointPath || '/v1/chat/completions';
+    const url = new URL(`${opts.baseUrl}${endpoint}`);
+    const requestOptions = {
+      hostname: url.hostname,
+      port: url.port || undefined,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${opts.apiKey}`,
+        'Content-Length': Buffer.byteLength(postData),
+        ...opts.extraHeaders
+      }
+    };
+
+    let fullContent = '';
+    let fullReasoning = '';
+
+    const handleDelta = (jsonStr: string) => {
+      try {
+        const data = JSON.parse(jsonStr);
+        const delta = data.choices?.[0]?.delta;
+        if (delta?.reasoning_content) {
+          fullReasoning += delta.reasoning_content;
+          opts.onReasoningChunk?.(delta.reasoning_content);
+        }
+        if (delta?.content) {
+          fullContent += delta.content;
+          opts.onContentChunk?.(delta.content);
+        }
+      } catch {}
+    };
+
+    const req = https.request(requestOptions, (res: IncomingMessage) => {
+      if (handleHttpStreamError(res, `${opts.errorPrefix} Error`, opts.onError, reject)) return;
+
+      streamSseLines(
+        res,
+        (cleanedLine) => {
+          if (cleanedLine === 'data: [DONE]') return;
+          if (cleanedLine.startsWith('data: ')) {
+            handleDelta(cleanedLine.slice(6));
+          }
+        },
+        (trailing) => {
+          if (trailing && trailing.startsWith('data: ')) {
+            handleDelta(trailing.slice(6));
+          }
+          opts.onComplete?.(fullContent, fullReasoning);
+          resolve();
+        }
+      );
+    });
+
+    req.on('error', (err) => {
+      opts.onError?.(err);
+      reject(err);
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+

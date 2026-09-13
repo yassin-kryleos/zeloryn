@@ -3,16 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 
-// Mock mammoth and html-to-docx before importing WorkspaceSandbox
-vi.mock('mammoth', () => ({
-  default: {
-    convertToMarkdown: vi.fn().mockResolvedValue({ value: '' })
-  }
-}));
-vi.mock('html-to-docx', () => ({
-  default: vi.fn().mockResolvedValue(Buffer.from(''))
-}));
-
 import { WorkspaceSandbox } from './tools';
 
 const TEST_WORKSPACE = path.resolve(__dirname, '../../test_workspace_adv');

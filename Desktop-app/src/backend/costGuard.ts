@@ -81,23 +81,11 @@ export class CostGuard {
   }
 
   private getHistoryFilePath(): string {
-    const dir = path.join(this.workspaceRoot, '.kryleos');
-    if (!fs.existsSync(dir)) {
-      try {
-        fs.mkdirSync(dir, { recursive: true });
-      } catch {}
-    }
-    return path.join(dir, 'cost_history.json');
+    return path.join(this.workspaceRoot, '.kryleos', 'cost_history.json');
   }
 
   private getSpendCapFilePath(): string {
-    const dir = path.join(this.workspaceRoot, '.kryleos');
-    if (!fs.existsSync(dir)) {
-      try {
-        fs.mkdirSync(dir, { recursive: true });
-      } catch {}
-    }
-    return path.join(dir, 'spend_cap.json');
+    return path.join(this.workspaceRoot, '.kryleos', 'spend_cap.json');
   }
 
   public async getSpendCap(): Promise<SpendCapConfig> {
@@ -121,6 +109,7 @@ export class CostGuard {
       enabled: cap.enabled !== undefined ? cap.enabled : (current.enabled ?? true)
     };
     const filePath = this.getSpendCapFilePath();
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
     await fs.promises.writeFile(filePath, JSON.stringify(updated, null, 2), 'utf-8');
     return updated;
   }
@@ -187,6 +176,7 @@ export class CostGuard {
     
     const filePath = this.getHistoryFilePath();
     try {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
       await fs.promises.writeFile(filePath, JSON.stringify(history, null, 2), 'utf-8');
     } catch (err) {
       console.error('Failed to save cost record:', err);

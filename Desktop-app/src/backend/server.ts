@@ -1,9 +1,7 @@
 import express from 'express';
 import * as http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
-import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
 import * as path from 'path';
 import * as fs from 'fs';
 import dotenv from 'dotenv';
@@ -221,15 +219,16 @@ app.use(helmet({
   crossOriginResourcePolicy: false,
 }));
 
-// SEC-M4: rate limiter for sensitive auth/billing routes to blunt brute force.
-// Webhooks, telemetry, and companion WS are intentionally NOT limited here.
-const sensitiveLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30,                  // per IP per window
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests. Please try again later.' },
-});
+// SEC-M4: rate limiter for sensitive auth/pairing routes to blunt brute force.
+// Uses native internal SlidingWindowLimiter.
+const _sensitiveLimiter = new SlidingWindowLimiter(30, 15 * 60 * 1000);
+const sensitiveLimiter = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  if (!_sensitiveLimiter.consume(ip)) {
+    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+  }
+  next();
+};
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -437,6 +436,11 @@ export async function logCommandInitiation(workspaceRoot: string, entry: { planI
   }
 }
 
+async function checkSpendCapBlocked(workspaceRoot: string): Promise<string | null> {
+  const capCheck = await new CostGuard(workspaceRoot).checkSpendCap();
+  return capCheck.allowed ? null : `Execution blocked by CostGuard spend enforcement: ${capCheck.reason}`;
+}
+
 // Phase 5.4: the FORGE-run launch body shared by the local `case 'query'`
 // handler and a remote companion's START_FORGE_RUN. `send` decouples it from
 // a specific WebSocket so a remote run can broadcast to all paired companions
@@ -457,11 +461,10 @@ async function startForgeRun(opts: {
   const { orchestrator, queryText, originalText, sessionId, space, planItemId, zeroEgressMode, modelProxy, send, deviceId, source } = opts;
 
   // 7e: Spend cap enforcement check
-  const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
-  const capCheck = await costGuard.checkSpendCap();
-  if (!capCheck.allowed) {
-    send({ type: 'error', message: `Execution blocked by CostGuard spend enforcement: ${capCheck.reason}` });
-    orchestrator.addLog('SYSTEM', 'user', `[SPEND CAP BLOCKED] ${capCheck.reason}`, 'error');
+  const spendBlocked = await checkSpendCapBlocked(sandbox.getWorkspaceRoot());
+  if (spendBlocked) {
+    send({ type: 'error', message: spendBlocked });
+    orchestrator.addLog('SYSTEM', 'user', `[SPEND CAP BLOCKED] ${spendBlocked}`, 'error');
     return;
   }
 
@@ -2004,13 +2007,9 @@ ${getResponseModeInstructions(responseMode)}`;
                 } catch { /* snapshot is optional; proceed anyway */ }
 
                 // 7e: Spend cap check for Tier 1 runners
-                const runnerCostGuard = new CostGuard(sandbox.getWorkspaceRoot());
-                const capCheck = await runnerCostGuard.checkSpendCap();
-                if (!capCheck.allowed) {
-                  ws.send(JSON.stringify({
-                    type: 'error',
-                    message: `Execution blocked by CostGuard spend enforcement: ${capCheck.reason}`
-                  }));
+                const spendBlocked = await checkSpendCapBlocked(sandbox.getWorkspaceRoot());
+                if (spendBlocked) {
+                  ws.send(JSON.stringify({ type: 'error', message: spendBlocked }));
                   return;
                 }
 

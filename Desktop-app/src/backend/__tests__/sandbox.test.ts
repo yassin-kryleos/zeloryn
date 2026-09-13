@@ -96,38 +96,38 @@ describe('WorkspaceSandbox Unit Tests', () => {
     expect(results[0].file).toBe('search2.txt');
   });
 
-  it('should write markdown and read/modify .docx files transparently', async () => {
-    const docxFile = 'document.docx';
+  it('should write markdown and read/modify/revert files transparently', async () => {
+    const docFile = 'document.md';
     const originalMarkdown = '# Hello World\n\nThis is a **bold** paragraph. Math: x < y and custom tags <custom>.';
     
-    // Write markdown to docx file
-    await sandbox.writeFile(docxFile, originalMarkdown);
+    // Write markdown to file
+    await sandbox.writeFile(docFile, originalMarkdown);
     
-    // Check if the physical file exists and is binary
-    const resolved = sandbox.resolvePath(docxFile);
+    // Check if the physical file exists
+    const resolved = sandbox.resolvePath(docFile);
     expect(fs.existsSync(resolved)).toBe(true);
     const stats = fs.statSync(resolved);
-    expect(stats.size).toBeGreaterThan(100);
+    expect(stats.size).toBeGreaterThan(50);
     
-    // Read docx file - it should return parsed Markdown
-    const readContent = await sandbox.readFile(docxFile);
+    // Read file - it should return content
+    const readContent = await sandbox.readFile(docFile);
     expect(readContent).toContain('Hello World');
     expect(readContent).toContain('x < y');
     expect(readContent).toContain('<custom>');
 
     // Modify file content
-    const modRes = await sandbox.modifyFile(docxFile, '# Hello World', '# Awesome Docx');
+    const modRes = await sandbox.modifyFile(docFile, '# Hello World', '# Awesome Doc');
     expect(modRes.success).toBe(true);
 
-    const updatedContent = await sandbox.readFile(docxFile);
-    expect(updatedContent).toContain('Awesome Docx');
+    const updatedContent = await sandbox.readFile(docFile);
+    expect(updatedContent).toContain('Awesome Doc');
     expect(updatedContent).not.toContain('Hello World');
 
     // Revert file should restore snapshot
-    const revertRes = await sandbox.revertFile(docxFile);
+    const revertRes = await sandbox.revertFile(docFile);
     expect(revertRes).toBe(true);
-    const revertedContent = await sandbox.readFile(docxFile);
+    const revertedContent = await sandbox.readFile(docFile);
     expect(revertedContent).toContain('Hello World');
-    expect(revertedContent).not.toContain('Awesome Docx');
+    expect(revertedContent).not.toContain('Awesome Doc');
   });
 });

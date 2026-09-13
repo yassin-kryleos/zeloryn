@@ -17,9 +17,9 @@ test.describe('Desktop renderer — smoke', () => {
     await page.waitForLoadState('networkidle');
   });
 
-  test('page title contains Kryleos', async ({ page }) => {
+  test('page title contains app brand (Zeloryn)', async ({ page }) => {
     const title = await page.title();
-    expect(title.toLowerCase()).toContain('kryleos');
+    expect(title.toLowerCase()).toMatch(/zeloryn|kryleos/);
   });
 
   test('app container renders without a crash banner', async ({ page }) => {
