@@ -82,26 +82,26 @@ Choose the one-line install command for your operating system:
 
 ### macOS & Linux (Terminal Installer)
 ```bash
-curl -fsSL https://raw.githubusercontent.com/thetimelord69/Kryleos-forge/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yassin-kryleos/zeloryn/main/install.sh | bash
 ```
 
 ### macOS via Homebrew
 ```bash
-brew tap thetimelord69/forge https://github.com/thetimelord69/homebrew-forge
-brew install --cask kryleos-forge
+brew tap yassin-kryleos/zeloryn https://github.com/yassin-kryleos/homebrew-zeloryn
+brew install --cask zeloryn
 ```
 
 ### Windows via Winget
 ```powershell
-winget install Kryleos.Forge
+winget install Zeloryn
 ```
 
 *Or via PowerShell one-liner:*
 ```powershell
-irm https://raw.githubusercontent.com/thetimelord69/Kryleos-forge/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/yassin-kryleos/zeloryn/main/install.ps1 | iex
 ```
 
-Direct binary downloads (`.dmg`, `.AppImage`, `.deb`, `.exe`, `.msi`) are always available on our [GitHub Releases](https://github.com/thetimelord69/Kryleos-forge/releases) page.
+Direct binary downloads (`.dmg`, `.AppImage`, `.deb`, `.exe`, `.msi`) are always available on our [GitHub Releases](https://github.com/yassin-kryleos/zeloryn/releases) page.
 
 ---
 
@@ -109,7 +109,7 @@ Direct binary downloads (`.dmg`, `.AppImage`, `.deb`, `.exe`, `.msi`) are always
 
 Zeloryn follows a **conservative, privacy-first default**:
 - **Zero Silent Phone-Home**: Forge will **never** silently connect to external servers or GitHub to check for updates on startup without explicit user consent.
-- **Manual Checking**: You can check for updates manually at any time via the in-app menu or by running `winget upgrade Kryleos.Forge` / re-running `install.sh`.
+- **Manual Checking**: You can check for updates manually at any time via the in-app menu or by running `winget upgrade Zeloryn` / re-running `install.sh`.
 - **Opt-In Background Check**: If you want Forge to check GitHub Releases for updates when launched, set `KRYLEOS_CHECK_UPDATES=1` in your environment or `.env` file. Even when enabled, Forge never automatically downloads or executes binaries without confirmation.
 
 ---
@@ -131,8 +131,8 @@ If you want to contribute or build Forge from source:
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/thetimelord69/Kryleos-forge.git
-cd Kryleos-forge
+git clone https://github.com/yassin-kryleos/zeloryn.git
+cd zeloryn
 
 # Copy environment configuration
 cp .env.example .env

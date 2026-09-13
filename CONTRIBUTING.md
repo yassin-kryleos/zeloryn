@@ -47,8 +47,8 @@ When contributing to Zeloryn, please keep our design principles in mind:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/thetimelord69/Kryleos-forge.git
-   cd Kryleos-forge
+   git clone https://github.com/yassin-kryleos/zeloryn.git
+   cd zeloryn
    ```
 
 2. **Configure Environment**:

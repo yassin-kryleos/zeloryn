@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 #
-# Kryleos Forge — Universal Terminal Installer (Linux & macOS)
-# Usage: curl -fsSL https://raw.githubusercontent.com/thetimelord69/Kryleos-forge/main/install.sh | bash
+# Zeloryn — Universal Terminal Installer (Linux & macOS)
+# Usage: curl -fsSL https://raw.githubusercontent.com/yassin-kryleos/zeloryn/main/install.sh | bash
 #
 
 set -e
 
 # Repository configuration
-REPO_OWNER="thetimelord69"
-REPO_NAME="Kryleos-forge"
+REPO_OWNER="yassin-kryleos"
+REPO_NAME="zeloryn"
 GITHUB_REPO="${REPO_OWNER}/${REPO_NAME}"
-BINARY_NAME="kryleos-forge"
-APP_NAME="Kryleos Forge"
+BINARY_NAME="zeloryn"
+APP_NAME="Zeloryn"
 
 # Formatting helpers
 BOLD="\033[1m"
@@ -56,7 +56,7 @@ case "$OS" in
   Linux*)  PLATFORM="linux" ;;
   Darwin*) PLATFORM="mac" ;;
   *)
-    log_error "Unsupported operating system: $OS. Kryleos Forge supports Linux and macOS via this script (use winget on Windows)."
+    log_error "Unsupported operating system: $OS. Zeloryn supports Linux and macOS via this script (use winget on Windows)."
     exit 1
     ;;
 esac
@@ -111,13 +111,13 @@ cleanup() {
 trap cleanup EXIT
 
 if [ "$PLATFORM" = "linux" ]; then
-  ASSET_NAME="Kryleos-Forge-${CLEAN_VERSION}-linux-${ARCH}.AppImage"
-  FALLBACK_ASSET="Kryleos-Forge-${CLEAN_VERSION}-${ARCH}.AppImage"
+  ASSET_NAME="Zeloryn-${CLEAN_VERSION}-linux-${ARCH}.AppImage"
+  FALLBACK_ASSET="Zeloryn-${CLEAN_VERSION}-${ARCH}.AppImage"
   DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/${ASSET_NAME}"
-  
-  APP_DIR="${FORGE_APP_DIR:-$HOME/.local/share/kryleos-forge}"
+
+  APP_DIR="${FORGE_APP_DIR:-$HOME/.local/share/zeloryn}"
   mkdir -p "$APP_DIR"
-  TARGET_APPIMAGE="${APP_DIR}/Kryleos-Forge.AppImage"
+  TARGET_APPIMAGE="${APP_DIR}/Zeloryn.AppImage"
 
   log_info "Downloading ${ASSET_NAME}..."
   if ! curl -fSL --progress-bar "$DOWNLOAD_URL" -o "${TMP_DIR}/${ASSET_NAME}"; then
@@ -143,23 +143,23 @@ EOF
   # Desktop launcher entry
   DESKTOP_DIR="$HOME/.local/share/applications"
   if [ -d "$DESKTOP_DIR" ] || mkdir -p "$DESKTOP_DIR" 2>/dev/null; then
-    DESKTOP_FILE="${DESKTOP_DIR}/kryleos-forge.desktop"
+    DESKTOP_FILE="${DESKTOP_DIR}/zeloryn.desktop"
     cat << EOF > "$DESKTOP_FILE"
 [Desktop Entry]
-Name=Kryleos Forge
+Name=Zeloryn
 Comment=Free, Open-Source AI Software Engineering Cockpit
 Exec=${WRAPPER_SCRIPT} %U
 Terminal=false
 Type=Application
 Categories=Development;IDE;
-StartupWMClass=kryleos-forge
+StartupWMClass=zeloryn
 EOF
     chmod +x "$DESKTOP_FILE" 2>/dev/null || true
   fi
 
 elif [ "$PLATFORM" = "mac" ]; then
-  ASSET_NAME="Kryleos-Forge-${CLEAN_VERSION}-mac-${ARCH}.dmg"
-  FALLBACK_ASSET="Kryleos-Forge-${CLEAN_VERSION}.dmg"
+  ASSET_NAME="Zeloryn-${CLEAN_VERSION}-mac-${ARCH}.dmg"
+  FALLBACK_ASSET="Zeloryn-${CLEAN_VERSION}.dmg"
   DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/${ASSET_NAME}"
 
   log_info "Downloading ${ASSET_NAME}..."
@@ -210,7 +210,7 @@ case ":$PATH:" in
   *) PATH_CONFIGURED=false ;;
 esac
 
-log_success "Kryleos Forge (${VERSION}) installed successfully!"
+log_success "Zeloryn (${VERSION}) installed successfully!"
 
 if [ "$PATH_CONFIGURED" = false ]; then
   printf "\n${YELLOW}!${RESET} Notice: ${BOLD}%s${RESET} is not in your current PATH.\n" "$INSTALL_BIN_DIR"

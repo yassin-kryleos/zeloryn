@@ -1,14 +1,14 @@
-# Kryleos Forge — Windows PowerShell Installer
-# Usage: irm https://raw.githubusercontent.com/thetimelord69/Kryleos-forge/main/install.ps1 | iex
+# Zeloryn — Windows PowerShell Installer
+# Usage: irm https://raw.githubusercontent.com/yassin-kryleos/zeloryn/main/install.ps1 | iex
 
 $ErrorActionPreference = 'Stop'
 
-$RepoOwner = "thetimelord69"
-$RepoName  = "Kryleos-forge"
+$RepoOwner = "yassin-kryleos"
+$RepoName  = "zeloryn"
 $GithubRepo = "$RepoOwner/$RepoName"
 
 Write-Host ""
-Write-Host "==> Installing Kryleos Forge for Windows..." -ForegroundColor Cyan
+Write-Host "==> Installing Zeloryn for Windows..." -ForegroundColor Cyan
 
 try {
     Write-Host "==> Resolving latest release..." -ForegroundColor Gray
@@ -33,8 +33,8 @@ try {
     Write-Host "==> Launching installer..." -ForegroundColor Green
     Start-Process -FilePath $TempInstaller -Wait
 
-    Write-Host "==> Kryleos Forge installation complete!" -ForegroundColor Green
-    Write-Host "    Launch Kryleos Forge from your Start Menu or Desktop shortcut." -ForegroundColor Cyan
+    Write-Host "==> Zeloryn installation complete!" -ForegroundColor Green
+    Write-Host "    Launch Zeloryn from your Start Menu or Desktop shortcut." -ForegroundColor Cyan
 }
 catch {
     Write-Host "ERROR: Installation failed: $_" -ForegroundColor Red
