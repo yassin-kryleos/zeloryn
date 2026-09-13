@@ -80,4 +80,63 @@ describe('CostGuard Class', () => {
     expect(stats.savings).toBe(20);
     expect(stats.breakdownByModel['gpt-4o-mini'].cost).toBe(0.0005);
   });
+
+  it('enforces configurable spend cap and blocks agent runs when exceeded (7e)', async () => {
+    const costGuard = new CostGuard(testWorkspace);
+
+    // Initial state: no cap set
+    const capInit = await costGuard.getSpendCap();
+    expect(capInit.enabled).toBe(false);
+
+    // Set a project cap of $0.0010 and daily cap of $0.0008
+    await costGuard.setSpendCap({
+      enabled: true,
+      maxProjectSpend: 0.0010,
+      maxDailySpend: 0.0008
+    });
+
+    const capUpdated = await costGuard.getSpendCap();
+    expect(capUpdated.enabled).toBe(true);
+    expect(capUpdated.maxProjectSpend).toBe(0.0010);
+    expect(capUpdated.maxDailySpend).toBe(0.0008);
+
+    // When spend is 0, checkSpendCap allows execution
+    const check1 = await costGuard.checkSpendCap();
+    expect(check1.allowed).toBe(true);
+    expect(check1.projectSpend).toBe(0);
+
+    // Add record with $0.0005
+    await costGuard.addRecord({
+      model: 'gpt-4o-mini',
+      provider: 'OpenAI',
+      inputTokens: 100,
+      outputTokens: 200,
+      cost: 0.0005,
+      tokenSavings: 0
+    });
+
+    const check2 = await costGuard.checkSpendCap();
+    expect(check2.allowed).toBe(true);
+    expect(check2.projectSpend).toBe(0.0005);
+
+    // Add another record with $0.0006 (total now $0.0011 >= $0.0010 project cap and daily cap)
+    await costGuard.addRecord({
+      model: 'gpt-4o-mini',
+      provider: 'OpenAI',
+      inputTokens: 100,
+      outputTokens: 200,
+      cost: 0.0006,
+      tokenSavings: 0
+    });
+
+    const check3 = await costGuard.checkSpendCap();
+    expect(check3.allowed).toBe(false);
+    expect(check3.reason).toMatch(/spend cap reached/i);
+    expect(check3.projectSpend).toBeCloseTo(0.0011, 4);
+
+    // Disabling cap permits execution again
+    await costGuard.setSpendCap({ enabled: false });
+    const check4 = await costGuard.checkSpendCap();
+    expect(check4.allowed).toBe(true);
+  });
 });

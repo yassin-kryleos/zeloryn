@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { AgentOrchestrator, type AgentLog } from './agents';
-import type { ProjectTask, ExecutionTrace } from './db';
+import type { ProjectTask, ExecutionTrace, PostExecutionReview } from './db';
 import * as deviceRegistry from './deviceRegistry';
 import { getPublicKey, signPayload, verifyEd25519Signature } from './security';
 
@@ -409,6 +409,7 @@ export class CompanionHub {
     activeAgent?: string;
     tasks?: ProjectTask[];
     latestTrace?: ExecutionTrace;
+    postExecutionReview?: { planItemId: string; review: PostExecutionReview };
   }) {
     this.broadcastToCompanions({ type: 'session_update', ...payload });
   }

@@ -67,6 +67,12 @@ export function estimateCost(text: string, model: string, isOutput: boolean = fa
   return tokens * rate;
 }
 
+export interface SpendCapConfig {
+  enabled: boolean;
+  maxProjectSpend?: number;
+  maxDailySpend?: number;
+}
+
 export class CostGuard {
   private workspaceRoot: string;
 
@@ -82,6 +88,81 @@ export class CostGuard {
       } catch {}
     }
     return path.join(dir, 'cost_history.json');
+  }
+
+  private getSpendCapFilePath(): string {
+    const dir = path.join(this.workspaceRoot, '.kryleos');
+    if (!fs.existsSync(dir)) {
+      try {
+        fs.mkdirSync(dir, { recursive: true });
+      } catch {}
+    }
+    return path.join(dir, 'spend_cap.json');
+  }
+
+  public async getSpendCap(): Promise<SpendCapConfig> {
+    const filePath = this.getSpendCapFilePath();
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { enabled: false };
+      }
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      return JSON.parse(content);
+    } catch {
+      return { enabled: false };
+    }
+  }
+
+  public async setSpendCap(cap: Partial<SpendCapConfig>): Promise<SpendCapConfig> {
+    const current = await this.getSpendCap();
+    const updated: SpendCapConfig = {
+      ...current,
+      ...cap,
+      enabled: cap.enabled !== undefined ? cap.enabled : (current.enabled ?? true)
+    };
+    const filePath = this.getSpendCapFilePath();
+    await fs.promises.writeFile(filePath, JSON.stringify(updated, null, 2), 'utf-8');
+    return updated;
+  }
+
+  public async checkSpendCap(): Promise<{
+    allowed: boolean;
+    reason?: string;
+    projectSpend: number;
+    dailySpend: number;
+    cap: SpendCapConfig;
+  }> {
+    const cap = await this.getSpendCap();
+    const history = await this.getHistory();
+
+    const projectSpend = history.reduce((sum, r) => sum + (r.cost || 0), 0);
+    const today = new Date().toISOString().slice(0, 10);
+    const dailySpend = history
+      .filter(r => (r.timestamp || '').slice(0, 10) === today)
+      .reduce((sum, r) => sum + (r.cost || 0), 0);
+
+    if (cap.enabled) {
+      if (typeof cap.maxProjectSpend === 'number' && projectSpend >= cap.maxProjectSpend) {
+        return {
+          allowed: false,
+          reason: `Project spend cap reached: $${projectSpend.toFixed(4)} >= $${cap.maxProjectSpend.toFixed(4)}. Further agent runs blocked.`,
+          projectSpend,
+          dailySpend,
+          cap
+        };
+      }
+      if (typeof cap.maxDailySpend === 'number' && dailySpend >= cap.maxDailySpend) {
+        return {
+          allowed: false,
+          reason: `Daily spend cap reached: $${dailySpend.toFixed(4)} >= $${cap.maxDailySpend.toFixed(4)}. Further agent runs blocked today.`,
+          projectSpend,
+          dailySpend,
+          cap
+        };
+      }
+    }
+
+    return { allowed: true, projectSpend, dailySpend, cap };
   }
 
   public async getHistory(): Promise<CostRecord[]> {

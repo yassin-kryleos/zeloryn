@@ -115,6 +115,15 @@ export interface ProjectTask {
   githubIssueNumber?: number;
   githubRepo?: string;
   htmlUrl?: string;
+  postExecutionReview?: PostExecutionReview;
+}
+
+export interface PostExecutionReview {
+  status: 'passed' | 'failed' | 'pending';
+  verdict: string;
+  findings: string;
+  reviewedAt: string;
+  override?: boolean;
 }
 
 export interface PlanWorkspaceItem {
