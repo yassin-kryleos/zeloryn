@@ -20,7 +20,13 @@ function git(cwd: string, args: string[]): string {
 
 // Resolve Git for Windows once at module load
 const gitPath: string = (() => {
-  if (process.platform !== 'win32') return 'git';
+  if (process.platform !== 'win32') {
+    const unixCandidates = ['/usr/bin/git', '/usr/local/bin/git', '/bin/git'];
+    for (const p of unixCandidates) {
+      try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
+    }
+    return 'git';
+  }
   const candidates = [
     'C:\\Program Files\\Git\\mingw64\\bin\\git.exe',
     'C:\\Program Files\\Git\\cmd\\git.exe',
@@ -41,8 +47,10 @@ const gitEnv: NodeJS.ProcessEnv = (() => {
   };
 })();
 
+import * as os from 'os';
+
 function tmpDir(): string {
-  return path.join(__dirname, '.tmp-test-' + Math.random().toString(36).slice(2, 8));
+  return path.join(os.tmpdir(), '.tmp-test-' + Math.random().toString(36).slice(2, 8));
 }
 
 function write(p: string, content: string): void {
@@ -56,6 +64,7 @@ describe('ccDeviationService', () => {
 
   beforeEach(() => {
     workspace = tmpDir();
+    fs.mkdirSync(workspace, { recursive: true });
     storeFile = path.join(workspace, '.kryleos', 'cc-deviations.json');
 
     git(workspace, ['init']);

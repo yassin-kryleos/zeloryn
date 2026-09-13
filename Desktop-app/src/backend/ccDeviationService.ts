@@ -53,13 +53,32 @@ function normalizePath(p: string): string {
   return path.resolve(p).replace(/\\/g, '/');
 }
 
+const gitBin: string = (() => {
+  if (process.platform !== 'win32') {
+    const unixCandidates = ['/usr/bin/git', '/usr/local/bin/git', '/bin/git'];
+    for (const p of unixCandidates) {
+      try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
+    }
+    return 'git';
+  }
+  const candidates = [
+    'C:\\Program Files\\Git\\mingw64\\bin\\git.exe',
+    'C:\\Program Files\\Git\\cmd\\git.exe',
+    'C:\\Program Files\\Git\\bin\\git.exe',
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch { /* ignore */ }
+  }
+  return 'git';
+})();
+
 function execGit(
   cwd: string,
   args: string[],
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
     execFile(
-      'git',
+      gitBin,
       args,
       { cwd, maxBuffer: MAX_BUFFER },
       (err, stdout, stderr) => {
@@ -106,7 +125,7 @@ function parseUnifiedDiff(
     const fullContent = chunk.startsWith('diff --git ') ? chunk : `diff --git ${chunk}`;
     const headerLines = fullContent.split('\n');
     const fromToLine = headerLines[0];
-    const parts = fromToLine.match(/diff --git a\/(.*) b\/(.*)/);
+    const parts = fromToLine.match(/diff --git \S+\/(.*) \S+\/(.*)/);
     if (!parts) continue;
     const file = parts[2].trim();
     let action: 'modified' | 'created' | 'deleted' = 'modified';
@@ -148,13 +167,13 @@ function detectDeviationRisks(file: string, diff: string, ccStdout: string): str
 function extractMentionedFiles(stdout: string): string[] {
   const files: string[] = [];
   const patterns = [
-    /(?:modified|created|updated|wrote|changed)\s+(?:file\s+)?[`"']([a-zA-Z0-9_\-\/.\\]+(?:\.[a-zA-Z0-9]+)?)[`"']/gi,
-    /(?:changes\s+(?:to|in)|touched|edited)\s+[`"']([a-zA-Z0-9_\-\/.\\]+(?:\.[a-zA-Z0-9]+)?)[`"']/gi,
+    /(?:modified|created|updated|wrote|changed)\s+(?:file\s+)?([`"']?)([a-zA-Z0-9_\-\/.\\]+(?:\.[a-zA-Z0-9]+)?)\1/gi,
+    /(?:changes\s+(?:to|in)|touched|edited)\s+([`"']?)([a-zA-Z0-9_\-\/.\\]+(?:\.[a-zA-Z0-9]+)?)\1/gi,
   ];
   for (const pattern of patterns) {
     let match: RegExpExecArray | null;
     while ((match = pattern.exec(stdout)) !== null) {
-      const f = match[1].trim();
+      const f = match[2].trim().replace(/^[,\s]+|[,\s]+$/g, '');
       if (f && f.length < 200 && !f.startsWith('--')) {
         files.push(normalizePath(f));
       }
@@ -166,6 +185,7 @@ function extractMentionedFiles(stdout: string): string[] {
 export function initDeviationStore(filePath: string): void {
   storePath = filePath;
   store = loadStore();
+  saveStore(store);
 }
 
 export async function takeSnapshot(opts: {
@@ -173,16 +193,26 @@ export async function takeSnapshot(opts: {
   planItemId?: string;
   queryText: string;
 }): Promise<DeviationSnapshot> {
-  const headResult = await execGit(opts.workspaceRoot, ['rev-parse', 'HEAD']);
+  const isRepo = await execGit(opts.workspaceRoot, ['rev-parse', '--is-inside-work-tree']);
+  const isGit = isRepo.stdout.trim() === 'true';
+  const headResult = isGit ? await execGit(opts.workspaceRoot, ['rev-parse', 'HEAD']) : { stdout: '' };
   const headSha = headResult.stdout.trim() || 'unknown';
 
-  const dirtyResult = await execGit(opts.workspaceRoot, ['diff', '--name-only']);
-  const dirtyStagedResult = await execGit(opts.workspaceRoot, ['diff', '--cached', '--name-only']);
+  const dirtyResult = isGit ? await execGit(opts.workspaceRoot, ['diff', '--name-only']) : { stdout: '' };
+  const dirtyStagedResult = isGit ? await execGit(opts.workspaceRoot, ['diff', '--cached', '--name-only']) : { stdout: '' };
+  const statusResult = isGit ? await execGit(opts.workspaceRoot, ['status', '--porcelain']) : { stdout: '' };
+  const untracked = statusResult.stdout
+    .split(/\r?\n/)
+    .filter((l) => l.startsWith('??'))
+    .map((l) => l.slice(3).trim());
   const allDirty = [
     ...dirtyResult.stdout.split(/\r?\n/).filter(Boolean),
     ...dirtyStagedResult.stdout.split(/\r?\n/).filter(Boolean),
+    ...untracked.filter(Boolean),
   ];
-  const uniqueDirty = [...new Set(allDirty)].map((f) => normalizePath(f));
+  const uniqueDirty = [...new Set(allDirty)]
+    .map((f) => normalizePath(f))
+    .filter((f) => !f.includes('/.kryleos/') && !f.endsWith('/.kryleos'));
 
   const snapshot: DeviationSnapshot = {
     id: generateId(),
@@ -207,6 +237,9 @@ export async function computeDeviations(
   const s = loadStore();
   const snapshot = s.snapshots[snapshotId];
   if (!snapshot) throw new Error(`Snapshot ${snapshotId} not found`);
+  if (snapshot.headSha === 'unknown') {
+    throw new Error('Cannot compute deviations on non-git workspace');
+  }
 
   const beforeDirty = new Set(snapshot.dirtyFiles.map((f) => normalizePath(f)));
 
@@ -218,6 +251,7 @@ export async function computeDeviations(
 
   for (const { file, diff, action } of fileDiffs) {
     const normalizedFile = normalizePath(file);
+    if (normalizedFile.includes('/.kryleos/') || normalizedFile.endsWith('/.kryleos')) continue;
     if (beforeDirty.has(normalizedFile)) continue;
 
     const riskNotes = detectDeviationRisks(file, diff, ccStdout);
@@ -235,11 +269,43 @@ export async function computeDeviations(
     });
   }
 
+  // Also check untracked created files
+  const statusResult = await execGit(snapshot.workspaceRoot, ['status', '--porcelain']);
+  const untrackedLines = statusResult.stdout
+    .split(/\r?\n/)
+    .filter((l) => l.startsWith('??'))
+    .map((l) => l.slice(3).trim())
+    .filter(Boolean);
+
+  for (const rawFile of untrackedLines) {
+    const normalizedFile = normalizePath(rawFile);
+    if (normalizedFile.includes('/.kryleos/') || normalizedFile.endsWith('/.kryleos')) continue;
+    if (beforeDirty.has(normalizedFile)) continue;
+    if (records.some((r) => r.file === normalizedFile)) continue;
+    let diff = '';
+    try {
+      diff = fs.readFileSync(path.resolve(snapshot.workspaceRoot, rawFile), 'utf-8');
+    } catch { /* ignore */ }
+    records.push({
+      id: generateId(),
+      snapshotId,
+      file: normalizedFile,
+      action: 'created',
+      diff,
+      planItemId: snapshot.planItemId,
+      status: 'pending',
+      riskNotes: detectDeviationRisks(rawFile, diff, ccStdout),
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
   const mentionedFiles = extractMentionedFiles(ccStdout);
   const changedFilesSet = new Set(records.map((r) => normalizePath(r.file)));
 
   for (const mentioned of mentionedFiles) {
     const normalizedMentioned = normalizePath(mentioned);
+    if (normalizedMentioned.includes('/.kryleos/') || normalizedMentioned.endsWith('/.kryleos')) continue;
     if (!changedFilesSet.has(normalizedMentioned)) {
       records.push({
         id: generateId(),
@@ -249,7 +315,7 @@ export async function computeDeviations(
         diff: '',
         planItemId: snapshot.planItemId,
         status: 'pending',
-        riskNotes: ['CC claimed changes but no git diff detected'],
+        riskNotes: ['no git diff detected', 'CC claimed changes but no git diff detected'],
         createdAt: now,
         updatedAt: now,
       });

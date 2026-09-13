@@ -14,7 +14,7 @@ import { classifyCommand, type CommandClassification } from './tools';
 export interface TerminalSession {
   id: string;
   pty: IPty;
-  ws: WebSocket;
+  ws: WebSocket | null;
   createdAt: number;
   lastActivity: number;
   cwd: string;
@@ -22,6 +22,15 @@ export interface TerminalSession {
   inputBuffer: string;
   /** True while awaiting user approval for a destructive command. */
   pendingApproval: boolean;
+}
+
+export interface CreateAgentSessionOptions {
+  command: string;
+  args: string[];
+  cwd?: string;
+  ws?: WebSocket | null;
+  onData?: (data: string) => void;
+  onExit?: (exitCode: number) => void;
 }
 
 export interface TerminalManagerOptions {
@@ -137,6 +146,83 @@ export class TerminalManager {
     return session;
   }
 
+  /** Spawn an agent process inside a PTY session with live streaming and command approvals. */
+  createAgentSession(opts: CreateAgentSessionOptions): TerminalSession {
+    const sessionId = crypto.randomUUID();
+    const resolvedCwd = opts.cwd || this.options.workspaceRoot;
+
+    if (!this.isPathInsideWorkspace(resolvedCwd)) {
+      throw new Error(`Path "${resolvedCwd}" is outside the workspace root.`);
+    }
+
+    const shellEnv: { [key: string]: string } = {
+      ...process.env,
+      TERM: 'xterm-256color',
+      ...(os.platform() !== 'win32' ? { PWD: resolvedCwd } : {}),
+    };
+
+    const pty = spawn(opts.command, opts.args, {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd: resolvedCwd,
+      env: shellEnv,
+    });
+
+    const session: TerminalSession = {
+      id: sessionId,
+      pty,
+      ws: opts.ws || null,
+      createdAt: Date.now(),
+      lastActivity: Date.now(),
+      cwd: resolvedCwd,
+      inputBuffer: '',
+      pendingApproval: false,
+    };
+
+    this.sessions.set(sessionId, session);
+
+    pty.onData((data: string) => {
+      session.lastActivity = Date.now();
+      if (opts.onData) {
+        opts.onData(data);
+      }
+      if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+        try {
+          session.ws.send(JSON.stringify({ type: 'terminal_data', sessionId, data }));
+        } catch { /* ws closed */ }
+      }
+      try {
+        this.options.onTerminalOutput(sessionId, data);
+      } catch { /* companion output */ }
+    });
+
+    pty.onExit(({ exitCode }) => {
+      if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+        try {
+          session.ws.send(JSON.stringify({ type: 'terminal_exit', sessionId, exitCode }));
+        } catch { /* ignore */ }
+      }
+      this.sessions.delete(sessionId);
+      if (opts.onExit) {
+        opts.onExit(exitCode);
+      }
+    });
+
+    if (session.ws && session.ws.readyState === WebSocket.OPEN) {
+      try {
+        session.ws.send(JSON.stringify({
+          type: 'terminal_created',
+          sessionId,
+          cols: pty.cols,
+          rows: pty.rows,
+        }));
+      } catch { /* ignore */ }
+    }
+
+    return session;
+  }
+
   /** Write input to a terminal session.
    *  Applies command classification at \r boundaries: blocked commands are
    *  rejected with a bell, destructive commands are gated through the
@@ -187,7 +273,7 @@ export class TerminalManager {
     if (classification.blocked) {
       session.pty.write('\x07');
       try {
-        if (session.ws.readyState === WebSocket.OPEN) {
+        if (session.ws && session.ws.readyState === WebSocket.OPEN) {
           session.ws.send(JSON.stringify({
             type: 'terminal_command_blocked',
             sessionId,
@@ -220,7 +306,7 @@ export class TerminalManager {
           } else {
             session.pty.write('\x07');
             try {
-              if (session.ws.readyState === WebSocket.OPEN) {
+              if (session.ws && session.ws.readyState === WebSocket.OPEN) {
                 session.ws.send(JSON.stringify({
                   type: 'terminal_command_rejected',
                   sessionId,
