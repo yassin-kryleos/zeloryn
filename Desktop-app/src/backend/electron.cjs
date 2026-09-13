@@ -227,9 +227,10 @@ function stopBackend() {
 }
 
 // Unsigned builds cannot auto-apply updates (Squirrel.Mac requires a signed
-// app; the Windows Authenticode verifier rejects an unsigned package). Until
-// code-signing certs are purchased, only check-and-notify: point the user at
-// the GitHub release so they can download and reinstall manually.
+// Update check policy (Phase 3 open-source strategy):
+// Conservative, privacy-first default — NO silent phone-home on startup.
+// Automatic checks occur only if explicitly opted in via KRYLEOS_CHECK_UPDATES=1.
+// Manual checks are always available via IPC ('check-for-updates') or releases page.
 function setupAutoUpdater() {
   if (!app.isPackaged) return;
 
@@ -237,11 +238,12 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on('update-available', (info) => {
+    if (!mainWindow) return;
     dialog.showMessageBox(mainWindow, {
       type: 'info',
       title: 'Update available',
       message: `Kryleos Forge ${info.version} is available (you have ${app.getVersion()}).`,
-      detail: 'This beta build is unsigned, so updates are not applied automatically. Open the GitHub release to download and reinstall.',
+      detail: 'Open the GitHub release page to download and install the latest version.',
       buttons: ['Open Releases Page', 'Later']
     }).then((result) => {
       if (result.response === 0) {
@@ -250,12 +252,31 @@ function setupAutoUpdater() {
     });
   });
 
+  autoUpdater.on('update-not-available', (info) => {
+    console.log(`[updater] Version ${app.getVersion()} is up to date.`);
+  });
+
   autoUpdater.on('error', (err) => {
     console.error('[updater] error:', err);
   });
 
-  autoUpdater.checkForUpdates().catch((err) => {
-    console.error('[updater] check failed:', err);
+  // Explicit opt-in: only check on boot if user requested it via env
+  if (process.env.KRYLEOS_CHECK_UPDATES === '1') {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('[updater] check failed:', err);
+    });
+  } else {
+    console.log('[updater] automatic update check disabled by default (no phone-home). Set KRYLEOS_CHECK_UPDATES=1 to enable.');
+  }
+
+  // Allow manual check from UI via IPC
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      const res = await autoUpdater.checkForUpdates();
+      return { success: true, version: res?.updateInfo?.version || app.getVersion() };
+    } catch (err) {
+      return { success: false, error: err?.message || 'Update check failed' };
+    }
   });
 }
 

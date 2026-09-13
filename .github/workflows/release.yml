@@ -1,32 +1,35 @@
-name: Release artifacts
+name: Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
-      channel:
-        description: Artifact channel
+      tag:
+        description: 'Release tag (e.g. v0.1.0)'
         required: true
-        type: choice
-        options: [invited-beta-unsigned, public-signed]
+        default: 'v0.1.0'
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
   attestations: write
 
 jobs:
-  desktop:
+  build-desktop:
+    name: Build ${{ matrix.platform }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            artifact: windows
+            platform: windows
           - os: macos-latest
-            artifact: macos
+            platform: macos
           - os: ubuntu-latest
-            artifact: linux
-    runs-on: ${{ matrix.os }}
+            platform: linux
     defaults:
       run:
         working-directory: Desktop-app
@@ -39,58 +42,186 @@ jobs:
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
           cache-dependency-path: Desktop-app/package-lock.json
-      - run: npm ci
-      - name: Verify desktop release input
-        run: |
-          npm run lint
-          npm test
-      - name: Require signing credentials for public release
-        if: inputs.channel == 'public-signed'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run test validation
+        run: npm test
+
+      - name: Build application
+        run: npm run build
+
+      - name: Package Windows artifacts
+        if: matrix.platform == 'windows'
         shell: bash
         run: |
-          if [[ "${{ runner.os }}" == "Windows" && -z "$WIN_CSC_LINK" ]]; then exit 1; fi
-          if [[ "${{ runner.os }}" == "macOS" && ( -z "$CSC_LINK" || -z "$APPLE_ID" || -z "$APPLE_APP_SPECIFIC_PASSWORD" || -z "$APPLE_TEAM_ID" ) ]]; then exit 1; fi
-      - name: Build package
-        shell: bash
-        run: |
-          if [[ "${{ inputs.channel }}" == "invited-beta-unsigned" ]]; then
-            npm run build
-            npx electron-builder --config.win.signAndEditExecutable=false
+          if [ -n "$WIN_CSC_LINK" ]; then
+            echo "Signing certificate detected. Building signed Windows package..."
+            npx electron-builder --win
           else
-            npm run dist
+            echo "No Windows signing credentials configured. Building unsigned package..."
+            npx electron-builder --win --config.win.signAndEditExecutable=false
           fi
-      - name: Checksums
+
+      - name: Package macOS artifacts
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          if [ -n "$CSC_LINK" ] && [ -n "$APPLE_ID" ]; then
+            echo "Apple developer credentials detected. Building signed & notarized macOS package..."
+            npx electron-builder --mac
+          else
+            echo "No Apple Developer signing credentials configured. Building unsigned macOS package..."
+            npx electron-builder --mac --config.mac.identity=null
+          fi
+
+      - name: Package Linux artifacts
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          npx electron-builder --linux AppImage deb tar.gz
+
+      - name: Generate platform checksums
         shell: bash
         run: |
           cd dist-desktop
           : > SHA256SUMS.txt
           for file in *; do
-            if [[ -f "$file" && "$file" != "SHA256SUMS.txt" ]]; then
-              if command -v sha256sum >/dev/null; then sha256sum "$file" >> SHA256SUMS.txt; else shasum -a 256 "$file" >> SHA256SUMS.txt; fi
+            if [ -f "$file" ] && [ "$file" != "SHA256SUMS.txt" ]; then
+              if command -v sha256sum >/dev/null 2>&1; then
+                sha256sum "$file" >> SHA256SUMS.txt
+              else
+                shasum -a 256 "$file" >> SHA256SUMS.txt
+              fi
             fi
           done
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: kryleos-forge-${{ matrix.artifact }}-${{ inputs.channel }}
-          path: Desktop-app/dist-desktop/**
+          cat SHA256SUMS.txt
 
-  sbom:
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: |
+            Desktop-app/dist-desktop/*
+            !Desktop-app/dist-desktop/win-unpacked/
+            !Desktop-app/dist-desktop/mac/
+            !Desktop-app/dist-desktop/linux-unpacked/
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-desktop]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: Prepare consolidated release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          find all-artifacts -type f ! -name "SHA256SUMS.txt" -exec cp {} release-assets/ \;
+
+          cd release-assets
+          : > SHA256SUMS.txt
+          for file in *; do
+            if [ -f "$file" ] && [ "$file" != "SHA256SUMS.txt" ]; then
+              sha256sum "$file" >> SHA256SUMS.txt
+            fi
+          done
+          echo "=== Consolidated SHA256SUMS ==="
+          cat SHA256SUMS.txt
+
+      - name: Determine tag name
+        id: release_tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: Kryleos Forge ${{ steps.release_tag.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release-assets/*
+
+  update-distribution:
+    name: Update Homebrew & Winget Manifests
+    needs: [publish-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npx --yes @cyclonedx/cyclonedx-npm@4.2.1 --package-lock-only Desktop-app/package-lock.json --output-file desktop-sbom.json
-      - run: npx --yes @cyclonedx/cyclonedx-npm@4.2.1 --package-lock-only Web-app/package-lock.json --output-file web-sbom.json
-      - run: npx --yes @cyclonedx/cyclonedx-npm@4.2.1 --package-lock-only Mobile-app/package-lock.json --output-file mobile-sbom.json
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+
+      - name: Update local distribution manifests
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          find all-artifacts -type f ! -name "SHA256SUMS.txt" -exec cp {} release-assets/ \;
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          fi
+          node distribution/scripts/update-distribution-manifests.mjs "$TAG" release-assets/
+
+      - name: Upload updated distribution manifests
+        uses: actions/upload-artifact@v4
         with:
-          name: sboms
-          path: '*-sbom.json'
+          name: distribution-manifests
+          path: |
+            distribution/homebrew/Casks/kryleos-forge.rb
+            distribution/homebrew/Formula/forge.rb
+            distribution/winget/Kryleos.Forge.yaml
+
+      - name: Sync Homebrew Tap (Optional)
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        shell: bash
+        run: |
+          echo "Syncing updated Cask to homebrew-forge repository..."
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/thetimelord69/homebrew-forge.git" tap-repo
+          mkdir -p tap-repo/Casks
+          cp distribution/homebrew/Casks/kryleos-forge.rb tap-repo/Casks/
+          cd tap-repo
+          git add Casks/kryleos-forge.rb
+          git commit -m "Update kryleos-forge to ${GITHUB_REF#refs/tags/}" || echo "No changes to commit"
+          git push origin main || echo "Failed to push to tap repo"

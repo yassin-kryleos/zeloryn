@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.singleton.1.6.0.schema.json
+PackageIdentifier: Kryleos.Forge
+PackageVersion: 0.1.0
+PackageName: Kryleos Forge
+Publisher: Kryleos
+PublisherUrl: https://github.com/thetimelord69/Kryleos-forge
+PublisherSupportUrl: https://github.com/thetimelord69/Kryleos-forge/issues
+Author: Kryleos Contributors
+PackageUrl: https://github.com/thetimelord69/Kryleos-forge
+License: Apache-2.0
+LicenseUrl: https://github.com/thetimelord69/Kryleos-forge/blob/main/LICENSE
+ShortDescription: Free, open-source, local-first AI software engineering cockpit.
+Description: |
+  Kryleos Forge is a local-first AI engineering cockpit wrapping terminal-capable
+  coding agents (Claude Code CLI) in a structured, dependency-aware Kanban workflow.
+  100% BYOK with support for Anthropic, OpenAI, Google Gemini, DeepSeek, and Ollama.
+Moniker: forge
+Tags:
+  - ai
+  - agent
+  - claude-code
+  - kanban
+  - developer-tools
+  - coding-assistant
+ReleaseNotesUrl: https://github.com/thetimelord69/Kryleos-forge/releases/tag/v0.1.0
+Installers:
+  - Architecture: x64
+    InstallerType: nullsoft
+    InstallerUrl: https://github.com/thetimelord69/Kryleos-forge/releases/download/v0.1.0/Kryleos-Forge-Setup-0.1.0.exe
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    Scope: user
+    InstallerSwitches:
+      Silent: /S
+      SilentWithProgress: /S
+ManifestType: singleton
+ManifestVersion: 1.6.0
