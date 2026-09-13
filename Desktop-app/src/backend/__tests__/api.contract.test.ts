@@ -92,72 +92,7 @@ describe('GET /api/companion/status — contract', () => {
   });
 });
 
-// ─── /api/auth/register ──────────────────────────────────────────────────────
 
-describe('POST /api/auth/register — contract', () => {
-  // Server returns { success: true, user: { token, tier, email, ... } }
-  it('success response has shape: { success: true, user: { token, tier } }', async () => {
-    const email = `contract_shape_${Date.now()}@test.local`;
-    const res = await request(app)
-      .post('/api/auth/register')
-      .send({ name: 'ShapeUser', email, password: 'Shape123!' });
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('success', true);
-    expect(res.body).toHaveProperty('user');
-    expect(res.body.user).toHaveProperty('token');
-    expect(res.body.user).toHaveProperty('tier');
-    expect(typeof res.body.user.token).toBe('string');
-    expect(typeof res.body.user.tier).toBe('string');
-  });
-
-  it('token is non-empty string of at least 8 characters', async () => {
-    const email = `contract_tok_${Date.now()}@test.local`;
-    const res = await request(app)
-      .post('/api/auth/register')
-      .send({ name: 'TokUser', email, password: 'Tok123456!' });
-    expect(res.body.user.token.length).toBeGreaterThanOrEqual(8);
-  });
-
-  it('default tier is "free"', async () => {
-    const email = `contract_free_${Date.now()}@test.local`;
-    const res = await request(app)
-      .post('/api/auth/register')
-      .send({ name: 'FreeUser', email, password: 'Free123!' });
-    expect(res.body.user.tier).toBe('free');
-  });
-});
-
-// ─── /api/auth/login ─────────────────────────────────────────────────────────
-
-describe('POST /api/auth/login — contract', () => {
-  const suffix = Date.now() + 100;
-  const email = `contract_login_${suffix}@test.local`;
-
-  beforeAll(async () => {
-    await request(app)
-      .post('/api/auth/register')
-      .send({ name: 'LoginContract', email, password: 'Login123!' });
-  });
-
-  it('success response has shape: { success: true, user: { token } }', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email, password: 'Login123!' });
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('success', true);
-    expect(res.body.user).toHaveProperty('token');
-    expect(typeof res.body.user.token).toBe('string');
-  });
-
-  it('failure response is a JSON object with an error field', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email, password: 'WrongPass' });
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.headers['content-type']).toMatch(/application\/json/);
-    expect(typeof res.body).toBe('object');
-  });
-});
 
 // ─── 404 handling ────────────────────────────────────────────────────────────
 

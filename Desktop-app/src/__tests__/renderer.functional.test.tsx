@@ -19,6 +19,14 @@ afterEach(cleanup);
 // ─── Theme persistence logic ─────────────────────────────────────────────────
 // The renderer persists the active theme under the 'matrix_theme' localStorage key.
 
+const mockLocalStorage: Record<string, string> = {};
+vi.stubGlobal('localStorage', {
+  getItem: (key: string) => mockLocalStorage[key] || null,
+  setItem: (key: string, value: string) => { mockLocalStorage[key] = value; },
+  removeItem: (key: string) => { delete mockLocalStorage[key]; },
+  clear: () => { for (const key in mockLocalStorage) delete mockLocalStorage[key]; }
+});
+
 const THEME_KEY = 'matrix_theme';
 
 describe('Theme localStorage persistence', () => {

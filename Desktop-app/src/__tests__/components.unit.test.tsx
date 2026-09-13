@@ -63,9 +63,9 @@ describe('FeatureBadge', () => {
     expect(screen.getByText(/production/i)).toBeInTheDocument();
   });
 
-  it('resolves cloudSync id to preview status', () => {
+  it('resolves cloudSync id to planned/local-only status', () => {
     render(<FeatureBadge id="cloudSync" />);
-    expect(screen.getByText(/preview/i)).toBeInTheDocument();
+    expect(screen.getByText(/planned|local-only/i)).toBeInTheDocument();
   });
 });
 

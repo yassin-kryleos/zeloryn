@@ -17,14 +17,6 @@ interface DriftItem {
   suggestedStatus: ProjectTask['status'];
 }
 
-const tierLadder = ['free', 'solo', 'solo_plus', 'founder', 'agency'];
-function isTierAllowed(userTier: string, requiredTier: string): boolean {
-  const userIndex = tierLadder.indexOf(userTier.toLowerCase());
-  const reqIndex = tierLadder.indexOf(requiredTier.toLowerCase());
-  if (userIndex === -1 || reqIndex === -1) return false;
-  return userIndex >= reqIndex;
-}
-
 interface PlanningScreenProps {
   sessionId?: string;
   activeProject?: any | null;
@@ -41,7 +33,6 @@ interface PlanningScreenProps {
   onSendPlanItemToForge?: (title: string) => void;
   tasks?: ProjectTask[];
   onConfirmComplete?: (taskId: string) => Promise<void> | void;
-  userTier?: string;
   authToken?: string;
   onNotify?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
   onAbort?: () => void;
@@ -131,7 +122,6 @@ export function PlanningScreen({
   onSendPlanItemToForge,
   tasks = [],
   onConfirmComplete,
-  userTier = 'free',
   authToken = '',
   onNotify,
   onAbort,
@@ -253,7 +243,6 @@ export function PlanningScreen({
   
   const [isPushDiffModalOpen, setIsPushDiffModalOpen] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
-  const [isFreeExportModalOpen, setIsFreeExportModalOpen] = useState(false);
 
   const [isGithubModalOpen, setIsGithubModalOpen] = useState(false);
   const [gitTokenInput, setGitTokenInput] = useState(githubToken);
@@ -851,11 +840,7 @@ export function PlanningScreen({
       return;
     }
     
-    if (userTier.toLowerCase() === 'free') {
-      setIsFreeExportModalOpen(true);
-    } else {
-      setIsPushDiffModalOpen(true);
-    }
+    setIsPushDiffModalOpen(true);
   };
 
   const executePushToCrew = async () => {
@@ -1067,9 +1052,7 @@ export function PlanningScreen({
       setWhatsLeftExport(Boolean(data.exportAllowed));
       const report = data.report as WhatsLeftReport;
       onNotify?.(
-        report.truncated
-          ? `What's Left: showing ${report.items.length} of ${report.total} (tier cap). Upgrade for more.`
-          : `What's Left: ${report.items.length} open item(s).`,
+        `What's Left: ${report.items.length} open item(s).`,
         'success'
       );
     } catch (err: any) {
@@ -1950,27 +1933,13 @@ export function PlanningScreen({
                 </select>
               </div>
 
-              {/* Template details and tier gate */}
+              {/* Template details */}
               {(() => {
                 const activeTpl = docTemplates.find(t => t.id === selectedTemplateId);
                 if (!activeTpl) return null;
-                const allowed = isTierAllowed(userTier, activeTpl.requiredTier);
                 return (
                   <div className="space-y-2">
                     <p className="text-[10px] text-forge-dim italic select-text pr-1">{activeTpl.description}</p>
-                    <div className="flex items-center justify-between text-[9px]">
-                      <span className="text-forge-dim">Required Level:</span>
-                      <span className={`font-bold uppercase ${allowed ? 'text-forge-neon' : 'text-forge-red'}`}>
-                        {activeTpl.requiredTier === 'free' ? 'All Tiers' : activeTpl.requiredTier}
-                      </span>
-                    </div>
-                    
-                    {!allowed && (
-                      <div className="p-2 border border-forge-red/40 bg-forge-red/10 text-forge-red rounded text-[9px] select-text">
-                        ⚠ This template is gated to the <strong>{activeTpl.requiredTier.toUpperCase()}</strong> tier. Upgrades are available in your account settings.
-                      </div>
-                    )}
-
                     <div className="flex gap-2">
                       <div className="flex-1 flex flex-col gap-0.5">
                         <label className="text-[9px] text-forge-dim uppercase">Save Path</label>
@@ -1985,7 +1954,7 @@ export function PlanningScreen({
                       <button
                         type="button"
                         onClick={handleGenerateDoc}
-                        disabled={generatingDoc || !allowed}
+                        disabled={generatingDoc}
                         className="forge-btn shrink-0 self-end text-[10px] py-1 px-3 disabled:opacity-40 disabled:cursor-not-allowed font-bold"
                       >
                         {generatingDoc ? 'GENERATING...' : 'GENERATE'}
@@ -2192,20 +2161,13 @@ export function PlanningScreen({
               <div className="border border-forge-dark bg-black/20 rounded p-3 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold text-forge-neon uppercase tracking-wider"> Founder Autopilot Utilities</span>
-                  <span className="text-[8px] border border-indigo-500 bg-indigo-950 text-indigo-200 px-1 py-0.2 rounded font-bold uppercase">Founder tier</span>
                 </div>
-
-                {!isTierAllowed(userTier, 'founder') && (
-                  <div className="p-2 border border-forge-red/40 bg-forge-red/10 text-forge-red rounded text-[9px] leading-relaxed">
-                    ⚠ These utilities are gated to the **FOUNDER** plan. Upgrades can be managed in the subscription panel.
-                  </div>
-                )}
 
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('founder', 'prd')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'founder')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-left flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Product Specs (PRD)</span>
@@ -2214,7 +2176,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('founder', 'architecture')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'founder')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-left flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">System Architecture</span>
@@ -2223,7 +2185,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('founder', 'roadmap')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'founder')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-left flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Roadmap & Backlog</span>
@@ -2232,7 +2194,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('founder', 'changelog')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'founder')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-left flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Release Changelog</span>
@@ -2241,7 +2203,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('founder', 'health_report')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'founder')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-left flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Monthly Health Report</span>
@@ -2250,7 +2212,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('founder', 'release_checklist')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'founder')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-left flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Release QA Checklist</span>
@@ -2259,7 +2221,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('founder', 'pricing_page')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'founder')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-left flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Pricing Copywriter</span>
@@ -2268,7 +2230,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('founder', 'investor_summary')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'founder')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-left flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Investor Executive Summary</span>
@@ -2281,14 +2243,7 @@ export function PlanningScreen({
               <div className="border border-forge-dark bg-black/20 rounded p-3 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] font-bold text-forge-neon uppercase tracking-wider"> Agency Premium Deliverables</span>
-                  <span className="text-[8px] border border-emerald-500 bg-emerald-950 text-emerald-200 px-1 py-0.2 rounded font-bold uppercase">Agency tier</span>
                 </div>
-
-                {!isTierAllowed(userTier, 'agency') && (
-                  <div className="p-2 border border-forge-red/40 bg-forge-red/10 text-forge-red rounded text-[9px] leading-relaxed">
-                    ⚠ These utilities are gated to the **AGENCY** plan. Upgrades can be managed in the subscription panel.
-                  </div>
-                )}
 
                 {/* Agency Branding Controls */}
                 <div className="p-2 border border-forge-dark bg-black/40 rounded space-y-2">
@@ -2336,7 +2291,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('agency', 'handoff')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'agency')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-center flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Handoff Pack</span>
@@ -2345,7 +2300,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('agency', 'brochure')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'agency')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-center flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Pitch Brochure</span>
@@ -2354,7 +2309,7 @@ export function PlanningScreen({
                   <button
                     type="button"
                     onClick={() => handleGenerateUtility('agency', 'branded_doc')}
-                    disabled={generatingUtility || !isTierAllowed(userTier, 'agency')}
+                    disabled={generatingUtility}
                     className="forge-btn text-[9px] py-1 px-1.5 text-center flex flex-col gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <span className="font-bold text-forge-text">Branded HTML</span>
@@ -2698,7 +2653,7 @@ export function PlanningScreen({
         </div>
       )}
 
-      {/* --- MODAL 3: PUSH TO CREW DIFF MODAL (SOLO+) --- */}
+      {/* --- MODAL 3: PUSH TO CREW DIFF MODAL --- */}
       {isPushDiffModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 font-mono select-none">
           <div className="w-full max-w-lg border border-forge-neon rounded bg-forge-panel-bg p-5 flex flex-col max-h-[80vh]">
@@ -2747,91 +2702,6 @@ export function PlanningScreen({
                 className="forge-btn text-[10px] py-1.5 px-4 font-bold disabled:opacity-40"
               >
                 {isPushing ? 'Syncing...' : 'Confirm Sync to CREW'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- MODAL 4: FREE TIER EXPORT MODAL --- */}
-      {isFreeExportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 font-mono select-none">
-          <div className="w-full max-w-lg border border-amber-600 rounded bg-forge-panel-bg p-5 flex flex-col max-h-[80vh]">
-            <div className="flex justify-between items-center border-b border-forge-dark pb-2">
-              <span className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                <AlertTriangle size={14} /> Free Tier Handoff Export
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsFreeExportModalOpen(false)}
-                className="text-forge-dim hover:text-white"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="my-3 space-y-3">
-              <div className="text-[10px] text-forge-dim leading-relaxed">
-                PLAN &rarr; CREW direct context sync is a paid tier feature. You can copy the generated Markdown below and paste it manually into the Crew chat to seed the specialists review.
-              </div>
-              <div className="relative">
-                <textarea
-                  readOnly
-                  value={getExportMarkdown()}
-                  rows={8}
-                  className="w-full forge-input text-[10px] p-2 bg-black font-mono border border-forge-dark text-forge-neon resize-none focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(getExportMarkdown());
-                    onNotify?.('Copied to clipboard!', 'success');
-                  }}
-                  className="absolute bottom-2 right-2 text-[9px] bg-forge-neon text-black px-2 py-0.5 rounded font-bold hover:bg-white cursor-pointer"
-                >
-                  COPY
-                </button>
-              </div>
-              <div className="text-[9px] text-forge-dim italic">
-                Upgrade to Solo ($5/mo) or above for direct WebSocket context injection.
-              </div>
-
-              {/* Suggested CREW review personas (spec: auto-suggest on handoff). */}
-              <div className="border border-forge-dark rounded p-2 space-y-1.5">
-                <div className="text-[10px] font-bold text-forge-text uppercase">Suggested CREW reviewers</div>
-                <div className="text-[9px] text-forge-dim">
-                  These three personas review your plan in CREW before execution:
-                </div>
-                {crewPersonas.map(p => (
-                  <div key={p.role} className="text-[9px] text-forge-dim flex gap-1">
-                    <span className="text-forge-text font-bold shrink-0">{p.name}:</span>
-                    <span>{p.description}</span>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      for (const p of crewPersonas) await installCrewPersona(p);
-                      onNotify?.('Installed all 3 CREW personas into .kryleos/agents.', 'success');
-                    } catch (err: any) {
-                      onNotify?.(`Persona install failed: ${err.message}`, 'error');
-                    }
-                  }}
-                  className="forge-btn text-[9px] px-2 py-1 font-bold"
-                >
-                  Install all 3 personas
-                </button>
-              </div>
-            </div>
-
-            <div className="flex justify-end border-t border-forge-dark pt-3">
-              <button
-                type="button"
-                onClick={() => setIsFreeExportModalOpen(false)}
-                className="forge-secondary-button text-[10px] py-1.5 px-3"
-              >
-                Close
               </button>
             </div>
           </div>

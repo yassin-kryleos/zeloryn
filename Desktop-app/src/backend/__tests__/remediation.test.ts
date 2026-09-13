@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'path';
-
-// Import local functions/modules to verify remediation
-import * as syncController from '../sync';
-
 // Duplicate path validation helper to verify logic correctness
 function isPathInside(parent: string, child: string): boolean {
   const relative = path.relative(parent, child);
@@ -33,44 +29,6 @@ describe('Security Remediation Verification Tests', () => {
       expect(isPathInside(parentDir, childDir)).toBe(false);
     });
   });
-
-  describe('SEC-04: Cryptographic Hashing and Token Checks', () => {
-    it('should generate secure session tokens with random bytes', async () => {
-      // Register will generate a secure random token
-      const testEmail = `sec_test_${Date.now()}@example.com`;
-      const testPass = 'securePassword123!';
-      
-      const user = await syncController.register(testEmail, testPass);
-      
-      expect(user.token).toBeDefined();
-      expect(user.token.length).toBeGreaterThan(40); // token_ + 32 hex + _ + timestamp
-      expect(user.passwordHash).not.toBe(testPass); // Must not store plain password
-      expect(user.passwordHash).toContain(':'); // Must have format salt:hash
-      
-      // Clean up test user
-      await syncController.deleteUser(testEmail);
-    });
-
-    it('should successfully login and verify PBKDF2 password hashes', async () => {
-      const testEmail = `sec_login_${Date.now()}@example.com`;
-      const testPass = 'anotherPass456!';
-      
-      // Register
-      const user = await syncController.register(testEmail, testPass);
-      expect(user.passwordHash).toContain(':');
-
-      // Login success
-      const loggedUser = await syncController.login(testEmail, testPass);
-      expect(loggedUser.email).toBe(testEmail.toLowerCase());
-
-      // Login failure
-      await expect(syncController.login(testEmail, 'wrongPassword')).rejects.toThrow('Invalid credentials');
-
-      // Clean up
-      await syncController.deleteUser(testEmail);
-    });
-  });
-
   describe('SEC-10: Local Chat History Database Encryption', () => {
     it('should encrypt the chat history on disk and decrypt it transparently', async () => {
       const { ChatDatabase } = await import('../db');

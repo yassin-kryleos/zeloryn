@@ -87,14 +87,12 @@ describe('Advanced Features: Semantic Cache, Self-Healing, RBAC', () => {
   // SEMANTIC CACHE TESTS
   // =============================================
   describe('Semantic Cache & Workspace Indexer', () => {
-    it('should block free-tier users from building semantic cache', async () => {
+    it('should allow building semantic cache regardless of tier', async () => {
       sandbox.setUserTier('free');
-      await expect(sandbox.buildSemanticCache()).rejects.toThrow('Access Denied');
-    });
-
-    it('should block basic-tier users from building semantic cache', async () => {
-      sandbox.setUserTier('basic');
-      await expect(sandbox.buildSemanticCache()).rejects.toThrow('Access Denied');
+      const testFile = path.join(TEST_WORKSPACE, 'sample_free.ts');
+      fs.writeFileSync(testFile, 'export function freeTest() {}', 'utf-8');
+      const result = await sandbox.buildSemanticCache();
+      expect(result.success).toBe(true);
     });
 
     it('should allow pro-tier users to build semantic cache', async () => {
@@ -171,9 +169,13 @@ export class RequestHandler {}
       expect(results.length).toBe(0);
     });
 
-    it('should block free-tier users from querying semantic cache', async () => {
+    it('should allow free-tier users to query semantic cache', async () => {
       sandbox.setUserTier('free');
-      await expect(sandbox.querySemanticCache('test')).rejects.toThrow('Access Denied');
+      const testFile = path.join(TEST_WORKSPACE, 'free_api.ts');
+      fs.writeFileSync(testFile, 'export function freeTestQuery() {}', 'utf-8');
+      await sandbox.buildSemanticCache();
+      const results = await sandbox.querySemanticCache('freeTest');
+      expect(results.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -232,21 +234,23 @@ export class RequestHandler {}
       expect(combinedStderr).toContain('SELF-HEALING');
     });
 
-    it('should NOT trigger self-healing on command failure for free users', async () => {
+    it('should trigger self-healing on command failure regardless of tier', async () => {
       sandbox.setUserTier('free');
 
-      const filePath = 'no_heal_test.txt';
+      const filePath = 'heal_free_test.txt';
       const fullPath = path.join(TEST_WORKSPACE, filePath);
-      fs.writeFileSync(fullPath, 'original', 'utf-8');
+      fs.writeFileSync(fullPath, 'original baseline', 'utf-8');
 
-      await sandbox.writeFile(filePath, 'modified for free user');
+      await sandbox.writeFile(filePath, 'modified broke state');
 
-      const result = await sandbox.runCommand('node -e "process.exit(1)"');
+      const stderrOutput: string[] = [];
+      const result = await sandbox.runCommand('node -e "process.exit(1)"', undefined, (data) => stderrOutput.push(data));
       expect(result.code).not.toBe(0);
 
-      // File should NOT be reverted for free tier
+      // File should be reverted to baseline snapshot
       const content = fs.readFileSync(fullPath, 'utf-8');
-      expect(content).not.toBe('original');
+      expect(content).toBe('original baseline');
+      expect(stderrOutput.join('')).toContain('SELF-HEALING');
     });
   });
 
@@ -274,14 +278,14 @@ export class RequestHandler {}
       expect(result.stderr).not.toContain('RBAC');
     });
 
-    it('should not apply RBAC policies for non-enterprise tiers', async () => {
-      sandbox.setUserTier('pro');
+    it('should enforce RBAC policies based on user role regardless of tier', async () => {
+      sandbox.setUserTier('free');
       sandbox.setUserRole('developer');
       sandbox.setCommandPolicies({ blockedPrefixes: ['npm publish'] });
 
-      // RBAC only applies to enterprise tier - should not block
-      const result = await sandbox.runCommand('echo "pro dev test"');
-      expect(result.stderr).not.toContain('RBAC');
+      const result = await sandbox.runCommand('npm publish --dry-run');
+      expect(result.code).toBe(-1);
+      expect(result.stderr).toContain('RBAC');
     });
 
     it('should use default blocked prefixes when no custom policies set', async () => {
@@ -309,7 +313,8 @@ export class RequestHandler {}
   // =============================================
   describe('Workspace Whitelist Sandbox', () => {
     it('should block access outside whitelisted directories', () => {
-      expect(() => sandbox.resolvePath('C:\\Windows\\System32\\evil.txt')).toThrow('Access Denied');
+      const outsidePath = process.platform === 'win32' ? 'C:\\Windows\\System32\\evil.txt' : '/etc/shadow';
+      expect(() => sandbox.resolvePath(outsidePath)).toThrow('Access Denied');
     });
 
     it('should allow access within whitelisted directories', () => {

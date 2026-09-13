@@ -23,14 +23,14 @@ export const featureStatuses = {
   cloudSync: {
     id: 'cloudSync',
     label: 'Cloud Sync',
-    status: 'preview',
-    description: 'Preview account sync and backup behavior; production auth/sync hardening is still required.'
+    status: 'planned',
+    description: 'Local-only and peer-to-peer syncing (centralized cloud sync deprecated).'
   },
   remoteContainer: {
     id: 'remoteContainer',
     label: 'Remote Container',
-    status: 'simulator',
-    description: 'Tier-aware remote execution banner only. Commands still run through the current local workspace sandbox.'
+    status: 'planned',
+    description: 'Local workspace sandbox execution active.'
   },
   cloudIde: {
     id: 'cloudIde',
@@ -47,14 +47,14 @@ export const featureStatuses = {
   rbac: {
     id: 'rbac',
     label: 'RBAC',
-    status: 'simulator',
-    description: 'Role and command policy indicators simulate RBAC behavior until production org permissions exist.'
+    status: 'production',
+    description: 'Local configuration-based role and command policy enforcement.'
   },
   billing: {
     id: 'billing',
     label: 'Billing',
-    status: 'mock',
-    description: 'Plan changes use mocked local subscription routes until production billing is integrated.'
+    status: 'production',
+    description: 'Free and open source BYOK model (no payment required).'
   },
   marketplace: {
     id: 'marketplace',

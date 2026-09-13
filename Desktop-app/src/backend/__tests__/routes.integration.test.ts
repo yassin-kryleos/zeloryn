@@ -12,16 +12,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../server';
 
-// ─── helpers ────────────────────────────────────────────────────────────────
-// Server returns { success: true, user: { token, tier, email, ... } }
 
-async function registerUser(suffix: string) {
-  const email = `route_int_${suffix}@test.local`;
-  const res = await request(app)
-    .post('/api/auth/register')
-    .send({ name: 'IntTestUser', email, password: 'IntTest123!' });
-  return { email, token: res.body?.user?.token as string | undefined, status: res.status };
-}
 
 describe('credential persistence', () => {
   it('serializes concurrent updates without corrupting or losing fields', async () => {
@@ -82,90 +73,12 @@ describe('GET /api/companion/status', () => {
   });
 });
 
-// ─── auth registration ───────────────────────────────────────────────────────
-
-describe('POST /api/auth/register', () => {
-  const suffix = Date.now();
-
-  it('returns 200 with a token on first registration', async () => {
-    const { status, token } = await registerUser(String(suffix));
-    expect(status).toBe(200);
-    expect(typeof token).toBe('string');
-    expect(token!.length).toBeGreaterThan(0);
-  });
-
-  it('returns 4xx on duplicate registration', async () => {
-    const email = `dup_${suffix}@test.local`;
-    await request(app)
-      .post('/api/auth/register')
-      .send({ name: 'A', email, password: 'Pass123!' });
-    const res = await request(app)
-      .post('/api/auth/register')
-      .send({ name: 'A', email, password: 'Pass123!' });
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.status).toBeLessThan(500);
-  });
-
-  it('rejects missing email with 4xx', async () => {
-    const res = await request(app)
-      .post('/api/auth/register')
-      .send({ name: 'NoEmail', password: 'Pass123!' });
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.status).toBeLessThan(500);
-  });
-
-  it('rejects missing password with 4xx', async () => {
-    const res = await request(app)
-      .post('/api/auth/register')
-      .send({ name: 'NoPw', email: `nopw_${suffix}@test.local` });
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.status).toBeLessThan(500);
-  });
-});
-
-// ─── auth login ──────────────────────────────────────────────────────────────
-
-describe('POST /api/auth/login', () => {
-  const suffix = Date.now() + 1;
-  let email: string;
-
-  beforeAll(async () => {
-    const reg = await registerUser(String(suffix));
-    email = reg.email;
-  });
-
-  it('returns 200 and token for valid credentials', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email, password: 'IntTest123!' });
-    expect(res.status).toBe(200);
-    // Server returns { success: true, user: { token, ... } }
-    expect(res.body?.user).toHaveProperty('token');
-  });
-
-  it('returns 4xx for wrong password', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email, password: 'WrongPass!' });
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.status).toBeLessThan(500);
-  });
-
-  it('returns 4xx for unknown email', async () => {
-    const res = await request(app)
-      .post('/api/auth/login')
-      .send({ email: 'nobody_exists@test.local', password: 'x' });
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.status).toBeLessThan(500);
-  });
-});
-
 // ─── malformed / oversized request handling ──────────────────────────────────
 
 describe('Malformed and oversized request handling', () => {
   it('returns 400 (not 500) on syntactically malformed JSON', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/credentials')
       .set('Content-Type', 'application/json')
       .send('{ not : valid json }');
     expect(res.status).toBe(400);
@@ -175,7 +88,7 @@ describe('Malformed and oversized request handling', () => {
   it('returns 413 on a payload exceeding the 1 MB body limit', async () => {
     const bigPayload = JSON.stringify({ name: 'x'.repeat(1_200_000) });
     const res = await request(app)
-      .post('/api/auth/register')
+      .post('/api/credentials')
       .set('Content-Type', 'application/json')
       .send(bigPayload);
     expect(res.status).toBe(413);
@@ -183,32 +96,27 @@ describe('Malformed and oversized request handling', () => {
 
   it('does not expose a stack trace in error responses', async () => {
     const res = await request(app)
-      .post('/api/auth/login')
+      .post('/api/credentials')
       .set('Content-Type', 'application/json')
       .send('{ bad }');
     expect(JSON.stringify(res.body)).not.toMatch(/at Object\.|at Module\.|node_modules/);
   });
 });
 
-// ─── authentication guard ────────────────────────────────────────────────────
+// ─── route protection & error handling ───────────────────────────────────────
 
-describe('Auth middleware — protected routes', () => {
+describe('Route protection & error handling', () => {
   it('GET /api/projects returns 200 or requires token (not 500)', async () => {
     const res = await request(app).get('/api/projects');
     expect(res.status).not.toBe(500);
   });
 
-  it('GET /api/sessions accepts a valid Bearer token without error', async () => {
-    const suffix = Date.now() + 2;
-    const reg = await registerUser(String(suffix));
-    if (!reg.token) return;
-    const res = await request(app)
-      .get('/api/sessions')
-      .set('Authorization', `Bearer ${reg.token}`);
+  it('GET /api/sessions returns 200', async () => {
+    const res = await request(app).get('/api/sessions');
     expect(res.status).toBe(200);
   });
 
-  it('a forged Bearer token on a write route returns non-2xx or 2xx gracefully (no crash)', async () => {
+  it('a forged Bearer token on a write route returns non-500 gracefully (no crash)', async () => {
     const res = await request(app)
       .put('/api/sessions/fake-id/tasks')
       .set('Authorization', 'Bearer totally-forged-token')

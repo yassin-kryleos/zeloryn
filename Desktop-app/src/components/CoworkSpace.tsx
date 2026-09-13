@@ -109,7 +109,6 @@ interface CoworkSpaceProps {
   streamingContent?: string;
   activeAgent: AgentRole | 'system';
   workspaceRoot: string;
-  userTier?: string;
   onSaveTasks: (updatedTasks: ProjectTask[]) => void;
   onSaveAgents?: (updatedAgents: CustomAgent[]) => void;
   onSendQuery: (query: string) => void;
@@ -132,7 +131,6 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
   streamingContent = '',
   activeAgent,
   workspaceRoot,
-  userTier = 'free',
   onSaveTasks,
   onSaveAgents,
   onSendQuery,
@@ -889,22 +887,16 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
                       <FeatureBadge id="rbac" compact />
                     </span>
                   </span>
-                  {userTier === 'enterprise' ? (
                     <div className="space-y-1 text-[9px] font-mono">
                       <div className="flex items-center gap-1.5 text-forge-neon">
-                        <span className="h-1.5 w-1.5 rounded-full bg-forge-neon animate-ping" />
-                        <span>Collaboration Preview connected to org session simulator (RBAC Simulator: OWNER)</span>
+                        <span className="h-1.5 w-1.5 rounded-full bg-forge-neon" />
+                        <span>Direct workspace collaboration active (Local RBAC: OWNER)</span>
                       </div>
                       <div className="text-forge-dim italic mt-1 text-[8px] flex justify-between">
-                        <span>Active peers: 3 online</span>
-                        <span>Audit Log: Enabled</span>
+                        <span>Status: Ready</span>
+                        <span>Audit Log: Local</span>
                       </div>
                     </div>
-                  ) : (
-                    <div className="text-forge-dim italic text-[8px] leading-tight">
-                      Team presence, audit logs, and shared workspace indicators are preview/simulator features. Upgrade to Enterprise Plan for organization collaboration preview tools.
-                    </div>
-                  )}
                 </div>
 
                 {/* Agent Creator Form */}
