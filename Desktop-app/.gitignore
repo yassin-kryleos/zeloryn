@@ -19,13 +19,19 @@ dist-ssr
 .env
 .env.*
 !.env.example
+*.key
+*.pem
 .kryleos_fallback.key
 .kryleos_db.key
 
 # Runtime / local app state
-chat_history.json
+chat_history*.json
+projects.json
 .kryleos/
 .kryleos_forge_secrets.json
+*.db
+*.sqlite
+*.sqlite3
 
 # Editor directories and files
 .vscode/*

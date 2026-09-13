@@ -21,14 +21,29 @@ web-build/
 # Local runtime and app state
 .claude/
 .kryleos/
-chat_history.json
+.gstack/
+.tmp-runtime/
+.tmp-e2e/
+chat_history*.json
+projects.json
 .kryleos_forge_secrets.json
 .release-score-tmp/
+*.db
+*.sqlite
+*.sqlite3
 
 # Environment and secrets
 .env
 .env.*
 !.env.example
+*.key
+*.pem
+.kryleos_*.key
+
+# Test and coverage artifacts
+coverage/
+playwright-report/
+test-results/
 
 # Editor and OS files
 .vscode/

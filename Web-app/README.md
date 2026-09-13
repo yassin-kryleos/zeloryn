@@ -1,73 +1,68 @@
-# React + TypeScript + Vite
+# Zeloryn — Web Companion Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The Web Companion is a lightweight, browser-based dashboard for Zeloryn. It allows you to monitor build tasks, review specifications, and interact with the Forge lifecycle from any web browser without needing to run the full Electron desktop shell.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Capabilities
 
-## React Compiler
+- **Lightweight Access**: Connect to your running Desktop Forge instance from another machine on your local network or over a private encrypted mesh (Tailscale / Cloudflare Tunnel).
+- **Workspace Navigation**: Review active tasks on the Kanban board, inspect feature specifications, and view agent progress.
+- **BYOK & Offline First**: Zero cloud tracking or metered relays. Directly communicates with your desktop's local Express server via secure pairing.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Prerequisites
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- **Node.js**: `v20.0.0` or higher
+- **npm**: `v10.0.0` or higher
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### Installation & Development
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# Install dependencies
+npm install
+
+# Start Vite development server (default: http://localhost:5173)
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Production Build
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+# Typecheck and compile static assets to dist/
+npm run build
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Preview production build locally
+npm run preview
 ```
+
+---
+
+## Connecting to Desktop Forge
+
+1. Ensure the Desktop Forge backend is running (`cd ../Desktop-app && npm run dev`).
+2. If connecting from another device on your network:
+   - Ensure `KRYLEOS_BIND_HOST=0.0.0.0` is set in `Desktop-app/.env`.
+   - Retrieve your desktop's pairing code from the Desktop app UI.
+3. Open the Web Companion in your browser and enter:
+   - **Backend URL**: `http://localhost:3001` (or your desktop's LAN / Tailscale IP: `http://100.x.y.z:3001`).
+   - **Pairing Token**: The one-time authentication token displayed on your desktop.
+4. Once paired, the web companion communicates directly with your desktop backend over WebSocket and HTTP.
+
+---
+
+## Testing
+
+```bash
+# Run unit and functional tests via Vitest
+npm test
+```
+
+---
+
+## License
+
+Part of Zeloryn. Licensed under the Apache License 2.0. See [LICENSE](../LICENSE).

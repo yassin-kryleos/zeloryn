@@ -11,6 +11,12 @@ node_modules
 dist
 dist-ssr
 *.local
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
 
 # Playwright
 /test-results/
