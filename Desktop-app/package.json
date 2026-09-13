@@ -1,13 +1,13 @@
 {
-  "name": "kryleos-forge",
+  "name": "zeloryn",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Free, open-source, local-first AI software engineering cockpit.",
+  "author": "Zeloryn Contributors",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "src/backend/electron.cjs",
   "scripts": {
-    "generate:pricing": "node ../scripts/generate-pricing.mjs",
-    "predev": "npm run generate:pricing",
-    "prebuild": "npm run generate:pricing",
     "dev": "concurrently -n \"vite,server,electron\" -c \"blue,green,magenta\" \"vite\" \"tsx src/backend/server.ts\" \"electron .\"",
     "dev:e2e": "concurrently -n \"vite,server\" -c \"blue,green\" \"vite --mode test --port 5174\" \"tsx src/backend/server.ts\"",
     "server": "tsx src/backend/server.ts",
@@ -22,6 +22,8 @@
   },
   "dependencies": {
     "@google/genai": "^2.8.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "cors": "^2.8.6",
     "dompurify": "^3.4.10",
     "dotenv": "^17.4.2",
@@ -32,15 +34,14 @@
     "html-to-docx": "^1.8.0",
     "lucide-react": "^1.17.0",
     "mammoth": "^1.12.0",
-    "razorpay": "^2.9.6",
+    "node-pty": "^1.1.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "stripe": "^22.2.0",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-javascript": "^0.21.2",
+    "tree-sitter-typescript": "^0.21.2",
     "typescript": "~6.0.2",
-    "node-pty": "^1.1.0",
-    "ws": "^8.21.0",
-    "@xterm/xterm": "^6.0.0",
-    "@xterm/addon-fit": "^0.11.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",

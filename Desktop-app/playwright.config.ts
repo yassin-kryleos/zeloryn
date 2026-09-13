@@ -16,6 +16,7 @@ export default defineConfig({
   testMatch: '**/*.e2e.ts',
   testIgnore: '**/packaged.e2e.ts',
   fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
@@ -44,6 +45,9 @@ export default defineConfig({
     timeout: 60_000,
     env: {
       KRYLEOS_DATA_DIR: path.join(process.cwd(), '.tmp-e2e'),
+      KRYLEOS_LOCAL_SESSION_SECRET: 'test-session-secret-for-playwright-32chars',
+      VITE_KRYLEOS_LOCAL_SESSION_SECRET: 'test-session-secret-for-playwright-32chars',
+      KRYLEOS_TEST_MODE: '1',
     },
   },
 });
