@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 const BLOCKING = new Set(['critical', 'serious']);
 for (const theme of ['light', 'matrix', 'forge']) {
-  for (const tab of ['Overview', 'Pricing tab', 'Planning tab', 'Tutorial tab', 'Downloads tab', 'Settings tab']) {
+  for (const tab of ['Overview', 'Free & BYOK tab', 'Planning tab', 'Tutorial tab', 'Downloads tab', 'Settings tab']) {
     test(`${theme} / ${tab} contrast`, async ({ page }) => {
       await page.addInitScript((t) => localStorage.setItem('web_theme', t), theme);
       await page.goto('/');

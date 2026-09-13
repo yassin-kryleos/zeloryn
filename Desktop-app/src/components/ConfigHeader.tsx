@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2 } from 'lucide-react';
 import type { ResponseMode } from '../backend/agents';
 import { FeatureBadge } from './FeatureBadge';
-import { TIER_PRICES, BUYABLE_TIER_IDS } from '../pricing.generated';
 
 interface PairedDeviceSummary {
   deviceId: string;
@@ -51,16 +50,6 @@ interface ConfigHeaderProps {
   githubToken: string;
   githubRepoUrl: string;
   onOpenGuide: () => void;
-  user: { email: string; token: string; isPremium: boolean; tier?: string; billingProvider?: 'stripe' | 'razorpay' | 'license' } | null;
-  syncStatus: string;
-  lastSyncedAt: string;
-  onRegister: (email: string, pass: string) => Promise<void>;
-  onLogin: (email: string, pass: string) => Promise<void>;
-  onLogout: () => void;
-  onSubscribe: (tier: string) => Promise<void>;
-  onActivateLicense: (licenseKey: string) => Promise<boolean>;
-  onOpenBillingPortal?: () => Promise<void>;
-  onForceSync: () => Promise<void>;
   onUpdateConfig: (data: { 
     apiKey?: string; 
     geminiApiKey?: string;
@@ -70,6 +59,7 @@ interface ConfigHeaderProps {
     ollamaUrl?: string;
     useSearch?: boolean;
     model?: string; 
+    fastModel?: string;
     workspaceRoot?: string;
     theme?: string;
     customInstructions?: string;
@@ -80,6 +70,7 @@ interface ConfigHeaderProps {
     zeroEgressMode?: boolean;
     privacyMode?: boolean;
   }) => void;
+  fastModel?: string;
   piiFilterEnabled?: boolean;
   onTogglePiiFilter?: (val: boolean) => void;
   telemetry?: { bytesSent: number; bytesReceived: number; compressionSavingsRatio: number } | null;
@@ -102,6 +93,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   ollamaUrl,
   useSearch,
   model,
+  fastModel = '',
   workspaceRoot,
   isConnected,
   theme,
@@ -114,16 +106,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   githubToken,
   githubRepoUrl,
   onOpenGuide,
-  user,
-  syncStatus,
-  lastSyncedAt,
-  onRegister,
-  onLogin,
-  onLogout,
-  onSubscribe,
-  onActivateLicense,
-  onOpenBillingPortal,
-  onForceSync,
   onUpdateConfig,
   piiFilterEnabled = false,
   onTogglePiiFilter,
@@ -136,7 +118,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   zeroEgressMode = false,
   privacyMode = false
 }) => {
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [userRole, setUserRole] = useState<'admin' | 'developer'>('admin');
   const [keychainSecured, setKeychainSecured] = useState<boolean>(false);
 
@@ -190,8 +171,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     }
     setIsBuildingIndex(false);
   };
-  const [emailInput, setEmailInput] = useState<string>('');
-  const [passInput, setPassInput] = useState<string>('');
   const [showKey, setShowKey] = useState<boolean>(false);
   const [showGeminiKey, setShowGeminiKey] = useState<boolean>(false);
   const [showOpenaiKey, setShowOpenaiKey] = useState<boolean>(false);
@@ -217,7 +196,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [inputCustomInstructions, setInputCustomInstructions] = useState<string>(customInstructions);
   const [inputResponseMode, setInputResponseMode] = useState<ResponseMode>(responseMode);
   const [inputTheme, setInputTheme] = useState<string>(theme);
-  const [activeTab, setActiveTab] = useState<'api_keys' | 'workspace' | 'github_sync' | 'account_theme' | 'permissions' | 'agents' | 'artifacts' | 'subscription'>('api_keys');
+  const [activeTab, setActiveTab] = useState<'api_keys' | 'workspace' | 'github_sync' | 'account_theme' | 'permissions' | 'agents' | 'artifacts'>('api_keys');
 
   React.useEffect(() => {
     setInputTheme(theme);
@@ -245,26 +224,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [activePairingSecret, setActivePairingSecret] = useState<string>('');
   const [pairedDevices, setPairedDevices] = useState<PairedDeviceSummary[]>([]);
   const [isCompanionModalOpen, setIsCompanionModalOpen] = useState<boolean>(false);
-  const [licenseKeyInput, setLicenseKeyInput] = useState<string>('');
-
-  const [isRedeemingLicense, setIsRedeemingLicense] = useState<boolean>(false);
-
-  // Activates an offline Ed25519-signed license key via /api/license/activate.
-  // The server verifies the signature and expiry against our embedded public
-  // key and applies the encoded tier to the authenticated account.
-  const handleRedeemLicense = async () => {
-    const key = licenseKeyInput.trim();
-    if (!key) return;
-    setIsRedeemingLicense(true);
-    try {
-      const ok = await onActivateLicense(key);
-      if (ok) {
-        setLicenseKeyInput('');
-      }
-    } finally {
-      setIsRedeemingLicense(false);
-    }
-  };
 
   const fetchPairedDevices = async () => {
     try {
@@ -590,6 +549,41 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         </select>
       </div>
 
+      {/* Fast Model Selector Dropdown (Phase 9b: Cost-aware routing) */}
+      <div className="flex items-center border border-forge-dark rounded p-0.5" title="Fast Model override for triage, Scope Guard review, and diff checks">
+        <select
+          aria-label="Fast AI model"
+          value={fastModel}
+          onChange={(e) => onUpdateConfig({ fastModel: e.target.value })}
+          className="bg-transparent border-0 text-[11px] text-forge-cyan font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
+        >
+          <option value="">Fast Model: (Default / Same)</option>
+          <optgroup label="DeepSeek">
+            <option value="deepseek-chat">Fast: DeepSeek Chat V3</option>
+          </optgroup>
+          <optgroup label="Google Gemini">
+            <option value="gemini-2.5-flash">Fast: Gemini 2.5 Flash</option>
+            <option value="gemini-3.5-flash">Fast: Gemini 3.5 Flash</option>
+          </optgroup>
+          <optgroup label="OpenAI GPT">
+            <option value="gpt-4o-mini">Fast: GPT-4o Mini</option>
+            <option value="gpt-5.5-mini">Fast: GPT 5.5 Mini</option>
+          </optgroup>
+          <optgroup label="Anthropic Claude">
+            <option value="claude-3-5-haiku-latest">Fast: Claude 3.5 Haiku</option>
+          </optgroup>
+          <optgroup label="OpenRouter">
+            <option value="qwen/qwen-2.5-coder-32b-instruct">Fast: Qwen 2.5 Coder 32B</option>
+            <option value="meta-llama/llama-3.3-70b-instruct">Fast: Llama 3.3 70B</option>
+          </optgroup>
+          <optgroup label="Local (Ollama)">
+            {ollamaOptions.map(option => (
+              <option key={`fast-${option.value}`} value={option.value}>Fast: {option.label}</option>
+            ))}
+          </optgroup>
+        </select>
+      </div>
+
       {/* Thinking Capability Dropdown */}
       <div className="flex items-center border border-forge-dark rounded p-0.5">
         <select
@@ -612,7 +606,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
 
       {/* Local Only Mode Badge */}
       {(zeroEgressMode || privacyMode || model.startsWith('ollama:') || model === 'llama3' || model === 'qwen2.5-coder') && (
-        <div className="flex items-center border border-forge-neon text-forge-neon bg-black/40 px-1.5 py-0.5 rounded text-[10px] font-bold font-mono select-none animate-pulse">
+        <div className="flex items-center border border-emerald-500 text-emerald-300 bg-black/40 px-1.5 py-0.5 rounded text-[10px] font-bold font-mono select-none">
           [LOCAL ONLY]
         </div>
       )}
@@ -705,7 +699,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 onClick={() => setActiveTab('account_theme')}
                 className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'account_theme' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
               >
-                Account
+                Theme
               </button>
               <button
                 type="button"
@@ -727,13 +721,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'artifacts' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
               >
                 Artifacts
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('subscription')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'subscription' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                Billing
               </button>
             </div>
 
@@ -1484,205 +1471,26 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               </div>
             )}
 
-            <div className="flex flex-col gap-2 border border-forge-dark bg-black bg-opacity-30 p-2 rounded">
-              <label className="text-[10px] uppercase text-forge-neon font-bold flex items-center justify-between">
-                <span>Kryleos Sync Account</span>
-                  <span className="text-[8px] text-forge-dim flex items-center gap-1">
-                    Multi-platform Sync
-                    <FeatureBadge id="cloudSync" compact />
+            {onStartCollabSession && (
+              <div className="border border-forge-dark bg-black bg-opacity-30 p-2.5 rounded flex flex-col gap-1.5 font-mono text-[9px]">
+                <div className="flex justify-between items-center">
+                  <span className="text-forge-neon font-bold uppercase text-[9.5px]">📡 WebRTC Workspace Collab</span>
+                  <span className={collabActive ? "text-forge-neon font-bold animate-pulse" : "text-forge-dim"}>
+                    {collabActive ? "ACTIVE ROOM" : "OFFLINE"}
                   </span>
-              </label>
-
-              {!user ? (
-                <div className="flex flex-col gap-2 font-mono">
-                  <div className="flex gap-1.5 justify-center border-b border-forge-very-dark pb-1 text-[9px]">
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode('login')}
-                      className={`px-2 py-0.5 rounded cursor-pointer ${authMode === 'login' ? 'bg-forge-very-dark border border-forge-neon text-forge-neon' : 'text-forge-dim'}`}
-                    >
-                      LOGIN
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode('register')}
-                      className={`px-2 py-0.5 rounded cursor-pointer ${authMode === 'register' ? 'bg-forge-very-dark border border-forge-neon text-forge-neon' : 'text-forge-dim'}`}
-                    >
-                      REGISTER
-                    </button>
-                  </div>
-                  <input
-                    type="email"
-                    placeholder="email@example.com"
-                    value={emailInput}
-                    onChange={(e) => setEmailInput(e.target.value)}
-                    className="forge-input text-[9px] bg-black border-forge-dark w-full px-2 py-1 text-forge-neon font-mono"
-                  />
-                  <input
-                    type="password"
-                    placeholder="password"
-                    value={passInput}
-                    onChange={(e) => setPassInput(e.target.value)}
-                    className="forge-input text-[9px] bg-black border-forge-dark w-full px-2 py-1 text-forge-neon font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (authMode === 'login') onLogin(emailInput, passInput);
-                      else onRegister(emailInput, passInput);
-                    }}
-                    className="forge-btn text-[9px] py-1 font-bold font-mono"
-                  >
-                    {authMode === 'login' ? 'SIGN IN' : 'CREATE ACCOUNT'}
-                  </button>
-
-                  {/* OAuth divider */}
-                  <div className="flex items-center gap-1.5 my-1 text-[8px] text-forge-dim uppercase font-bold justify-center">
-                    <span className="h-px bg-forge-very-dark flex-1"></span>
-                    <span>Or continue with</span>
-                    <span className="h-px bg-forge-very-dark flex-1"></span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1.5 font-mono">
-                    <button
-                      type="button"
-                      onClick={() => onLogin('google-oauth-user@gmail.com', 'google-oauth-flow-secret')}
-                      className="text-[9px] border border-forge-dark hover:border-forge-neon py-1 rounded font-bold flex items-center justify-center gap-1 text-forge-dim hover:text-white bg-black cursor-pointer"
-                    >
-                      GOOGLE
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onLogin('apple-id-user@icloud.com', 'apple-oauth-flow-secret')}
-                      className="text-[9px] border border-forge-dark hover:border-forge-neon py-1 rounded font-bold flex items-center justify-center gap-1 text-forge-dim hover:text-white bg-black cursor-pointer"
-                    >
-                      APPLE
-                    </button>
-                  </div>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2 text-[10px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-forge-text truncate">User: {user.email}</span>
-                    <button
-                      type="button"
-                      onClick={onLogout}
-                      className="text-red-400 hover:text-white text-[8px] cursor-pointer"
-                    >
-                      [LOGOUT]
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-forge-very-dark pt-1.5">
-                    <span>Account Plan:</span>
-                    <span className={`font-bold ${(user.tier || (user.isPremium ? 'basic' : 'free')) === 'enterprise' ? 'text-forge-neon animate-pulse' : (user.tier || (user.isPremium ? 'basic' : 'free')) === 'pro' ? 'text-blue-400' : (user.tier || (user.isPremium ? 'basic' : 'free')) === 'basic' ? 'text-amber-400' : 'text-forge-dim'}`}>
-                      {(user.tier || (user.isPremium ? 'basic' : 'free')).toUpperCase()}
-                    </span>
-                  </div>
-
-                  {/* Pricing Tier Selection Grid */}
-                  <div className="flex flex-col gap-1.5 border-t border-forge-very-dark pt-2 mt-1">
-                    <span className="text-[9px] text-forge-dim uppercase font-bold">Select Subscription Plan</span>
-                    <div className="flex flex-col gap-1">
-                      {(user.tier || 'free') !== 'solo' && (
-                        <button
-                          type="button"
-                          onClick={() => onSubscribe('solo')}
-                          className="text-[9px] bg-amber-900 border border-amber-500 hover:bg-amber-800 text-amber-100 font-bold py-1 px-2 rounded flex justify-between cursor-pointer"
-                        >
-                          <span>SOLO: TRACING & DRIFT</span>
-                          <span>${TIER_PRICES.solo}/MO</span>
-                        </button>
-                      )}
-                      {(user.tier || 'free') !== 'solo_plus' && (
-                        <button
-                          type="button"
-                          onClick={() => onSubscribe('solo_plus')}
-                          className="text-[9px] bg-blue-900 border border-blue-500 hover:bg-blue-800 text-blue-100 font-bold py-1 px-2 rounded flex justify-between cursor-pointer"
-                        >
-                          <span>SOLO PLUS: FULL DRIFT & SYNC</span>
-                          <span>${TIER_PRICES.solo_plus}/MO</span>
-                        </button>
-                      )}
-                      {(user.tier || 'free') !== 'founder' && (
-                        <button
-                          type="button"
-                          onClick={() => onSubscribe('founder')}
-                          className="text-[9px] bg-indigo-900 border border-indigo-500 hover:bg-indigo-800 text-indigo-100 font-bold py-1 px-2 rounded flex justify-between cursor-pointer"
-                        >
-                          <span>FOUNDER: MULTI-REPO & DEPS</span>
-                          <span>${TIER_PRICES.founder}/MO</span>
-                        </button>
-                      )}
-                      {(user.tier || 'free') !== 'agency' && (
-                        <div
-                          className="text-[9px] bg-emerald-950 border border-emerald-800 text-emerald-300 font-bold py-1 px-2 rounded flex justify-between opacity-70"
-                          title="Agency tier is not yet available for purchase"
-                        >
-                          <span>AGENCY: TEAM & CLIENT HANDOFF</span>
-                          <span>PREVIEW</span>
-                        </div>
-                      )}
-                      {user.tier && user.tier !== 'free' && user.billingProvider === 'stripe' && onOpenBillingPortal && (
-                        <button
-                          type="button"
-                          onClick={onOpenBillingPortal}
-                          className="text-[9px] bg-forge-dark hover:bg-forge-neon hover:text-black border border-forge-neon text-forge-neon font-bold py-1 px-2 rounded flex justify-center cursor-pointer mt-1 font-mono transition-colors"
-                        >
-                          MANAGE SUBSCRIPTION (STRIPE PORTAL)
-                        </button>
-                      )}
-                      {user.tier && user.tier !== 'free' && user.billingProvider !== 'license' && (
-                        <button
-                          type="button"
-                          onClick={() => onSubscribe('free')}
-                          className="text-[8px] text-forge-dim hover:text-red-400 font-mono transition-colors border border-forge-very-dark py-0.5 rounded cursor-pointer mt-1"
-                        >
-                          CANCEL SUBSCRIPTION (DEMOTE TO FREE)
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {user.tier && user.tier !== 'free' && (
-                    <div className="flex flex-col gap-1.5 border-t border-forge-very-dark pt-2 mt-1">
-                      <div className="flex justify-between text-[9px] text-forge-dim">
-                        <span>Sync status: <span className="text-forge-text uppercase font-bold">{syncStatus}</span></span>
-                        <span>{lastSyncedAt ? `Synced: ${new Date(lastSyncedAt).toLocaleTimeString()}` : 'Never synced'}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={onForceSync}
-                        className="forge-btn text-[9px] py-1 flex items-center justify-center gap-1 font-bold"
-                      >
-                        <RefreshCw size={10} className={syncStatus === 'syncing' ? 'animate-spin' : ''} />
-                        <span>FORCE CLOUD SYNC</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {user.tier && user.tier !== 'free' && (
-                    <div className="flex flex-col gap-1.5 border-t border-forge-very-dark pt-2.5 mt-2 font-mono">
-                      <div className="flex justify-between text-[9px] text-forge-dim">
-                        <span>WebRTC Collab:</span>
-                        <span className={collabActive ? "text-forge-neon font-bold animate-pulse" : "text-forge-dim"}>
-                          {collabActive ? "📡 ACTIVE ROOM" : "OFFLINE"}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={onStartCollabSession}
-                        className={`forge-btn text-[9px] py-1 flex items-center justify-center gap-1 font-bold ${
-                          collabActive ? "border-red-500 text-red-400 bg-forge-very-dark" : "border-forge-neon text-forge-neon"
-                        }`}
-                      >
-                        <span>{collabActive ? "DISCONNECT WEBRTC" : "START COLLAB SESSION"}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                <p className="text-[8px] text-forge-dim">Direct peer-to-peer workspace session sharing across devices on the same local network.</p>
+                <button
+                  type="button"
+                  onClick={onStartCollabSession}
+                  className={`forge-btn text-[9px] py-1 flex items-center justify-center gap-1 font-bold ${
+                    collabActive ? "border-red-500 text-red-400 bg-forge-very-dark" : "border-forge-neon text-forge-neon"
+                  }`}
+                >
+                  <span>{collabActive ? "DISCONNECT WEBRTC" : "START COLLAB SESSION"}</span>
+                </button>
+              </div>
+            )}
 
             {/* Theme configuration */}
             <div className="flex flex-col gap-1">
@@ -1708,110 +1516,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               <span className="text-[9px] text-forge-dim">
                 Forge (default) is a professional dark theme with green accents. Matrix and Terminal are the classic green-glow retro styles.
               </span>
-            </div>
-          </div>
-        )}
-
-          {activeTab === 'subscription' && (
-            <div className="flex flex-col gap-3 font-mono text-[10px]">
-              <span className="text-[10px] text-forge-neon font-bold uppercase tracking-wider mb-1">
-                <span className="inline-flex items-center gap-2">
-                  Kryleos Billing & Subscription Tiers
-                  <FeatureBadge id="billing" />
-                </span>
-              </span>
-
-              {/* Current Status banner */}
-              <div className="border border-forge-dark bg-black bg-opacity-35 p-2.5 rounded flex flex-col gap-1.5">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-white uppercase">Current Plan:</span>
-                  <span className={`text-[10px] font-extrabold uppercase px-1.5 border rounded ${
-                    !user ? 'text-forge-dim border-forge-very-dark' :
-                    (user.tier || 'free') === 'enterprise' ? 'text-forge-neon border-forge-neon animate-pulse' :
-                    (user.tier || 'free') === 'pro' ? 'text-cyan-400 border-cyan-800' :
-                    (user.tier || 'free') === 'basic' ? 'text-amber-400 border-amber-800' : 'text-forge-dim border-forge-dark'
-                  }`}>
-                    {user ? (user.tier || 'free').toUpperCase() : 'FREE (UNAUTHENTICATED)'}
-                  </span>
-                </div>
-                {!user ? (
-                  <p className="text-[9px] text-forge-red italic">Sign in or register in the ACCOUNT tab to configure cloud subscription services.</p>
-                ) : (
-                  <p className="text-[9px] text-forge-dim">Your session token is active. Checkout uses Stripe globally and Razorpay subscriptions in India.</p>
-                )}
-              </div>
-
-              {/* Offline license-key activation (Ed25519-signed, verified
-                  server-side against an embedded public key). */}
-              <div className="border border-forge-dark bg-black bg-opacity-30 p-2.5 rounded flex flex-col gap-1.5 mt-1">
-                <span className="font-bold text-forge-text uppercase text-[10px]">License Key</span>
-                <p className="text-[9px] text-forge-dim">Bought a plan externally? Paste the signed license key from your email to activate your tier. Expired or invalid keys are rejected.</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={licenseKeyInput}
-                    onChange={(e) => setLicenseKeyInput(e.target.value)}
-                    placeholder="<payload>.<signature>"
-                    className="flex-1 forge-input text-[11px] px-2 py-1 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleRedeemLicense}
-                    disabled={!licenseKeyInput.trim() || isRedeemingLicense}
-                    className="forge-btn text-[10px] px-3 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {isRedeemingLicense ? 'CHECKING...' : 'REDEEM'}
-                  </button>
-                </div>
-              </div>
-
-              {/* Recurring subscription tiers. */}
-              <div className="flex flex-col gap-2.5 mt-1">
-                {[
-                  { id: 'solo', name: 'SOLO', price: `$${TIER_PRICES.solo}/mo`, color: 'text-amber-400', features: ['Execution tracing', 'AI acceptance criteria', 'Basic drift detection', 'PLAN → CREW direct sync'] },
-                  { id: 'solo_plus', name: 'SOLO PLUS', price: `$${TIER_PRICES.solo_plus}/mo`, color: 'text-blue-400', features: ['Everything in Solo', 'Full drift (Diverged + confidence)', 'Trace history', 'Cross-device & mobile PLAN sync'] },
-                  { id: 'founder', name: 'FOUNDER', price: `$${TIER_PRICES.founder}/mo`, color: 'text-indigo-400', features: ['Everything in Solo Plus', 'Multi-repo plan scope', 'Plan item dependencies', 'Unlimited What’s Left + MD export', 'Agent specialization'] },
-                  { id: 'agency', name: 'AGENCY / TEAM', price: 'Preview', color: 'text-emerald-400', features: ['Everything in Founder', 'Shared plan editing', 'Team trace visibility', 'Client handoff packs', 'Branded docs + RBAC preview'] },
-                ].map(tier => {
-                  const current = (user?.tier || 'free') === tier.id;
-                  const buyable = (BUYABLE_TIER_IDS as string[]).includes(tier.id);
-                  return (
-                    <div key={tier.id} className="border border-forge-dark bg-black bg-opacity-30 p-2.5 rounded flex flex-col gap-1.5">
-                      <div className="flex justify-between items-center">
-                        <span className={`font-bold ${tier.color}`}>{tier.name} ({tier.price})</span>
-                        {current && <span className="text-[9px] text-forge-neon font-bold">[YOUR PLAN]</span>}
-                      </div>
-                      <ul className="text-[9px] text-forge-text space-y-0.5 pl-3 list-disc">
-                        {tier.features.map(f => <li key={f}>{f}</li>)}
-                      </ul>
-                      {!current && buyable && (
-                        <button
-                          type="button"
-                          onClick={() => onSubscribe(tier.id)}
-                          className="forge-btn text-[9px] py-1 font-bold mt-1"
-                        >
-                          UPGRADE TO {tier.name} &rarr;
-                        </button>
-                      )}
-                      {!current && !buyable && (
-                        <div className="text-[9px] text-forge-dim italic py-1 mt-1 text-center border border-forge-very-dark rounded">
-                          Preview &middot; join waitlist
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Demote option */}
-                {user && (user.tier || 'free') !== 'free' && user.billingProvider !== 'license' && (
-                  <button
-                    type="button"
-                    onClick={() => onSubscribe('free')}
-                    className="text-[9px] text-forge-dim hover:text-red-400 font-mono transition-colors border border-forge-very-dark py-1 rounded cursor-pointer mt-1"
-                  >
-                    CANCEL SUBSCRIPTION (RETURN TO FREE TIER)
-                  </button>
-                )}
             </div>
           </div>
         )}
@@ -2296,6 +2000,15 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               <div className="flex justify-between">
                 <span>Live connections:</span>
                 <span className="text-forge-neon font-bold">{companionCount} connected</span>
+              </div>
+            </div>
+
+            <div className="border-t border-forge-dark pt-3 mt-3 flex flex-col gap-1.5 text-[9px] font-mono text-left">
+              <span className="text-forge-dim uppercase tracking-wider font-bold">Backend URL Configuration:</span>
+              <div className="bg-forge-very-dark border border-forge-dark rounded p-2 text-forge-dim flex flex-col gap-1">
+                <div><span className="text-forge-neon font-semibold">LAN:</span> http://&lt;desktop-ip&gt;:3001 (Local Wi-Fi)</div>
+                <div><span className="text-forge-neon font-semibold">Tailscale:</span> http://100.x.y.z:3001 (Zero-cost mesh VPN)</div>
+                <div><span className="text-forge-neon font-semibold">Cloudflare:</span> https://your-tunnel.domain.com</div>
               </div>
             </div>
 

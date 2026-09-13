@@ -18,7 +18,7 @@ test.describe('Desktop renderer — UX interactions', () => {
 
   async function selectTheme(page: import('@playwright/test').Page, theme: 'forge' | 'dark' | 'light') {
     await page.getByRole('button', { name: 'CONFIG', exact: true }).click();
-    await page.getByRole('button', { name: 'Account', exact: true }).click();
+    await page.getByRole('button', { name: 'Theme', exact: true }).click();
     await page.getByRole('button', { name: theme, exact: true }).click();
     await page.getByRole('button', { name: 'Save Settings', exact: true }).click();
   }
@@ -43,9 +43,9 @@ test.describe('Desktop renderer — UX interactions', () => {
       await configBtn.click();
       await page.waitForTimeout(300);
     }
-    // Check at least one config tab is visible (Security, Billing, Account, etc.)
+    // Check at least one config tab is visible (Security, Theme, Directory, Syncs, etc.)
     const configTab = page.locator('[role="tab"], button').filter({
-      hasText: /security|billing|account|specialist|artifact/i
+      hasText: /security|theme|directory|syncs|agents|permissions/i
     }).first();
     if (await configTab.isVisible()) {
       await configTab.click();

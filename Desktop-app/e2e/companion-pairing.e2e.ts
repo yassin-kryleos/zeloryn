@@ -18,7 +18,9 @@ import { WebSocket } from 'ws';
  */
 
 const BACKEND_URL = 'http://localhost:3001';
-const WS_BASE = 'ws://localhost:3001';
+const WS_BASE = process.env.KRYLEOS_COMPANION_WS_BASE || 'ws://localhost:3002';
+const SESSION_SECRET = process.env.KRYLEOS_LOCAL_SESSION_SECRET || 'test-session-secret-for-playwright-32chars';
+const AUTH_HEADERS = { 'X-Kryleos-Session': SESSION_SECRET };
 
 function generateDeviceKeypair() {
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -57,7 +59,7 @@ function onceClose(ws: WebSocket, timeoutMs = 5000): Promise<{ code: number; rea
 test.describe('Desktop renderer — companion pairing', () => {
   test.beforeAll(async ({ request }) => {
     try {
-      const res = await request.get(`${BACKEND_URL}/api/companion/status`);
+      const res = await request.get(`${BACKEND_URL}/api/companion/status`, { headers: AUTH_HEADERS });
       if (!res.ok()) {
         test.skip();
       }
@@ -77,14 +79,14 @@ test.describe('Desktop renderer — companion pairing', () => {
       expect(/\d{6}/.test(text ?? '')).toBe(true);
     } else {
       // Fallback: fetch code from API and verify it's a 6-digit number
-      const res = await page.request.get(`${BACKEND_URL}/api/companion/status`);
+      const res = await page.request.get(`${BACKEND_URL}/api/companion/status`, { headers: AUTH_HEADERS });
       const json = await res.json();
       expect(/^\d{6}$/.test(String(json.code))).toBe(true);
     }
   });
 
   test('device pairing lifecycle: code+secret -> registration -> token reconnect -> revoke', async ({ request }) => {
-    const statusRes = await request.get(`${BACKEND_URL}/api/companion/status`);
+    const statusRes = await request.get(`${BACKEND_URL}/api/companion/status`, { headers: AUTH_HEADERS });
     const { code, pairingSecret, connectedCount } = await statusRes.json();
 
     // The 6-digit code remains the human-readable fallback credential.
@@ -132,12 +134,12 @@ test.describe('Desktop renderer — companion pairing', () => {
       reconnectWs.close();
 
       // 3. The device shows up in the paired-devices list.
-      const devicesRes = await request.get(`${BACKEND_URL}/api/companion/devices`);
+      const devicesRes = await request.get(`${BACKEND_URL}/api/companion/devices`, { headers: AUTH_HEADERS });
       const { devices } = await devicesRes.json();
       expect(devices.some((d: any) => d.deviceId === deviceId)).toBe(true);
 
       // 4. Revoke the device.
-      const revokeRes = await request.delete(`${BACKEND_URL}/api/companion/devices/${deviceId}`);
+      const revokeRes = await request.delete(`${BACKEND_URL}/api/companion/devices/${deviceId}`, { headers: AUTH_HEADERS });
       expect(revokeRes.ok()).toBe(true);
 
       // 5. Reconnecting with the now-revoked token fails.
@@ -150,7 +152,7 @@ test.describe('Desktop renderer — companion pairing', () => {
       expect(closeInfo.code).toBe(4001);
     } finally {
       // Always clean up the registry entry, even if an assertion above failed.
-      await request.delete(`${BACKEND_URL}/api/companion/devices/${deviceId}`).catch(() => {});
+      await request.delete(`${BACKEND_URL}/api/companion/devices/${deviceId}`, { headers: AUTH_HEADERS }).catch(() => {});
     }
   });
 });

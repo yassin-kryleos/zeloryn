@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import {
   Terminal, Sparkles, Key, FileText, Database, ShieldAlert, ShieldCheck,
   Download, Laptop, RefreshCw, Smartphone, Mic, MicOff,
-  Gem, Check, X, Zap, Building2, Users,
-  LogIn, LogOut, User, CreditCard, Lock, ExternalLink
+  Gem, Check, Zap, Building2, Users,
+  LogIn, LogOut, User, Lock, ExternalLink
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
-import { TIER_LABELS, TIER_PRICES, type TierId } from './pricing.generated';
 import { redactSensitiveData } from './shared/redact';
 
 interface Message {
@@ -16,7 +15,6 @@ interface Message {
 
 type ResponseMode = 'balanced' | 'concise' | 'critical' | 'brutal_audit';
 type FeatureStatus = 'production' | 'preview' | 'simulator' | 'mock' | 'planned';
-type UserTier = Exclude<TierId, 'agency'>;
 type ActiveTab = 'marketing' | 'pricing' | 'planning' | 'chat' | 'downloads' | 'settings';
 type BackendLog = { sender?: string; message?: string };
 type ToastKind = 'success' | 'error' | 'info';
@@ -40,8 +38,6 @@ function FeatureBadge({ status, label }: { status: FeatureStatus; label?: string
   );
 }
 
-const USER_TIERS: UserTier[] = ['free', 'solo', 'solo_plus', 'founder'];
-
 function readStoredUser(): AuthUser | null {
   try {
     const raw = localStorage.getItem('web_auth_user');
@@ -53,47 +49,6 @@ function readStoredUser(): AuthUser | null {
   }
 }
 const APP_TABS: ActiveTab[] = ['marketing', 'pricing', 'planning', 'chat', 'downloads', 'settings'];
-
-interface PricingRow {
-  label: string;
-  group?: boolean;
-  status?: FeatureStatus;
-  values: Record<UserTier, boolean | string>;
-}
-
-const PRICING_MATRIX: PricingRow[] = [
-  { label: 'Pricing', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Monthly price', values: { free: `$${TIER_PRICES.free}`, solo: `$${TIER_PRICES.solo}`, solo_plus: `$${TIER_PRICES.solo_plus}`, founder: `$${TIER_PRICES.founder}` } },
-  { label: 'Paired devices', values: { free: '1', solo: '3', solo_plus: '10', founder: 'Unlimited' } },
-  { label: 'Support', values: { free: 'Community', solo: 'Email', solo_plus: 'Priority', founder: 'Dedicated + SLA' } },
-
-  { label: 'Core (local-first)', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Local agent workspace', values: { free: true, solo: true, solo_plus: true, founder: true } },
-  { label: 'BYOK model access', values: { free: true, solo: true, solo_plus: true, founder: true } },
-  { label: 'Zero-egress execution', values: { free: true, solo: true, solo_plus: true, founder: true } },
-  { label: 'Voice scoping & planning', values: { free: true, solo: true, solo_plus: true, founder: true } },
-
-  { label: 'Sync & backup', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Settings cloud sync', status: 'preview', values: { free: false, solo: true, solo_plus: true, founder: true } },
-  { label: 'Automatic cloud backups', status: 'preview', values: { free: false, solo: true, solo_plus: true, founder: true } },
-
-  { label: 'Remote compute', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Remote containers', status: 'simulator', values: { free: false, solo: false, solo_plus: true, founder: true } },
-  { label: 'Cloud sandbox builds', status: 'simulator', values: { free: false, solo: false, solo_plus: true, founder: true } },
-  { label: 'Semantic cache query', status: 'preview', values: { free: false, solo: false, solo_plus: true, founder: true } },
-  { label: 'Self-healing rollback', status: 'preview', values: { free: false, solo: false, solo_plus: true, founder: true } },
-
-  { label: 'Organization', group: true, values: { free: '', solo: '', solo_plus: '', founder: '' } },
-  { label: 'Team workspaces', status: 'preview', values: { free: false, solo: false, solo_plus: false, founder: true } },
-  { label: 'Audit log & RBAC', status: 'simulator', values: { free: false, solo: false, solo_plus: false, founder: true } },
-  { label: 'WebRTC co-coding rooms', status: 'preview', values: { free: false, solo: false, solo_plus: false, founder: true } },
-  { label: 'SSO / SAML', status: 'planned', values: { free: false, solo: false, solo_plus: false, founder: true } },
-];
-
-function readStoredTier(): UserTier {
-  const storedTier = localStorage.getItem('web_user_tier');
-  return USER_TIERS.includes(storedTier as UserTier) ? (storedTier as UserTier) : 'free';
-}
 
 interface SimPlanFile {
   action: 'NEW' | 'MODIFY';
@@ -349,11 +304,7 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
-  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isNavOpen, setIsNavOpen] = useState(false);
-
-  // Checkout (Stripe / Razorpay redirect) flow
-  const [pendingTier, setPendingTier] = useState<UserTier | null>(null);
 
   // Settings state (Stored locally in localStorage)
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('web_api_key') || '');
@@ -369,12 +320,7 @@ export default function App() {
   const [piiFilterEnabled, setPiiFilterEnabled] = useState(() => localStorage.getItem('web_pii_filter_enabled') === 'true');
   const [telemetry, setTelemetry] = useState({ bytesSent: 12450, bytesReceived: 38920, compressionSavingsRatio: 0.68 });
 
-  // Billing status (Simulated local user)
-  const [userTier, setUserTier] = useState<UserTier>(readStoredTier);
-
-  const [showSyncOverlay, setShowSyncOverlay] = useState(false);
   const [collabActive, setCollabActive] = useState(false);
-  const [showCollabOverlay, setShowCollabOverlay] = useState(false);
 
   // Semantic Cache state
   const [semanticQuery, setSemanticQuery] = useState('');
@@ -385,10 +331,6 @@ export default function App() {
   // RBAC state
   const [rbacRole, setRbacRole] = useState<'admin' | 'developer'>('admin');
   const [rbacBlockedPrefixes, setRbacBlockedPrefixes] = useState('npm publish, docker push, terraform, aws');
-
-  // Lock overlays for new panels
-  const [showSemanticLock, setShowSemanticLock] = useState(false);
-  const [showRbacLock, setShowRbacLock] = useState(false);
 
   // Chat/Sandbox States
   const [chatMessages, setChatMessages] = useState<Message[]>([
@@ -408,7 +350,6 @@ export default function App() {
     `# Implementation Plan: Remote Scoping Draft\n\n- [ ] Define remote database model\n- [ ] Implement mobile authorization socket hooks\n- [ ] Configure local storage wrappers`
   );
   const [isPlanEditing, setIsPlanEditing] = useState(false);
-  const [showSyncLockModal, setShowSyncLockModal] = useState(false);
   const [syncConflict, setSyncConflict] = useState(false);
 
   const [pairingCode, setPairingCode] = useState(() => localStorage.getItem('web_pairing_code') || '');
@@ -534,10 +475,6 @@ export default function App() {
   }, [connectCompanion]);
 
   useEffect(() => {
-    localStorage.setItem('web_user_tier', userTier);
-  }, [userTier]);
-
-  useEffect(() => {
     if (authUser) localStorage.setItem('web_auth_user', JSON.stringify(authUser));
     else localStorage.removeItem('web_auth_user');
   }, [authUser]);
@@ -552,11 +489,6 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       setShowImportModal(false);
-      setShowSyncLockModal(false);
-      setShowSyncOverlay(false);
-      setShowCollabOverlay(false);
-      setShowSemanticLock(false);
-      setShowRbacLock(false);
       setShowAuthModal(false);
     };
     window.addEventListener('keydown', onKey);
@@ -766,11 +698,7 @@ export default function App() {
   }, [companionStatus]);
 
   const handleImportRequest = () => {
-    if (userTier === 'free') {
-      setShowSyncLockModal(true);
-    } else {
-      setShowImportModal(true);
-    }
+    setShowImportModal(true);
   };
 
   const handleImportClean = () => {
@@ -786,7 +714,7 @@ export default function App() {
     setPlanDraft(conflictedText);
   };
 
-  // --- Authentication (mock) ---
+  // --- Authentication (mock / local session) ---
   const openAuth = (mode: AuthMode) => {
     setAuthMode(mode);
     setAuthError('');
@@ -795,40 +723,19 @@ export default function App() {
 
   const apiBase = () => backendUrl.replace(/\/$/, '');
 
-  // Call the desktop sync API. Throws a TypeError on network/unreachable
-  // (caught by callers to trigger local fallback), or an Error on a 4xx.
-  const backendAuthRequest = async (mode: AuthMode, email: string, password: string): Promise<{ email: string; tier: string; token: string }> => {
-    const res = await fetch(`${apiBase()}/api/auth/${mode === 'signup' ? 'register' : 'login'}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || (mode === 'signup' ? 'Could not create account.' : 'Invalid email or password.'));
-    }
-    return data.user;
-  };
-
-  const finishAuth = (name: string, email: string, synced: boolean, token: string | null) => {
+  const finishAuth = (name: string, email: string, synced: boolean, token?: string | null) => {
     setAuthUser({ name, email });
+    if (token) setAuthToken(token);
     setShowAuthModal(false);
     setAuthError('');
     setAuthPassword('');
     setAuthName('');
     const verb = authMode === 'signup' ? 'Account created' : 'Signed in';
-    pushToast(`${verb} — welcome, ${name}.${synced ? ' Account synced to your desktop workspace.' : ' (local session — desktop offline)'}`, 'success');
-    if (pendingTier) {
-      const tier = pendingTier;
-      setPendingTier(null);
-      // authToken state may not have committed yet — pass the fresh token directly.
-      handleSubscribe(tier, token);
-    }
+    pushToast(`${verb} — welcome, ${name}.${synced ? ' Account synced to your desktop workspace.' : ' (local session)'}`, 'success');
   };
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isAuthSubmitting) return;
     const email = authEmail.trim();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
       setAuthError('Enter a valid email address.');
@@ -844,25 +751,7 @@ export default function App() {
     }
     const name = authMode === 'signup' ? authName.trim() : email.split('@')[0];
     setAuthError('');
-    setIsAuthSubmitting(true);
-    try {
-      const user = await backendAuthRequest(authMode, email, authPassword);
-      setAuthToken(user.token);
-      setBackendStatus('online');
-      if ((USER_TIERS as string[]).includes(user.tier)) setUserTier(user.tier as UserTier);
-      finishAuth(name, user.email, true, user.token);
-    } catch (err) {
-      // Network/unreachable → fall back to a local-only demo session.
-      if (err instanceof TypeError) {
-        setAuthToken(null);
-        finishAuth(name, email, false, null);
-        return;
-      }
-      // 4xx (bad credentials / duplicate account) → surface the message.
-      setAuthError(err instanceof Error ? err.message : 'Authentication failed.');
-    } finally {
-      setIsAuthSubmitting(false);
-    }
+    finishAuth(name, email, false, null);
   };
 
   const handleLogout = () => {
@@ -871,149 +760,8 @@ export default function App() {
     pushToast('Signed out.', 'info');
   };
 
-  // --- Plan selection / purchase ---
-  const requestPlan = (tier: UserTier) => {
-    if (tier === userTier) return;
-    if (tier === 'free') {
-      if (authToken) {
-        fetch(`${apiBase()}/api/billing/cancel-subscription`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${authToken}` },
-        }).then(async res => {
-          const data = await res.json().catch(() => ({}));
-          if (res.ok) pushToast('Cancellation scheduled for the end of the billing cycle.', 'success');
-          else pushToast(data.error || 'Could not cancel subscription.', 'error');
-        }).catch(() => pushToast('Could not reach billing service.', 'error'));
-      } else {
-        pushToast('Sign in to manage your subscription.', 'info');
-      }
-      return;
-    }
-    if (!authUser) {
-      setPendingTier(tier);
-      pushToast('Sign in to purchase a plan.', 'info');
-      openAuth('login');
-      return;
-    }
-    handleSubscribe(tier);
-  };
-
-  interface RazorpayCheckoutOptions {
-    key: string;
-    subscription_id: string;
-    name: string;
-    description: string;
-    prefill?: { email?: string };
-    handler?: () => void;
-    modal?: { ondismiss?: () => void };
-  }
-  interface RazorpayCheckoutInstance {
-    open: () => void;
-  }
-  type RazorpayWindow = Window & {
-    Razorpay?: new (options: RazorpayCheckoutOptions) => RazorpayCheckoutInstance;
-  };
-  const razorpayWindow = window as unknown as RazorpayWindow;
-
-  // Region-based payment routing: India-locale users pay via Razorpay (INR),
-  // everyone else via Stripe (USD). Defaults to Stripe if locale is undetermined.
-  const isIndianLocale = (): boolean => {
-    try {
-      const locale = Intl.NumberFormat().resolvedOptions().locale;
-      return locale === 'en-IN' || locale === 'hi-IN' || locale.toLowerCase().endsWith('-in');
-    } catch {
-      return false;
-    }
-  };
-
-  const loadRazorpayCheckoutScript = (): Promise<boolean> => {
-    if (razorpayWindow.Razorpay) return Promise.resolve(true);
-    return new Promise(resolve => {
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.async = true;
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
-  const handleSubscribe = async (tier: UserTier, tokenOverride?: string | null) => {
-    const token = tokenOverride ?? authToken;
-    if (!token) {
-      pushToast('Connect to your synced desktop account to upgrade.', 'info');
-      return;
-    }
-    if (isIndianLocale()) {
-      return handleSubscribeRazorpay(tier, token);
-    }
-    try {
-      const res = await fetch(`${apiBase()}/api/billing/create-checkout-session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ tier }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success && data.url) {
-        setBackendStatus('online');
-        window.open(data.url, '_blank');
-        pushToast(`Redirecting to Stripe checkout for the ${TIER_LABELS[tier]} plan…`, 'info');
-      } else {
-        pushToast(`Upgrade failed: ${data.error || 'No checkout URL returned'}`, 'error');
-      }
-    } catch (err) {
-      pushToast(`Upgrade error: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    }
-  };
-
-  const handleSubscribeRazorpay = async (tier: UserTier, tokenOverride?: string | null) => {
-    const token = tokenOverride ?? authToken;
-    if (!token) return;
-    try {
-      const res = await fetch(`${apiBase()}/api/billing/razorpay/create-subscription`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ tier }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
-        pushToast(`Upgrade failed: ${data.error || 'Could not create Razorpay subscription'}`, 'error');
-        return;
-      }
-      setBackendStatus('online');
-
-      const loaded = await loadRazorpayCheckoutScript();
-      if (!loaded || !razorpayWindow.Razorpay) {
-        pushToast('Could not load Razorpay checkout. Check your connection and try again.', 'error');
-        return;
-      }
-
-      const checkout = new razorpayWindow.Razorpay({
-        key: data.keyId,
-        subscription_id: data.subscriptionId,
-        name: 'Kryleos Forge',
-        description: `Upgrade to ${TIER_LABELS[tier]} plan`,
-        prefill: { email: authUser?.email },
-        handler: () => {
-          pushToast(`Payment received — ${TIER_LABELS[tier]} plan will activate shortly.`, 'success');
-        },
-        modal: {
-          ondismiss: () => pushToast('Checkout closed.', 'info'),
-        },
-      });
-      checkout.open();
-    } catch (err) {
-      pushToast(`Upgrade error: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    }
-  };
-
   const handleToggleSync = (checked: boolean) => {
-    if (userTier === 'free') {
-      setShowSyncOverlay(true);
-      setIsSyncEnabled(false);
-    } else {
-      setIsSyncEnabled(checked);
-    }
+    setIsSyncEnabled(checked);
   };
 
   // Prevent unused variables compilation errors
@@ -1046,14 +794,14 @@ export default function App() {
                 <button
                   onClick={() => setActiveTab('settings')}
                   className="flex items-center gap-2 px-3 py-1.5 border border-[var(--line)] rounded text-[10px] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-all max-w-[180px]"
-                  title={`Signed in as ${authUser.email} · ${TIER_LABELS[userTier]} plan`}
+                  title={`Signed in as ${authUser.email} · Free & Open Source`}
                 >
                   <span className="w-5 h-5 rounded-full bg-[var(--surface-active)] border border-[var(--accent)] flex items-center justify-center shrink-0">
                     <User size={11} className="text-[var(--accent)]" />
                   </span>
                   <span className="flex flex-col items-start leading-tight min-w-0">
                     <span className="text-[var(--text-strong)] font-bold truncate max-w-[110px]">{authUser.name}</span>
-                    <span className="text-[8px] uppercase tracking-wider text-[var(--accent)]">{TIER_LABELS[userTier]} plan</span>
+                    <span className="text-[8px] uppercase tracking-wider text-[var(--accent)]">Free &amp; Open Source</span>
                   </span>
                 </button>
                 <button
@@ -1100,7 +848,7 @@ export default function App() {
               onClick={() => { setActiveTab(tab); setIsNavOpen(false); }}
               aria-label={
                 tab === 'marketing' ? 'Overview tab' :
-                tab === 'pricing' ? 'Pricing tab' :
+                tab === 'pricing' ? 'Free & BYOK tab' :
                 tab === 'planning' ? 'Planning tab' :
                 tab === 'chat' ? 'Tutorial tab' :
                 tab === 'downloads' ? 'Downloads tab' :
@@ -1116,7 +864,7 @@ export default function App() {
             >
               {
                 tab === 'marketing' ? '✨ Overview' :
-                tab === 'pricing' ? '💎 Pricing' :
+                tab === 'pricing' ? '💎 Free / BYOK' :
                 tab === 'planning' ? '📋 Planning' :
                 tab === 'chat' ? '📖 Tutorial' :
                 tab === 'downloads' ? '📥 Downloads' :
@@ -1622,180 +1370,88 @@ export default function App() {
               </div>
             </div>
 
-            {/* Pricing CTA — full details live on the dedicated Pricing page */}
+            {/* Open Source & BYOK CTA */}
             <div className="glass-panel p-8 rounded space-y-5 text-center animate-fadeIn border border-[var(--accent-line)] bg-[var(--surface-deep)]">
               <h2 className="text-xl font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
-                <Gem size={20} className="text-[var(--accent)]" /> Plans for Every Workflow
+                <Gem size={20} className="text-[var(--accent)]" /> 100% Free &amp; Open Source
               </h2>
               <p className="text-[13px] text-[var(--accent-dim)] max-w-2xl mx-auto leading-relaxed">
-                From a free local-first workspace to the Founder plan for power users — compare every tier, feature by feature, on the dedicated pricing page.
+                Kryleos Forge is free, local-first software. No subscription, no paywalls, no gated tiers. Bring your own LLM API keys or run completely offline with local Ollama models.
               </p>
               <div className="flex flex-wrap justify-center items-center gap-2 text-[11px] text-[var(--accent-dim)]">
-                <span className="font-bold text-[var(--text-strong)]">Free</span><span className="opacity-50">·</span>
-                <span className="font-bold text-[var(--warn)]">Solo $5</span><span className="opacity-50">·</span>
-                <span className="font-bold text-[var(--info)]">Solo Plus $9</span><span className="opacity-50">·</span>
-                <span className="font-bold text-[var(--accent)]">Founder $15</span>
+                <span className="font-bold text-[var(--text-strong)]">Zero Subscription</span><span className="opacity-50">·</span>
+                <span className="font-bold text-[var(--accent)]">BYOK Model</span><span className="opacity-50">·</span>
+                <span className="font-bold text-[var(--info)]">Offline Ollama</span><span className="opacity-50">·</span>
+                <span className="font-bold text-[var(--text-strong)]">All Features Unlocked</span>
               </div>
               <div className="pt-2">
                 <button onClick={() => setActiveTab('pricing')} className="forge-btn forge-btn-primary px-6 py-2.5 font-bold uppercase rounded inline-flex items-center gap-2">
-                  <Gem size={14} /> Explore Pricing & Plans
+                  <Gem size={14} /> Learn About Free &amp; BYOK
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* PRICING TAB */}
+        {/* FREE & OPEN SOURCE BYOK TAB */}
         {activeTab === 'pricing' && (
           <div className="flex-1 overflow-y-auto p-8 space-y-10 max-w-6xl mx-auto">
             {/* Header */}
             <div className="text-center space-y-4 py-4 animate-fadeIn">
               <h1 className="text-4xl font-extrabold text-[var(--text-strong)] tracking-tight uppercase flex items-center justify-center gap-3">
-                <Gem size={30} className="text-[var(--accent)]" /> Pricing & Plans
+                <Gem size={30} className="text-[var(--accent)]" /> Free &amp; Open Source (BYOK)
               </h1>
               <p className="text-sm text-[var(--accent-dim)] max-w-2xl mx-auto leading-relaxed">
-                Kryleos Forge is local-first and free to start. Upgrade only when you need cross-device sync, remote compute, or organization-grade governance. Every paid tier includes all features of the tiers below it.
+                Kryleos Forge is 100% free and open source. There are no paid tiers, no feature paywalls, and no subscription fees. You supply your own LLM API keys or run locally via Ollama.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] text-[var(--accent-dim)]">
-                <span className="text-[var(--text-strong)] font-bold uppercase">Feature Status Guide:</span>
-                <FeatureBadge status="production" />
-                <FeatureBadge status="preview" />
-                <FeatureBadge status="simulator" />
-                <FeatureBadge status="mock" label="Mock Billing" />
+                <span className="text-[var(--text-strong)] font-bold uppercase">Architecture:</span>
+                <FeatureBadge status="production" label="Local First" />
+                <FeatureBadge status="production" label="BYOK / Offline" />
+                <FeatureBadge status="production" label="All Features Unconditional" />
               </div>
             </div>
 
-            {/* Tier cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-fadeIn">
-              {/* Free */}
-              <div className={`pricing-card pricing-card-free ${userTier === 'free' ? 'pricing-card-active' : ''}`}>
+            {/* Core Pillars */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-fadeIn">
+              <div className="pricing-card pricing-card-free">
                 <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
-                  <span className="text-[10px] text-[var(--accent-dim)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Zap size={12} /> Free</span>
-                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$0</span>
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase">forever</span>
+                  <span className="text-[10px] text-[var(--accent)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Zap size={12} /> Local-First &amp; Zero Egress</span>
+                  <span className="text-2xl font-extrabold text-[var(--text-strong)] block">100% Private</span>
                 </div>
-                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for solo developers getting started with local-first, zero-egress AI planning.</p>
-                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1">
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Local agent workspace</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> BYOK model access (DeepSeek, Gemini, OpenAI, Ollama)</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Zero-egress local execution</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Voice scoping & planning</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> 1 paired device</li>
-                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Settings cloud sync</li>
-                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
+                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">Your source code, traces, and workspace history never leave your machine. No telemetry or cloud tracking.</p>
+                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1 pt-2">
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Full local multi-agent workspace</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Zero-egress execution mode</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Direct peer-to-peer device pairing</li>
                 </ul>
-                <button onClick={() => requestPlan('free')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'free' ? 'forge-btn-primary' : ''}`}>
-                  {userTier === 'free' ? '✓ Current Plan' : 'Get Started Free'}
-                </button>
               </div>
 
-              {/* Solo */}
-              <div className={`pricing-card pricing-card-solo ${userTier === 'solo' ? 'pricing-card-active' : ''}`}>
+              <div className="pricing-card pricing-card-free">
                 <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
-                  <span className="text-[10px] text-[var(--warn)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><RefreshCw size={12} /> Solo</span>
-                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$5<span className="text-[12px] font-normal text-[var(--warn)]">/mo</span></span>
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase">billed monthly</span>
+                  <span className="text-[10px] text-[var(--info)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Sparkles size={12} /> BYOK Flexibility</span>
+                  <span className="text-2xl font-extrabold text-[var(--text-strong)] block">Your Keys, Your Costs</span>
                 </div>
-                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for individuals who work across multiple machines and want their setup to follow them.</p>
-                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1">
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Free</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Settings cloud sync <FeatureBadge status="preview" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Automatic cloud backups <FeatureBadge status="preview" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Up to 3 paired devices</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Email support</li>
-                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Remote containers</li>
-                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
+                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">Pay only for the LLM tokens you consume directly to providers, or use Ollama for completely free offline inference.</p>
+                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1 pt-2">
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Gemini, OpenAI, Anthropic, OpenRouter</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Local Ollama (deepseek-r1, llama3, qwen)</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Encrypted credential storage</li>
                 </ul>
-                <button onClick={() => requestPlan('solo')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'solo' ? 'forge-btn-primary' : ''}`}>
-                  {userTier === 'solo' ? '✓ Current Plan' : 'Choose Solo'}
-                </button>
               </div>
 
-              {/* Solo Plus — highlighted */}
-              <div className={`pricing-card pricing-card-solo_plus relative ${userTier === 'solo_plus' ? 'pricing-card-active' : ''}`}>
-                <span className="absolute top-3 right-3 text-[9px] bg-[var(--info)] text-[#001018] px-2 py-0.5 rounded-full font-extrabold uppercase tracking-wider">Popular</span>
+              <div className="pricing-card pricing-card-free">
                 <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
-                  <span className="text-[10px] text-[var(--info)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Sparkles size={12} /> Solo Plus</span>
-                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$9<span className="text-[12px] font-normal text-[var(--info)]">/mo</span></span>
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase">billed monthly</span>
+                  <span className="text-[10px] text-[var(--warn)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Building2 size={12} /> Unlocked Power Tools</span>
+                  <span className="text-2xl font-extrabold text-[var(--text-strong)] block">No Gating</span>
                 </div>
-                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for power users and freelancers who need remote compute and self-healing safeguards.</p>
-                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1">
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Solo</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Remote containers <FeatureBadge status="simulator" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Cloud sandbox builds <FeatureBadge status="simulator" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Semantic cache query <FeatureBadge status="preview" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Self-healing rollback monitor <FeatureBadge status="preview" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Up to 10 paired devices · Priority support</li>
-                  <li className="flex items-start gap-1.5 opacity-45"><X size={13} className="shrink-0 mt-0.5" /> Organization RBAC</li>
+                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed">Every developer utility, autonomous recovery safeguard, and workflow feature is available to all users.</p>
+                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1 pt-2">
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Semantic code indexing &amp; cache</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Self-healing rollback monitoring</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Plan-to-crew sync &amp; what's left drift</li>
                 </ul>
-                <button onClick={() => requestPlan('solo_plus')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'solo_plus' ? 'forge-btn-primary' : ''}`}>
-                  {userTier === 'solo_plus' ? '✓ Current Plan' : 'Choose Solo Plus'}
-                </button>
               </div>
-
-              {/* Founder */}
-              <div className={`pricing-card pricing-card-founder ${userTier === 'founder' ? 'pricing-card-active' : ''}`}>
-                <div className="border-b border-[var(--line)] pb-3 text-center space-y-1">
-                  <span className="text-[10px] text-[var(--accent)] font-bold uppercase block tracking-wider flex items-center justify-center gap-1.5"><Building2 size={12} /> Founder</span>
-                  <span className="text-3xl font-extrabold text-[var(--text-strong)] block">$15<span className="text-[12px] font-normal text-[var(--accent)]">/mo</span></span>
-                  <span className="text-[10px] text-[var(--text-muted)] uppercase">billed monthly</span>
-                </div>
-                <p className="text-[11px] text-[var(--accent-dim)] leading-relaxed min-h-[48px]">Best for teams and organizations that require governance, audit trails, and collaboration.</p>
-                <ul className="text-[11px] text-[var(--accent-soft)] space-y-2 flex-1 font-medium">
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Everything in Solo Plus</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Org team workspaces <FeatureBadge status="preview" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Audit log & RBAC <FeatureBadge status="simulator" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> WebRTC co-coding rooms <FeatureBadge status="preview" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> SSO / SAML <FeatureBadge status="planned" /></li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-[var(--accent)] shrink-0 mt-0.5" /> Unlimited devices · Dedicated support + SLA</li>
-                </ul>
-                <button onClick={() => requestPlan('founder')} className={`forge-btn w-full py-2 font-bold rounded ${userTier === 'founder' ? 'forge-btn-primary' : ''}`}>
-                  {userTier === 'founder' ? '✓ Current Plan' : 'Choose Founder'}
-                </button>
-              </div>
-            </div>
-
-            {/* Detailed comparison matrix */}
-            <div className="space-y-4 pt-4 animate-fadeIn">
-              <h2 className="text-xl text-center font-bold text-[var(--text-strong)] uppercase tracking-wider flex items-center justify-center gap-2">
-                <FileText size={18} className="text-[var(--accent)]" /> Full Feature Comparison
-              </h2>
-              <div className="glass-panel rounded overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[640px]">
-                  <thead>
-                    <tr className="border-b border-[var(--line-strong)]">
-                      <th scope="col" className="p-3 text-[11px] uppercase font-bold text-[var(--text-strong)] tracking-wider">Capability</th>
-                      {(USER_TIERS.map(id => [id, TIER_LABELS[id]]) as Array<[UserTier,string]>).map(([key, label]) => (
-                        <th key={key} scope="col" className={`p-3 text-center text-[11px] uppercase font-bold tracking-wider ${userTier === key ? 'text-[var(--accent)]' : 'text-[var(--accent-dim)]'}`}>
-                          {label}{userTier === key && <span className="block text-[8px] text-[var(--accent)] font-extrabold">● Current</span>}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="text-[11px]">
-                    {PRICING_MATRIX.map((row, i) => (
-                      <tr key={i} className={`border-b border-[var(--line-faint)] ${row.group ? 'bg-[var(--surface-accent)]' : ''}`}>
-                        <th scope="row" className={`p-3 font-medium text-left ${row.group ? 'text-[var(--accent)] uppercase text-[10px] font-bold tracking-wider' : 'text-[var(--accent-soft)]'}`}>
-                          {row.label}{row.status && <FeatureBadge status={row.status} />}
-                        </th>
-                        {USER_TIERS.map(tier => (
-                          <td key={tier} className={`p-3 text-center ${userTier === tier ? 'bg-[var(--surface-active)]' : ''}`}>
-                            {row.group ? '' : typeof row.values[tier] === 'boolean'
-                              ? (row.values[tier]
-                                  ? <Check size={15} className="text-[var(--accent)] inline" aria-label="Included" />
-                                  : <X size={15} className="text-[var(--text-faint)] inline" aria-label="Not included" />)
-                              : <span className="text-[var(--accent-soft)] font-semibold">{row.values[tier]}</span>}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-[10px] text-[var(--text-muted)] text-center">
-                Billing is a local <FeatureBadge status="mock" label="Mock" /> simulation in this companion build — selecting a plan changes the active demo tier and unlocks the corresponding gated panels in Settings. No payment is processed.
-              </p>
             </div>
 
             {/* FAQ */}
@@ -1805,10 +1461,10 @@ export default function App() {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {[
-                  ['Is my code ever uploaded?', 'No. On every tier, source code and system instructions stay on your machine. Zero-egress execution routes through local Ollama models; cloud features only sync settings and plan metadata you opt into.'],
-                  ['Can I bring my own API keys?', 'Yes — BYOK is available from the Free tier. Add DeepSeek, Gemini, or OpenAI keys in Settings, or run fully offline with Ollama.'],
-                  ['What counts as a paired device?', 'Any desktop or mobile companion linked to your workspace via a pairing code. Free includes 1, Solo 3, Solo Plus 10, and Founder is unlimited.'],
-                  ['Can I change or cancel anytime?', 'Plans are month-to-month. Switch tiers instantly here — downgrades take effect at the end of the current cycle.'],
+                  ['Is Kryleos Forge completely free?', 'Yes. Kryleos Forge is open source software. There are no subscriptions, no licenses, and no paid feature tiers.'],
+                  ['Where are my API keys stored?', 'API keys are stored locally on your machine in encrypted storage. They are never sent to any central server or third-party service.'],
+                  ['Is my code ever uploaded?', 'No. Source code, plans, and instructions stay entirely on your local machine. If you use Ollama, execution is 100% offline with zero egress.'],
+                  ['How does companion pairing work without a cloud subscription?', 'Direct WebSocket and WebRTC pairing link your mobile or web companion directly to your local desktop instance using local pairing codes without intermediate cloud servers.'],
                 ].map(([q, a]) => (
                   <div key={q} className="glass-panel p-5 rounded space-y-2">
                     <h3 className="text-[12px] font-bold text-[var(--text-strong)] uppercase tracking-wide">{q}</h3>
@@ -2461,65 +2117,31 @@ export default function App() {
                     <RefreshCw size={11} className="text-[var(--accent)]" />
                     <span>Enable Settings Cloud Sync</span>
                   </label>
-                  <span className="text-[10px] bg-[var(--line)] text-[var(--accent)] border border-[var(--accent)] px-1.5 rounded font-bold shrink-0">SOLO+</span>
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Syncs model settings and active project checklists across devices.</p>
-
-                {showSyncOverlay && (
-                  <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
-                    <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
-                      <ShieldAlert size={14} />
-                      <span>{`Sync locked: Upgrade to Solo Plan ($${TIER_PRICES.solo}/mo)`}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('solo'); setShowSyncOverlay(false); setIsSyncEnabled(true); }} className="text-[9px] bg-amber-800 text-white px-3 py-1 rounded font-bold hover:bg-amber-900 transition-all">UPGRADE</button>
-                      <button type="button" onClick={() => setShowSyncOverlay(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* WebRTC Collaboration Gated Sync */}
+              {/* WebRTC Collaboration Room */}
               <div className="border border-[var(--line)] bg-[var(--surface-deep)] p-4 rounded space-y-2 relative shadow-md">
                 <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     id="collab-chk"
                     checked={collabActive}
-                    onChange={e => {
-                      if (userTier !== 'founder') {
-                        setShowCollabOverlay(true);
-                      } else {
-                        setCollabActive(e.target.checked);
-                      }
-                    }}
+                    onChange={e => setCollabActive(e.target.checked)}
                     className="cursor-pointer"
                   />
                   <label htmlFor="collab-chk" className="text-[10px] uppercase font-bold text-[var(--text-strong)] flex items-center gap-1.5 cursor-pointer select-none">
                     <Laptop size={11} className="text-[var(--accent)]" />
                     <span>WebRTC Collaboration Room</span>
                   </label>
-                  <span className="text-[10px] bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] px-1.5 rounded font-extrabold shrink-0">FOUNDER</span>
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Preview real-time co-coding indicators, terminal stream status, and active agent pairing sessions.</p>
                 {collabActive && (
                   <div className="text-[10px] bg-[var(--surface-accent)] border border-[var(--accent)] p-2 rounded text-[var(--accent)] animate-pulse font-mono">
                     📡 COLLAB SESSION ACTIVE: Connected to signaling channel token room.
-                  </div>
-                )}
-
-                {showCollabOverlay && (
-                  <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
-                    <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
-                      <ShieldAlert size={14} />
-                      <span>{`Collab locked: Upgrade to Founder ($${TIER_PRICES.founder}/mo)`}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('founder'); setShowCollabOverlay(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
-                      <button type="button" onClick={() => setShowCollabOverlay(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
-                    </div>
                   </div>
                 )}
               </div>
@@ -2529,7 +2151,6 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <Database size={11} className="text-[var(--accent)]" />
                   <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">Semantic Cache Query</span>
-                  <span className="text-[10px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">SOLO PLUS+</span>
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Index and query workspace symbols, functions, and type definitions from a local semantic cache.</p>
@@ -2540,17 +2161,12 @@ export default function App() {
                     onChange={e => {
                       const q = e.target.value;
                       setSemanticQuery(q);
-                      if (userTier !== 'solo_plus' && userTier !== 'founder') {
-                        setShowSemanticLock(true);
-                        return;
-                      }
                       if (q.trim()) {
                         const mockAll = [
                           { symbol: 'handleSendChat', file: 'src/App.tsx', type: 'function' },
                           { symbol: 'Message', file: 'src/App.tsx', type: 'interface' },
                           { symbol: 'redactSensitiveData', file: 'src/App.tsx', type: 'function' },
                           { symbol: 'handleSaveSettings', file: 'src/App.tsx', type: 'function' },
-                          { symbol: 'UserTier', file: 'src/types.ts', type: 'type' },
                         ];
                         setSemanticResults(mockAll.filter(r => r.symbol.toLowerCase().includes(q.toLowerCase())));
                       } else {
@@ -2563,10 +2179,6 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (userTier !== 'solo_plus' && userTier !== 'founder') {
-                        setShowSemanticLock(true);
-                        return;
-                      }
                       setIsBuildingIndex(true);
                       setTimeout(() => {
                         setSemanticIndexCount(47);
@@ -2575,7 +2187,6 @@ export default function App() {
                           { symbol: 'Message', file: 'src/App.tsx', type: 'interface' },
                           { symbol: 'redactSensitiveData', file: 'src/App.tsx', type: 'function' },
                           { symbol: 'handleSaveSettings', file: 'src/App.tsx', type: 'function' },
-                          { symbol: 'UserTier', file: 'src/types.ts', type: 'type' },
                         ]);
                         setIsBuildingIndex(false);
                       }, 1500);
@@ -2598,19 +2209,6 @@ export default function App() {
                     ))}
                   </div>
                 )}
-
-                {showSemanticLock && (
-                  <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
-                    <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
-                      <ShieldAlert size={14} />
-                      <span>{`Semantic Cache locked: Upgrade to Solo Plus ($${TIER_PRICES.solo_plus}/mo)`}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('solo_plus'); setShowSemanticLock(false); }} className="text-[9px] bg-blue-900 border border-blue-500 text-blue-200 px-3 py-1 rounded font-bold hover:bg-blue-800 transition-all">UPGRADE</button>
-                      <button type="button" onClick={() => setShowSemanticLock(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Self-Healing Rollback Monitor */}
@@ -2618,36 +2216,27 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <RefreshCw size={11} className="text-[var(--accent)]" />
                   <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">Self-Healing Rollback Monitor</span>
-                  <span className="text-[10px] bg-blue-900 text-blue-200 border border-blue-500 px-1.5 rounded font-bold shrink-0">SOLO PLUS+</span>
                   <FeatureBadge status="preview" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Automatically reverts destructive file operations and monitors workspace integrity in real-time.</p>
-                {(userTier === 'solo_plus' || userTier === 'founder') ? (
-                  <>
-                    <div className="text-[10px] bg-[var(--surface-accent)] border border-[var(--accent)] p-2 rounded text-[var(--accent)] animate-pulse flex items-center gap-2">
-                      <ShieldCheck size={11} />
-                      <span>MONITORING ACTIVE</span>
-                    </div>
-                    <div className="border border-[var(--line)] bg-[var(--surface-overlay)] rounded p-3 space-y-2 max-h-32 overflow-y-auto text-[10px] font-mono">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[var(--warn)] font-bold">↩ REVERT</span>
-                        <span className="text-[var(--accent-dim)]">rm -rf ./dist — auto-rolled back 2m ago</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[var(--warn)] font-bold">↩ REVERT</span>
-                        <span className="text-[var(--accent-dim)]">truncate package.json — auto-rolled back 14m ago</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[var(--accent)] font-bold">✓ OK</span>
-                        <span className="text-[var(--accent-dim)]">git push origin main — approved 31m ago</span>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-[10px] text-[var(--text-muted)] border border-[var(--line)] bg-[var(--surface-overlay)] p-2.5 rounded">
-                    🔒 Upgrade to Solo Plus or Founder to enable self-healing rollback monitoring.
+                <div className="text-[10px] bg-[var(--surface-accent)] border border-[var(--accent)] p-2 rounded text-[var(--accent)] animate-pulse flex items-center gap-2">
+                  <ShieldCheck size={11} />
+                  <span>MONITORING ACTIVE</span>
+                </div>
+                <div className="border border-[var(--line)] bg-[var(--surface-overlay)] rounded p-3 space-y-2 max-h-32 overflow-y-auto text-[10px] font-mono">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--warn)] font-bold">↩ REVERT</span>
+                    <span className="text-[var(--accent-dim)]">rm -rf ./dist — auto-rolled back 2m ago</span>
                   </div>
-                )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--warn)] font-bold">↩ REVERT</span>
+                    <span className="text-[var(--accent-dim)]">truncate package.json — auto-rolled back 14m ago</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--accent)] font-bold">✓ OK</span>
+                    <span className="text-[var(--accent-dim)]">git push origin main — approved 31m ago</span>
+                  </div>
+                </div>
               </div>
 
               {/* RBAC Command Policies */}
@@ -2655,53 +2244,35 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <ShieldCheck size={11} className="text-[var(--accent)]" />
                   <span className="text-[10px] uppercase font-bold text-[var(--text-strong)]">RBAC Command Policy Simulator</span>
-                  <span className="text-[10px] bg-[var(--accent)] text-[var(--on-accent)] border border-[var(--accent)] px-1.5 rounded font-extrabold shrink-0">FOUNDER</span>
                   <FeatureBadge status="simulator" />
                 </div>
                 <p className="text-[10px] text-[var(--accent-dim)] leading-relaxed">Define role-based access controls and blocked command prefixes for organization workspaces.</p>
-                {userTier === 'founder' ? (
-                  <div className="space-y-3">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Active Role</label>
-                      <select
-                        value={rbacRole}
-                        onChange={e => setRbacRole(e.target.value as 'admin' | 'developer')}
-                        className="forge-input text-[12px] text-[var(--accent)] bg-[var(--surface-terminal)]"
-                      >
-                        <option value="admin">Admin</option>
-                        <option value="developer">Developer</option>
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Blocked Command Prefixes</label>
-                      <input
-                        type="text"
-                        value={rbacBlockedPrefixes}
-                        onChange={e => setRbacBlockedPrefixes(e.target.value)}
-                        placeholder="Comma-separated blocked prefixes..."
-                        className="forge-input text-[12px] text-[var(--accent)]"
-                      />
-                      <span className="text-[9px] text-[var(--accent-dim)]">Current role: <span className="text-[var(--text-strong)] font-bold uppercase">{rbacRole}</span> — {rbacRole === 'admin' ? 'Full access, blocked prefixes ignored' : `${rbacBlockedPrefixes.split(',').filter(Boolean).length} prefix(es) enforced`}</span>
-                    </div>
+                <div className="space-y-3">
+                  <div className="flex flex-col gap-1">
+                    <label htmlFor="rbac-active-role" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Active Role</label>
+                    <select
+                      id="rbac-active-role"
+                      aria-label="Active Role"
+                      value={rbacRole}
+                      onChange={e => setRbacRole(e.target.value as 'admin' | 'developer')}
+                      className="forge-input text-[12px] text-[var(--accent)] bg-[var(--surface-terminal)]"
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="developer">Developer</option>
+                    </select>
                   </div>
-                ) : (
-                  <div className="text-[10px] text-[var(--text-muted)] border border-[var(--line)] bg-[var(--surface-overlay)] p-2.5 rounded cursor-pointer" onClick={() => setShowRbacLock(true)}>
-                    RBAC simulator policies require Founder tier. Click to upgrade.
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Blocked Command Prefixes</label>
+                    <input
+                      type="text"
+                      value={rbacBlockedPrefixes}
+                      onChange={e => setRbacBlockedPrefixes(e.target.value)}
+                      placeholder="Comma-separated blocked prefixes..."
+                      className="forge-input text-[12px] text-[var(--accent)]"
+                    />
+                    <span className="text-[9px] text-[var(--accent-dim)]">Current role: <span className="text-[var(--text-strong)] font-bold uppercase">{rbacRole}</span> — {rbacRole === 'admin' ? 'Full access, blocked prefixes ignored' : `${rbacBlockedPrefixes.split(',').filter(Boolean).length} prefix(es) enforced`}</span>
                   </div>
-                )}
-
-                {showRbacLock && (
-                  <div className="absolute inset-0 bg-[var(--backdrop)] flex items-center justify-between p-4 border border-[var(--danger)] rounded z-30">
-                    <div className="flex items-center gap-2 text-[var(--danger)] text-[10px] font-bold">
-                      <ShieldAlert size={14} />
-                      <span>{`RBAC simulator locked: Upgrade to Founder ($${TIER_PRICES.founder}/mo)`}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => { setUserTier('founder'); setShowRbacLock(false); setCollabActive(true); }} className="text-[9px] bg-green-950 border border-green-500 text-green-200 px-3 py-1 rounded font-bold hover:bg-green-900 transition-all">UPGRADE</button>
-                      <button type="button" onClick={() => setShowRbacLock(false)} className="text-[9px] border border-[var(--line-strong)] text-[var(--text-muted)] px-3 py-1 rounded hover:text-[var(--text-strong)] transition-all">CANCEL</button>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
               <button type="submit" className="forge-btn forge-btn-primary w-full py-2.5 font-bold uppercase rounded mt-4">
@@ -2739,50 +2310,6 @@ export default function App() {
           <ExternalLink size={11} className="transition-transform group-hover:translate-x-0.5" />
         </a>
       </footer>
-
-      {/* Cloud Sync Lock modal dialog */}
-      {showSyncLockModal && (
-        <div className="fixed inset-0 bg-[var(--backdrop)] flex items-center justify-center p-4 backdrop-blur-sm z-50">
-          <div className="forge-panel w-full max-w-sm p-6 border border-amber-600 bg-[var(--surface-warn)] flex flex-col gap-4 text-center rounded shadow-2xl">
-            <ShieldAlert className="text-[var(--warn)] mx-auto" size={36} />
-            <div className="space-y-1.5">
-              <h3 className="text-[var(--text-strong)] font-bold text-sm uppercase">Cloud Sync Required</h3>
-              <p className="text-[11px] text-[var(--warn-soft)] leading-relaxed">
-                {renderMd('To sync your mobile planning session draft directly to your desktop workspace, you must enable **Cloud Sync** (Solo Tier or higher).')}
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 pt-2">
-              <button
-                onClick={() => {
-                  setUserTier('solo');
-                  setShowSyncLockModal(false);
-                  pushToast('Upgraded to Solo tier successfully.', 'success');
-                }}
-                className="bg-amber-700 hover:bg-amber-800 text-white text-[11px] font-bold py-2 rounded uppercase transition-all"
-              >
-                {`Upgrade to Solo ($${TIER_PRICES.solo}/mo)`}
-              </button>
-              <button
-                onClick={() => {
-                  setShowSyncLockModal(false);
-                  navigator.clipboard.writeText(planDraft)
-                    .then(() => pushToast('Implementation draft copied to clipboard.', 'success'))
-                    .catch(() => pushToast('Could not access clipboard. Copy the draft manually.', 'error'));
-                }}
-                className="border border-amber-600 text-[var(--warn)] hover:bg-[var(--surface-terminal)] text-[11px] py-2 rounded uppercase transition-all"
-              >
-                Copy Markdown manually
-              </button>
-              <button
-                onClick={() => setShowSyncLockModal(false)}
-                className="text-[10px] text-[var(--text-muted)] hover:text-[var(--text-strong)] uppercase font-bold"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Plan import options dialog (replaces native confirm) */}
       {showImportModal && (
@@ -2849,12 +2376,6 @@ export default function App() {
               </h3>
             </div>
 
-            {pendingTier && (
-              <div className="text-[10px] text-[var(--info)] bg-[var(--surface-accent)] border border-[var(--line)] rounded p-2 flex items-center gap-1.5">
-                <CreditCard size={12} /> Sign in to continue purchasing the <span className="font-bold uppercase">{TIER_LABELS[pendingTier]}</span> plan.
-              </div>
-            )}
-
             {authMode === 'signup' && (
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="auth-name" className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Full Name</label>
@@ -2874,8 +2395,8 @@ export default function App() {
 
             {authError && <div role="alert" className="text-[10px] text-[var(--danger)] font-bold">{authError}</div>}
 
-            <button type="submit" disabled={isAuthSubmitting} className="forge-btn forge-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed">
-              <LogIn size={14} /> {isAuthSubmitting ? 'Please wait…' : authMode === 'login' ? 'Sign In' : 'Create Account'}
+            <button type="submit" className="forge-btn forge-btn-primary w-full py-2.5 font-bold uppercase rounded flex items-center justify-center gap-2">
+              <LogIn size={14} /> {authMode === 'login' ? 'Sign In' : 'Create Account'}
             </button>
 
             <div className="text-[10px] text-[var(--accent-dim)] text-center">
