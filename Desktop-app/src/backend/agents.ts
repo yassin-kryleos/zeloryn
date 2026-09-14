@@ -605,7 +605,7 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
       }
 
       this.addLog('coordinator', action.agent || action.tool || 'user', 
-        `Action: ${action.type.toUpperCase()}${action.tool ? ` (${action.tool})` : ''}${action.agent ? ` -> ${action.agent}` : ''}\nMessage: ${action.message || ''}`, 
+        `Action: ${(action.type || 'respond').toUpperCase()}${action.tool ? ` (${action.tool})` : ''}${action.agent ? ` -> ${action.agent}` : ''}\nMessage: ${action.message || ''}`, 
         'action'
       );
 
@@ -696,8 +696,8 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
           depth--;
           if (depth === 0) {
             const candidate = text.slice(start, i + 1);
-            if (/"type"\s*:/.test(candidate)) return candidate;
-            break; // this object lacks "type"; try the next opening brace
+            if (/"type"\s*:/.test(candidate) || /"tool"\s*:/.test(candidate)) return candidate;
+            break; // this object lacks "type" or "tool"; try the next opening brace
           }
         }
       }
@@ -715,7 +715,7 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
       rawJson = tagMatch[1].trim();
     } else {
       const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-      if (fenceMatch && /"type"\s*:/.test(fenceMatch[1])) {
+      if (fenceMatch && (/"type"\s*:/.test(fenceMatch[1]) || /"tool"\s*:/.test(fenceMatch[1]))) {
         rawJson = fenceMatch[1].trim();
       } else {
         rawJson = this.extractBalancedJsonWithType(text);
@@ -725,12 +725,19 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
     if (!rawJson) return null;
 
     try {
-      return JSON.parse(rawJson) as AgentAction;
+      const parsed = JSON.parse(rawJson) as AgentAction;
+      if (!parsed.type && (parsed as any).tool) {
+        parsed.type = 'tool';
+      }
+      return parsed;
     } catch (err) {
       // Lenient regex parsing fallback for handling raw newlines generated inside JSON strings
       try {
+        const toolMatch = rawJson.match(/"tool"\s*:\s*"([^"]+)"/i);
+        const tool = toolMatch ? toolMatch[1] : undefined;
+
         const typeMatch = rawJson.match(/"type"\s*:\s*"([^"]+)"/i);
-        const type = typeMatch ? typeMatch[1] : 'respond';
+        const type = typeMatch ? typeMatch[1] : (tool ? 'tool' : 'respond');
         
         const messageMatch = rawJson.match(/"message"\s*:\s*"([\s\S]*?)"\s*}/) || 
                              rawJson.match(/"message"\s*:\s*"([\s\S]*?)"\s*(,\s*"|$)/) ||
@@ -741,9 +748,6 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
         const plan = planMatch 
           ? planMatch[1].split(',').map(s => s.trim().replace(/^"|"$/g, '')) 
           : [];
-
-        const toolMatch = rawJson.match(/"tool"\s*:\s*"([^"]+)"/i);
-        const tool = toolMatch ? toolMatch[1] : undefined;
 
         const argsMatch = rawJson.match(/"arguments"\s*:\s*({[\s\S]*?})/);
         let parsedArgs = {};

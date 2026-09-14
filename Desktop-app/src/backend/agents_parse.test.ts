@@ -38,6 +38,19 @@ describe('parseActionBlock — local-model tolerant parsing', () => {
     expect(a.message).toBe('hi');
   });
 
+  it('defaults type to tool when tool is present in JSON without explicit type', () => {
+    const a = parse('<action>{"tool":"writeFile","arguments":{"path":"src/test.ts","content":"hello"}}</action>');
+    expect(a.type).toBe('tool');
+    expect(a.tool).toBe('writeFile');
+    expect(a.arguments.path).toBe('src/test.ts');
+  });
+
+  it('parses bare JSON containing tool without type', () => {
+    const a = parse('Writing file: {"tool":"writeFile","arguments":{"path":"src/test.ts","content":"hello"}}');
+    expect(a.type).toBe('tool');
+    expect(a.tool).toBe('writeFile');
+  });
+
   it('returns null when there is no JSON action at all', () => {
     expect(parse('Node version is v20. No action needed.')).toBeNull();
   });

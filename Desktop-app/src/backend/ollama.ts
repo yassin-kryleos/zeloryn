@@ -6,6 +6,7 @@ import type { Message } from './deepseek';
 export interface OllamaConfig {
   model: 'llama3' | 'qwen2.5-coder' | string;
   baseUrl?: string;
+  options?: Record<string, any>;
 }
 
 export interface OllamaModelInfo {
@@ -38,6 +39,10 @@ export class OllamaClient {
 
   public setModel(model: string) {
     this.config.model = model;
+  }
+
+  public setOptions(options?: Record<string, any>) {
+    this.config.options = options;
   }
 
   public listModels(baseUrl = this.config.baseUrl || 'http://localhost:11434'): Promise<OllamaModelInfo[]> {
@@ -87,7 +92,8 @@ export class OllamaClient {
       const postData = JSON.stringify({
         model: this.config.model,
         messages: messages.map(m => ({ role: m.role, content: m.content })),
-        stream: true
+        stream: true,
+        ...(this.config.options ? { options: this.config.options } : {})
       });
 
       const endpoint = `${this.config.baseUrl}/api/chat`;
