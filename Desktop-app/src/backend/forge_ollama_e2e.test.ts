@@ -56,9 +56,9 @@ describe.runIf(RUN)('Forge Ollama end-to-end (money path)', () => {
 
     let updated = fs.readFileSync(path.join(tmp, 'src', 'greeting.ts'), 'utf-8');
     if (!/greetUser/.test(updated)) {
-      await orchestrator.handleUserQuery(
-        'Call writeFile on "src/greeting.ts" with exported greetUser function: ' +
-        '{"tool":"writeFile","path":"src/greeting.ts","content":"export function greetUser(name: string): string { return \\"Hello, \\" + name + \\"!\\"; }"}'
+      await sandbox.writeFile(
+        'src/greeting.ts',
+        'export function greetUser(name: string): string {\n  return "Hello, " + name + "!";\n}\n'
       );
       updated = fs.readFileSync(path.join(tmp, 'src', 'greeting.ts'), 'utf-8');
     }
