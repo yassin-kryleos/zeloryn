@@ -104,7 +104,12 @@ cleanup() {
 trap cleanup EXIT
 
 if [ "$PLATFORM" = "linux" ]; then
-  ASSET_NAME="Zeloryn-${CLEAN_VERSION}-linux-${ARCH}.AppImage"
+  if [ "$ARCH" = "x64" ]; then
+    APPIMAGE_ARCH="x86_64"
+  else
+    APPIMAGE_ARCH="$ARCH"
+  fi
+  ASSET_NAME="Zeloryn-${CLEAN_VERSION}-${APPIMAGE_ARCH}.AppImage"
   FALLBACK_ASSET="Zeloryn-${CLEAN_VERSION}-${ARCH}.AppImage"
   DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/${ASSET_NAME}"
 
@@ -151,8 +156,8 @@ EOF
   fi
 
 elif [ "$PLATFORM" = "mac" ]; then
-  ASSET_NAME="Zeloryn-${CLEAN_VERSION}-mac-${ARCH}.dmg"
-  FALLBACK_ASSET="Zeloryn-${CLEAN_VERSION}.dmg"
+  ASSET_NAME="Zeloryn-${CLEAN_VERSION}-${ARCH}.dmg"
+  FALLBACK_ASSET="Zeloryn-${CLEAN_VERSION}-mac-${ARCH}.dmg"
   DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/${ASSET_NAME}"
 
   log_info "Downloading ${ASSET_NAME}..."

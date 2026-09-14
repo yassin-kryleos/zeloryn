@@ -50,9 +50,9 @@ if (fs.existsSync(caskPath)) {
   let content = fs.readFileSync(caskPath, 'utf8');
   content = content.replace(/version "([^"]+)"/, `version "${version}"`);
 
-  // Find mac artifacts
-  const armFile = files.find(f => f.includes('mac') && f.includes('arm64') && f.endsWith('.dmg'));
-  const x64File = files.find(f => f.includes('mac') && f.includes('x64') && f.endsWith('.dmg'));
+  // Find mac artifacts (e.g. Zeloryn-0.1.0-arm64.dmg, Zeloryn-0.1.0-x64.dmg)
+  const armFile = files.find(f => f.includes('arm64') && f.endsWith('.dmg'));
+  const x64File = files.find(f => (f.includes('x64') || f.includes('x86_64')) && f.endsWith('.dmg'));
 
   if (armFile && checksums[armFile]) {
     content = content.replace(/sha256 arm: "([0-9a-fA-F]*)"/, `sha256 arm: "${checksums[armFile]}"`);
@@ -63,6 +63,34 @@ if (fs.existsSync(caskPath)) {
 
   fs.writeFileSync(caskPath, content, 'utf8');
   console.log(`[distribution] Updated Homebrew Cask: ${caskPath}`);
+}
+
+// 1b. Update Homebrew Formula
+const formulaPath = path.join(rootDir, 'distribution', 'homebrew', 'Formula', 'zeloryn.rb');
+if (fs.existsSync(formulaPath)) {
+  let content = fs.readFileSync(formulaPath, 'utf8');
+  content = content.replace(/version "([^"]+)"/, `version "${version}"`);
+
+  const macArmZip = files.find(f => f.includes('arm64') && f.endsWith('.zip'));
+  const macX64Zip = files.find(f => f.includes('x64') && f.endsWith('.zip') && !f.includes('Setup'));
+  const linuxArmTar = files.find(f => f.includes('arm64') && f.endsWith('.tar.gz'));
+  const linuxX64Tar = files.find(f => (f.includes('x64') || f.includes('x86_64')) && f.endsWith('.tar.gz'));
+
+  if (macArmZip && checksums[macArmZip]) {
+    content = content.replace(/(url [^\n]+arm64\.zip"\s+sha256 )"([^"]*)"/, `$1"${checksums[macArmZip]}"`);
+  }
+  if (macX64Zip && checksums[macX64Zip]) {
+    content = content.replace(/(url [^\n]+x64\.zip"\s+sha256 )"([^"]*)"/, `$1"${checksums[macX64Zip]}"`);
+  }
+  if (linuxArmTar && checksums[linuxArmTar]) {
+    content = content.replace(/(url [^\n]+arm64\.tar\.gz"\s+sha256 )"([^"]*)"/, `$1"${checksums[linuxArmTar]}"`);
+  }
+  if (linuxX64Tar && checksums[linuxX64Tar]) {
+    content = content.replace(/(url [^\n]+x64\.tar\.gz"\s+sha256 )"([^"]*)"/, `$1"${checksums[linuxX64Tar]}"`);
+  }
+
+  fs.writeFileSync(formulaPath, content, 'utf8');
+  console.log(`[distribution] Updated Homebrew Formula: ${formulaPath}`);
 }
 
 // 2. Update Winget manifest

@@ -5,7 +5,7 @@ cask "zeloryn" do
   sha256 arm: "0000000000000000000000000000000000000000000000000000000000000000",
          intel: "0000000000000000000000000000000000000000000000000000000000000000"
 
-  url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-mac-#{arch}.dmg"
+  url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-#{arch}.dmg"
   name "Zeloryn"
   desc "Free, open-source, local-first AI software engineering cockpit"
   homepage "https://github.com/yassin-kryleos/zeloryn"

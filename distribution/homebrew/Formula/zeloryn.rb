@@ -5,18 +5,18 @@ class Zeloryn < Formula
 
   if OS.mac?
     if Hardware::CPU.arm?
-      url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-mac-arm64.zip"
+      url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-arm64.zip"
       sha256 "0000000000000000000000000000000000000000000000000000000000000000"
     else
-      url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-mac-x64.zip"
+      url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-x64.zip"
       sha256 "0000000000000000000000000000000000000000000000000000000000000000"
     end
   elsif OS.linux?
     if Hardware::CPU.arm?
-      url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-linux-arm64.tar.gz"
+      url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-arm64.tar.gz"
       sha256 "0000000000000000000000000000000000000000000000000000000000000000"
     else
-      url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-linux-x64.tar.gz"
+      url "https://github.com/yassin-kryleos/zeloryn/releases/download/v#{version}/Zeloryn-#{version}-x64.tar.gz"
       sha256 "0000000000000000000000000000000000000000000000000000000000000000"
     end
   end
