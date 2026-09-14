@@ -1198,7 +1198,21 @@ export function PlanningScreen({
             {/* Summarize & Push Button + Composer */}
             <div className="p-3 border-t border-forge-dark bg-forge-panel-bg flex flex-col gap-2 shrink-0">
               {chatMessages.length <= 1 && (
-                <div className="grid grid-cols-1 gap-1">
+                <div className="grid grid-cols-1 gap-1.5 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const query = 'Analyze the existing codebase in this repository. Produce an architectural summary, list key modules, files, dependencies, and propose a structured roadmap for tinkering or extending features.';
+                      setInputText(query);
+                    }}
+                    className="text-left text-[10px] font-bold border border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 rounded px-2.5 py-1.5 flex items-center justify-between transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <FileCode size={12} className="text-cyan-400" />
+                      <span>Analyze &amp; Map Existing Codebase</span>
+                    </div>
+                    <span className="text-[9px] uppercase tracking-wider text-cyan-400/80">Brownfield</span>
+                  </button>
                   {[
                     'Turn my rough idea into a small first release with testable acceptance criteria.',
                     'Review this repo and suggest the safest high-impact improvement.',

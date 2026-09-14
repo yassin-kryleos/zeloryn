@@ -23,7 +23,9 @@ const SpaceLoading = () => (
     Loading workspace…
   </div>
 );
-import { Trash2, Plus, Cpu, FolderOpen, X } from 'lucide-react';
+import { CommandPalette } from './components/CommandPalette';
+import { DiffSafetyDrawer } from './components/DiffSafetyDrawer';
+import { Trash2, Plus, Cpu, FolderOpen, X, Sparkles, GitBranch, ShieldAlert, Search } from 'lucide-react';
 import type { AgentLog, AgentRole, ResponseMode } from './backend/agents';
 import type { ProjectTask } from './backend/db';
  
@@ -161,6 +163,9 @@ function App() {
   const [pendingDisclosure, setPendingDisclosure] = useState<{ provider: string; query: string; options: SendQueryOptions } | null>(null);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const notificationIdRef = useRef<number>(1);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState<boolean>(false);
+  const [isDiffDrawerOpen, setIsDiffDrawerOpen] = useState<boolean>(false);
+  const [currentGitBranch, setCurrentGitBranch] = useState<string>('main');
 
   const notify = useCallback((message: string, kind: NotificationKind = 'info', action?: { label: string; onClick: () => void }) => {
     const id = notificationIdRef.current++;
@@ -169,6 +174,88 @@ function App() {
       setNotifications(prev => prev.filter(notification => notification.id !== id));
     }, action ? 12000 : kind === 'error' ? 7000 : 4500);
   }, []);
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchGitBranch = async () => {
+      try {
+        const res = await fetch('http://localhost:3001/api/git/status');
+        if (res.ok) {
+          const data = await res.json();
+          if (mounted && data.currentBranch) {
+            setCurrentGitBranch(data.currentBranch);
+          }
+        }
+      } catch {
+        // ignore if not running
+      }
+    };
+    fetchGitBranch();
+    return () => { mounted = false; };
+  }, [workspaceRoot]);
+
+  const handleNativeBrowseFolder = async () => {
+    if ((window as any).electronAPI?.selectDirectory) {
+      const selected = await (window as any).electronAPI.selectDirectory();
+      if (selected) {
+        handleUpdateConfig({ workspaceRoot: selected });
+        notify(`Workspace folder set to ${selected}`, 'success');
+      }
+    } else {
+      setIsProjectModalOpen(true);
+    }
+  };
+
+  const handleAnalyzeCodebase = () => {
+    handleSpaceChange('plan');
+    handleSendQuery(
+      'Analyze the existing codebase in this repository. Produce an architectural summary, list key modules, files, dependencies, and propose a structured roadmap for tinkering or extending features.',
+      { spaceOverride: 'chat' }
+    );
+  };
+
+  const handleImportTodosFromPalette = async () => {
+    try {
+      const res = await fetch(`http://localhost:3001/api/plan/todos?workspace=${encodeURIComponent(workspaceRoot)}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.todos) && data.todos.length > 0) {
+        const newTasks: ProjectTask[] = data.todos.map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          category: t.category,
+          status: 'todo',
+          assignee: 'Builder',
+          description: t.description,
+          acceptanceCriteria: [{
+            id: `crit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            phase: 'phase1',
+            type: 'file_exists',
+            target: t.file,
+            description: `Verify changes in ${t.file}`,
+            status: 'pending'
+          }],
+          blockedBy: []
+        }));
+        setTasks(prev => [...prev, ...newTasks]);
+        notify(`Imported ${newTasks.length} TODO(s) from existing codebase files into Flow.`, 'success');
+      } else {
+        notify('No TODO/FIXME comments found in codebase files.', 'info');
+      }
+    } catch (err: any) {
+      notify(`Failed to import TODOs: ${err.message}`, 'error');
+    }
+  };
 
   // Background non-intrusive update notification
   useEffect(() => {
@@ -180,7 +267,7 @@ function App() {
         const dismissed = localStorage.getItem('zeloryn_dismissed_update');
         if (dismissed !== version) {
           notify(
-            `🚀 Update available: Zeloryn ${version} is now available!`,
+            `Update available: Zeloryn ${version} is now available!`,
             'info',
             {
               label: 'View Release',
@@ -206,7 +293,7 @@ function App() {
           const dismissed = localStorage.getItem('zeloryn_dismissed_update');
           if (dismissed !== result.latestVersion) {
             notify(
-              `🚀 Update available: Zeloryn v${result.latestVersion} is now available!`,
+              `Update available: Zeloryn v${result.latestVersion} is now available!`,
               'info',
               {
                 label: 'View Release',
@@ -1690,28 +1777,63 @@ function App() {
               <span className="text-[8px] bg-forge-dark text-forge-dim px-1 py-0.5 rounded-sm">v0.1.0</span>
             </div>
 
-            {/* Active Project Switcher / Indicator */}
-            <div className="flex items-center gap-2 ml-4 select-none">
-              {activeProject ? (
-                <div className="flex items-center gap-2 border border-forge-neon/40 px-2 py-0.5 rounded bg-forge-neon/5 text-[10px]">
-                  <span className="text-forge-neon font-bold uppercase">PROJECT: {activeProject.name}</span>
-                  <button
-                    onClick={() => setIsProjectModalOpen(true)}
-                    className="text-forge-dim hover:text-white underline cursor-pointer text-[9px] bg-transparent border-0 outline-none"
-                    type="button"
-                  >
-                    Switch
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setIsProjectModalOpen(true)}
-                  className="text-forge-text font-bold text-[10px] border border-forge-neon/40 px-2 py-0.5 rounded bg-forge-neon/5 hover:bg-forge-dark cursor-pointer outline-none"
-                  type="button"
-                >
-                  + Add project
-                </button>
-              )}
+            {/* Header Context Breadcrumb & Workspace Switcher */}
+            <div className="flex items-center gap-1.5 ml-3 select-none text-[10px] font-mono">
+              <button
+                type="button"
+                onClick={() => setIsProjectModalOpen(true)}
+                title="Switch active project or open workspace folder"
+                className="flex items-center gap-1 px-2 py-0.5 rounded border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-200 hover:text-white transition-colors cursor-pointer"
+              >
+                <FolderOpen size={11} className="text-zinc-400" />
+                <span className="font-semibold truncate max-w-[110px]">
+                  {activeProject?.name || workspaceRoot.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'Workspace'}
+                </span>
+              </button>
+
+              <span className="text-zinc-600">/</span>
+
+              <button
+                type="button"
+                onClick={() => setIsDiffDrawerOpen(true)}
+                title="View git branch status & diff undo safety drawer"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+              >
+                <GitBranch size={10} />
+                <span className="font-semibold">{currentGitBranch}</span>
+              </button>
+
+              <span className="text-zinc-600">/</span>
+
+              <div
+                title={`Active AI Model: ${model}`}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900/40 text-cyan-400 truncate max-w-[130px]"
+              >
+                <Cpu size={10} className="text-cyan-500 shrink-0" />
+                <span className="truncate">{model.replace(/^models\//, '')}</span>
+              </div>
+
+              {/* Safety Diff Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsDiffDrawerOpen(true)}
+                title="Inspect recent file modifications and safely Undo (Diff & Undo Drawer)"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 transition-colors cursor-pointer text-[9px] font-bold"
+              >
+                <ShieldAlert size={10} />
+                <span>Diff &amp; Undo</span>
+              </button>
+
+              {/* Command Palette Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsCommandPaletteOpen(true)}
+                title="Open Command Palette (Ctrl+K / Cmd+K)"
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer text-[10px]"
+              >
+                <Search size={10} className="text-zinc-400" />
+                <span className="text-[9px] text-zinc-400 font-bold bg-zinc-900 px-1 rounded border border-zinc-700">Ctrl+K</span>
+              </button>
             </div>
 
             {/* Switchable Spaces tab bar */}
@@ -1754,7 +1876,8 @@ function App() {
                 className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${activeSpace === 'vibe' ? 'forge-tab-active text-forge-neon font-bold' : ''}`}
                 title="Vibe Coding Studio (F5)"
               >
-                <span>⚡ Vibe</span>
+                <Sparkles size={11} className="text-emerald-400" />
+                <span>Vibe</span>
               </button>
 
               {isStreaming && (
@@ -2022,6 +2145,13 @@ function App() {
                 onNotify={notify}
                 onAbort={handleAbortWorkflow}
                 onCreateProject={handleCreateProject}
+                onOpenVibeTask={(taskId) => {
+                  setSelectedVibeTaskId(taskId);
+                  handleSpaceChange('vibe');
+                }}
+                onSendToForge={(taskTitle) => {
+                  handleSendQuery(taskTitle, 'code');
+                }}
               />
             </div>
           ) : activeSpace === 'project' ? (
@@ -2422,6 +2552,35 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* Universal Command Palette (Ctrl+K / Cmd+K) */}
+        <CommandPalette
+          isOpen={isCommandPaletteOpen}
+          onClose={() => setIsCommandPaletteOpen(false)}
+          onNavigate={handleSpaceChange}
+          onOpenProjectModal={() => setIsProjectModalOpen(true)}
+          onOpenSettings={() => {
+            window.dispatchEvent(new CustomEvent('open-config-drawer', { detail: { tab: 'api_keys' } }));
+          }}
+          onSelectTheme={(newTheme) => handleUpdateConfig({ theme: newTheme })}
+          tasks={tasks}
+          onSelectTask={() => {
+            handleSpaceChange('project');
+          }}
+          onAnalyzeCodebase={handleAnalyzeCodebase}
+          onImportTodos={handleImportTodosFromPalette}
+          onCheckDrift={() => {
+            handleSpaceChange('project');
+          }}
+          onBrowseFolder={handleNativeBrowseFolder}
+        />
+
+        {/* Diff & Undo Safety Drawer */}
+        <DiffSafetyDrawer
+          isOpen={isDiffDrawerOpen}
+          onClose={() => setIsDiffDrawerOpen(false)}
+          onNotify={notify}
+        />
       </div>
     </>
     </ErrorBoundary>

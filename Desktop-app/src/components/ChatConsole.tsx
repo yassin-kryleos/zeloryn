@@ -496,11 +496,32 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
         className="flex-1 overflow-y-auto pr-1 space-y-1 mb-2 font-mono select-text bg-forge-panel-bg p-3 rounded border border-forge-dark"
       >
         {logs.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center text-forge-dim font-mono py-20 select-none">
-            <span className="text-sm tracking-widest text-forge-neon font-bold">ZELORYN ONLINE // WORKSPACE LINKED</span>
-            <span className="text-[10px] mt-1 text-forge-dim">
-              Enter a request to route work through the agent team.
+          <div className="h-full flex flex-col items-center justify-center text-center text-forge-dim font-mono py-8 select-none">
+            <span className="text-sm tracking-widest text-forge-neon font-bold mb-1">CREW SPECIALIST SQUAD READY</span>
+            <span className="text-[10px] text-forge-dim max-w-sm mb-4">
+              Collaborate with Planner, Builder, Analyst, and Reviewer to explore, plan, and build features.
             </span>
+            <div className="grid grid-cols-2 gap-2 max-w-md w-full">
+              {[
+                { label: 'Audit Codebase Architecture', prompt: 'Analyze this codebase architecture, identify core modules, entrypoints, and dependencies.' },
+                { label: 'Plan New Feature Specs', prompt: 'Help me plan a new feature with structured architecture, acceptance criteria, and schema changes.' },
+                { label: 'Review Security & Permissions', prompt: 'Audit current auth, endpoints, input sanitization, and security risks in this project.' },
+                { label: 'Identify Code Refactors & TODOs', prompt: 'Scan this repository for technical debt, messy patterns, and high-leverage refactor opportunities.' }
+              ].map((item, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    setQuery(item.prompt);
+                    requestAnimationFrame(() => inputRef.current?.focus());
+                  }}
+                  className="p-2 border border-forge-dark hover:border-forge-neon bg-forge-very-dark/50 hover:bg-forge-dark/60 rounded text-left transition-colors cursor-pointer flex flex-col gap-0.5"
+                >
+                  <span className="text-[10px] font-bold text-zinc-200">{item.label}</span>
+                  <span className="text-[8.5px] text-forge-dim truncate">{item.prompt}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

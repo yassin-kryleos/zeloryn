@@ -135,8 +135,24 @@ export function ProjectSetupScreen({
             />
             <button
               type="button"
+              onClick={async () => {
+                const picked = await (window as any).electronAPI?.selectDirectory();
+                if (picked) {
+                  setWorkspaceFolder(picked);
+                  onUpdateWorkspaceRoot?.(picked);
+                  setTimeout(() => scanWorkspace(), 100);
+                }
+              }}
+              className="forge-secondary-button text-[10px] px-2.5 flex items-center gap-1 cursor-pointer"
+              title="Browse for local folder"
+            >
+              <FolderOpen size={11} />
+              <span>Browse...</span>
+            </button>
+            <button
+              type="button"
               onClick={() => { onUpdateWorkspaceRoot?.((workspaceFolder || '').trim()); scanWorkspace(); }}
-              className="forge-btn text-[10px] px-2.5"
+              className="forge-btn text-[10px] px-2.5 cursor-pointer"
             >
               SCAN
             </button>

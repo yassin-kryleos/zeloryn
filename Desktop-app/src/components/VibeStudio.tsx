@@ -47,33 +47,33 @@ interface VibeMessage {
 
 const STARTER_PROMPTS = [
   {
-    title: '🚀 Modern SaaS Landing Page',
+    title: 'Modern SaaS Landing Page',
     prompt: 'Build a modern, sleek landing page with a hero section, pricing table, testimonial carousel, and dark mode toggle.'
   },
   {
-    title: '📊 Finance & Analytics Dashboard',
+    title: 'Finance & Analytics Dashboard',
     prompt: 'Build an interactive financial dashboard with real-time price cards, portfolio balance calculator, and trend charts.'
   },
   {
-    title: '📝 Minimalist Notes & Tasks',
+    title: 'Minimalist Notes & Tasks',
     prompt: 'Build a clean, aesthetic notes app with drag-and-drop task lists, search filter, and localStorage persistence.'
   },
   {
-    title: '🎮 Retro Arcade Web Game',
+    title: 'Retro Arcade Web Game',
     prompt: 'Build an interactive retro arcade game in HTML5 canvas with keyboard controls, sound effects, and high scores.'
   },
   {
-    title: '🧮 Freelance Invoice Generator',
+    title: 'Freelance Invoice Generator',
     prompt: 'Build an invoice generator that calculates line items, taxes, discounts, and renders a clean printable PDF layout.'
   }
 ];
 
 const QUICK_MODIFIERS = [
-  { label: '🎨 Add Dark Mode', text: 'Add a beautiful dark mode / light mode toggle.' },
-  { label: '📱 Make Responsive', text: 'Ensure the layout is fully responsive on mobile and tablet screens.' },
-  { label: '✨ Polish UI', text: 'Enhance typography, subtle shadows, smooth hover transitions, and rounded corners.' },
-  { label: '🧪 Add Sample Data', text: 'Populate with realistic sample data and interactive dummy actions.' },
-  { label: '💾 Save to Storage', text: 'Persist all user edits and state to localStorage so data survives reloads.' }
+  { label: 'Add Dark Mode', text: 'Add a beautiful dark mode / light mode toggle.' },
+  { label: 'Make Responsive', text: 'Ensure the layout is fully responsive on mobile and tablet screens.' },
+  { label: 'Polish UI', text: 'Enhance typography, subtle shadows, smooth hover transitions, and rounded corners.' },
+  { label: 'Add Sample Data', text: 'Populate with realistic sample data and interactive dummy actions.' },
+  { label: 'Save to Storage', text: 'Persist all user edits and state to localStorage so data survives reloads.' }
 ];
 
 const COMMON_PORTS = ['5173', '5174', '3000', '8080'];
@@ -417,7 +417,7 @@ export const VibeStudio: React.FC<VibeStudioProps> = ({
                 className="text-[9.5px] font-mono font-bold text-forge-neon hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0"
               >
                 <Sparkles size={10} />
-                <span>⚡ Auto-Prompt from Task</span>
+                <span>Auto-Prompt from Task</span>
               </button>
               {activeTask.status !== 'done' && onSaveTasks && (
                 <button

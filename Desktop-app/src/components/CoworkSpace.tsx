@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Play, Clock, Trash2, ArrowRight, ArrowLeft, Terminal, ClipboardList, Code, FolderOpen, UserPlus, ShieldAlert, X, GitBranch, Download } from 'lucide-react';
+import { Plus, Play, Clock, Trash2, ArrowRight, ArrowLeft, Terminal, ClipboardList, Code, FolderOpen, UserPlus, ShieldAlert, X, GitBranch, Download, Sparkles, ExternalLink } from 'lucide-react';
 import type { AgentLog, AgentRole } from '../backend/agents';
 import type { ProjectTask } from '../backend/db';
 import { FileBrowser } from './FileBrowser';
@@ -118,6 +118,8 @@ interface CoworkSpaceProps {
   onNotify?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
   onAbort?: () => void;
   onCreateProject?: (name: string, folderPath: string, gitUrl: string, description: string) => void;
+  onOpenVibeTask?: (taskId: string) => void;
+  onSendToForge?: (taskTitle: string) => void;
 }
 
 export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
@@ -139,7 +141,9 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
   onApproveCommand,
   onNotify,
   onAbort,
-  onCreateProject
+  onCreateProject,
+  onOpenVibeTask,
+  onSendToForge
 }) => {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('Keymaker');
@@ -585,11 +589,11 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
                     </div>
                     <div className="flex items-center justify-between text-[9px] mt-1 pt-1 border-t border-forge-very-dark border-dashed">
                       <span className={getAssigneeColor(t.assignee)}>[{t.assignee}]</span>
-                      <div className="flex items-center gap-1.5 opacity-60 group-hover:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 opacity-75 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => moveTask(t.id, 'backward')}
                           disabled={t.status === 'todo'}
-                          className="text-forge-dim hover:text-white disabled:opacity-30"
+                          className="text-forge-dim hover:text-white disabled:opacity-30 p-0.5"
                           title="Move task backward"
                           aria-label="Move task backward"
                         >
@@ -597,15 +601,37 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
                         </button>
                         <button
                           onClick={() => handleReferenceTask(t)}
-                          className="text-forge-neon hover:text-white"
-                          title="Insert context reference"
-                          aria-label="Insert context reference"
+                          className="px-1 py-0.2 rounded border border-forge-dark hover:border-forge-neon text-forge-neon hover:text-white text-[8px] font-mono cursor-pointer"
+                          title="Add task context into chat"
+                          aria-label="Add task context into chat"
                         >
-                          [@ref]
+                          + Chat
                         </button>
+                        {t.status !== 'done' && onSendToForge && (
+                          <button
+                            onClick={() => onSendToForge(`Implement task: ${t.title}`)}
+                            disabled={isStreaming}
+                            className="px-1 py-0.2 rounded border border-forge-neon/40 bg-forge-neon/15 hover:bg-forge-neon/30 text-forge-neon text-[8px] font-mono font-bold flex items-center gap-0.5 cursor-pointer disabled:opacity-40"
+                            title="Run task in Forge CLI"
+                          >
+                            <Play size={7} />
+                            <span>Run</span>
+                          </button>
+                        )}
+                        {t.status !== 'done' && onOpenVibeTask && (
+                          <button
+                            onClick={() => onOpenVibeTask(t.id)}
+                            disabled={isStreaming}
+                            className="px-1 py-0.2 rounded border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 text-[8px] font-mono font-bold flex items-center gap-0.5 cursor-pointer disabled:opacity-40"
+                            title="Build task visually in Vibe Studio"
+                          >
+                            <Sparkles size={7} />
+                            <span>Vibe</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDeleteTask(t.id)}
-                          className="text-red-400 hover:text-white"
+                          className="text-red-400 hover:text-white p-0.5"
                           title="Delete task"
                           aria-label="Delete task"
                         >
@@ -614,7 +640,7 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
                         <button
                           onClick={() => moveTask(t.id, 'forward')}
                           disabled={t.status === 'done'}
-                          className="text-forge-neon hover:text-white disabled:opacity-30"
+                          className="text-forge-neon hover:text-white disabled:opacity-30 p-0.5"
                           title="Move task forward"
                           aria-label="Move task forward"
                         >

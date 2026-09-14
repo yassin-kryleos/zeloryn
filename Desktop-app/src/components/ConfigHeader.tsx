@@ -287,7 +287,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       if (res.hasUpdate) {
         setUpdateAvailableVersion(res.latestVersion);
         setUpdateStatusText(`Update available: v${res.latestVersion}`);
-        onNotify?.(`🚀 Update available: Zeloryn v${res.latestVersion} is available!`, 'info');
+        onNotify?.(`Update available: Zeloryn v${res.latestVersion} is available!`, 'info');
       } else if (res.success) {
         setUpdateAvailableVersion(null);
         setUpdateStatusText(`Zeloryn is up to date (v${APP_VERSION}).`);
@@ -905,7 +905,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           className="px-1.5 py-0.5 bg-forge-neon/15 border border-forge-neon/40 text-forge-neon text-[9px] font-mono rounded cursor-pointer hover:bg-forge-neon/25 transition-all"
           title="Specialized model roles active across agents (Chat, Reasoning, Coding, etc.)"
         >
-          ⚡ ROLES ACTIVE
+          ROLES ACTIVE
         </button>
       )}
 
@@ -1664,7 +1664,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
 
                   {/* Task recommendation tips */}
                   <div className="border border-forge-dark bg-black bg-opacity-30 p-2 rounded text-[9px] font-mono text-forge-dim flex flex-col gap-1 mt-1">
-                    <span className="text-white uppercase font-bold text-[9.5px]">💡 MODEL TIPS & RECOMMENDATIONS:</span>
+                    <span className="text-white uppercase font-bold text-[9.5px]">MODEL TIPS & RECOMMENDATIONS:</span>
                     <div className="grid grid-cols-2 gap-1.5">
                       <div>
                         <span className="text-forge-neon font-bold">Build Loops:</span> Claude 3.5 Sonnet / Gemini Pro (Reasoning-heavy)
@@ -1718,7 +1718,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                         className="px-2.5 py-1 bg-forge-neon text-black font-mono font-bold text-[10px] rounded hover:bg-forge-neon/80 transition-all cursor-pointer flex items-center gap-1"
                         title="Auto-detect active API keys and assign the optimal model to each role"
                       >
-                        <span>⚡ Auto-Assign Roles</span>
+                        <span>Auto-Assign Roles</span>
                       </button>
                       <button
                         type="button"
@@ -1945,12 +1945,12 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                               <div className="flex items-center gap-1">
                                 {modelDef.reasoningOnly && (
                                   <span className="px-1 bg-purple-900/40 text-purple-300 border border-purple-700/50 rounded">
-                                    ⚡ XML Tool
+                                    XML Tool
                                   </span>
                                 )}
                                 {slotKey === 'research' && modelDef.contextWindow < 32000 && (
                                   <span className="px-1 bg-amber-900/40 text-amber-300 border border-amber-700/50 rounded">
-                                    ⚠️ Small Ctx
+                                    Small Ctx
                                   </span>
                                 )}
                                 <span>{(modelDef.contextWindow / 1000).toFixed(0)}k ctx</span>
@@ -2178,7 +2178,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               <div className="border border-forge-dark bg-black bg-opacity-30 p-2.5 rounded flex flex-col gap-1.5">
                 <span className="text-[10px] uppercase font-bold text-white flex items-center justify-between">
                   <span>RBAC & Command Policies</span>
-                  <span className="text-[8px] bg-forge-very-dark border border-forge-neon text-forge-neon px-1 py-0.5 rounded font-bold">ENTERPRISE</span>
                 </span>
                 <div className="flex flex-col gap-2 mt-1">
                   <div className="flex items-center justify-between">
@@ -2216,7 +2215,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               <div className="border border-forge-dark bg-black bg-opacity-30 p-2.5 rounded flex flex-col gap-1.5">
                 <span className="text-[10px] uppercase font-bold text-white flex items-center justify-between">
                   <span>Semantic Cache Indexer</span>
-                  <span className="text-[8px] bg-forge-very-dark border border-forge-neon text-forge-neon px-1 py-0.5 rounded font-bold">PRO / ENTERPRISE</span>
                 </span>
                 <span className="text-forge-dim text-[9px]">Build local symbol cache to query function/class signatures instantly.</span>
                 <div className="flex flex-col gap-1.5 mt-1">
@@ -2322,7 +2320,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
             {telemetry && (
               <div className="border border-forge-neon border-opacity-30 bg-forge-very-dark p-2.5 rounded flex flex-col gap-1.5 font-mono text-[9px] mb-1">
                 <span className="text-forge-neon font-bold uppercase text-[9.5px] flex items-center justify-between border-b border-forge-neon border-opacity-30 pb-1">
-                  <span>⚡ WebSocket Telemetry</span>
+                  <span>WebSocket Telemetry</span>
                   <span className="text-[8px] bg-black border border-forge-neon px-1 rounded animate-pulse">COMPRESSION ACTIVE</span>
                 </span>
                 <div className="flex justify-between">
@@ -2367,7 +2365,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 <span>Console Theme Stylesheet</span>
               </label>
               <div className="flex gap-1 bg-forge-very-dark border border-forge-dark rounded p-0.5">
-                {['forge', 'dark', 'light', 'terminal', 'matrix'].map((t) => (
+                {['forge', 'dark', 'light', 'terminal'].map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -2394,7 +2392,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 ))}
               </div>
               <span className="text-[9px] text-forge-dim">
-                Forge (default) is a professional dark theme with green accents. Matrix and Terminal are the classic green-glow retro styles.
+                Forge (default) is a professional dark theme with green accents. Terminal is the classic retro amber/green style.
               </span>
             </div>
 

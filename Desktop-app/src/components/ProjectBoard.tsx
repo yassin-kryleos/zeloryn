@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square, GitBranch, GitFork, ExternalLink, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
+import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square, GitBranch, GitFork, ExternalLink, RotateCcw, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
 import type { AcceptanceCriterion, AcceptanceCriterionType, CriterionPhase, ProjectTask } from '../backend/db';
 import { scoreTodayTasks } from '../shared/todayScore';
 import { driftClass } from '../shared/driftClassification';
@@ -8,6 +8,7 @@ import { wouldCreateDependencyCycle, findUnblockedTasks, getNextSchedulableTask,
 import { resolveAgentForCategory, type InstalledAgent, type ItemCategory } from '../shared/agentCapabilities';
 import { FileBrowser } from './FileBrowser';
 import { SafeMarkdown } from './SafeMarkdown';
+import { TaskDetailDrawer } from './TaskDetailDrawer';
 
 interface ProjectBoardProps {
   tasks: ProjectTask[];
@@ -67,6 +68,48 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   const [handoffModalTask, setHandoffModalTask] = useState<ProjectTask | null>(null);
   const [handoffTargets, setHandoffTargets] = useState<any[]>([]);
   const [availableRunners, setAvailableRunners] = useState<any[]>([]);
+  const [drawerTask, setDrawerTask] = useState<ProjectTask | null>(null);
+  const [importingTodos, setImportingTodos] = useState(false);
+
+  const handleSaveTaskDetail = (updated: ProjectTask) => {
+    onSaveTasks(tasks.map(t => t.id === updated.id ? updated : t));
+    setDrawerTask(updated);
+  };
+
+  const handleImportTodos = async () => {
+    setImportingTodos(true);
+    try {
+      const res = await fetch(`http://localhost:3001/api/plan/todos?workspace=${encodeURIComponent(workspaceRoot)}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.todos) && data.todos.length > 0) {
+        const newTasks: ProjectTask[] = data.todos.map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          category: t.category,
+          status: 'todo',
+          assignee: 'Builder',
+          description: t.description,
+          acceptanceCriteria: [{
+            id: `crit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            phase: 'phase1',
+            type: 'file_exists',
+            target: t.file,
+            description: `Verify changes in ${t.file}`,
+            status: 'pending'
+          }],
+          blockedBy: []
+        }));
+        onSaveTasks([...tasks, ...newTasks]);
+        onNotify?.(`Imported ${newTasks.length} TODO(s) from existing codebase files into Flow.`, 'success');
+      } else {
+        onNotify?.('No TODO/FIXME comments found in codebase files.', 'info');
+      }
+    } catch (err: any) {
+      onNotify?.(`Failed to import TODOs: ${err.message}`, 'error');
+    } finally {
+      setImportingTodos(false);
+    }
+  };
 
   const loadWorktrees = async () => {
     try {
@@ -633,7 +676,11 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           isBlocked ? 'border-red-900 opacity-65' : 'border-forge-dark hover:border-forge-dim'
         }`}
       >
-        <div className={`text-xs break-words select-text font-bold mb-1 ${task.status === 'done' ? 'text-forge-dim line-through opacity-75' : 'text-forge-text'}`}>
+        <div
+          onClick={() => setDrawerTask(task)}
+          className={`text-xs break-words select-text font-bold mb-1 cursor-pointer hover:text-white transition-colors ${task.status === 'done' ? 'text-forge-dim line-through opacity-75' : 'text-forge-text'}`}
+          title="Click to view & edit task details"
+        >
           <SafeMarkdown text={task.title} />
         </div>
         <div className="flex flex-wrap gap-1 mb-1.5 text-[8px] uppercase font-bold">
@@ -747,21 +794,22 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
               <select
                 value={taskRunners[task.id] || 'claude-code'}
                 onChange={(e) => setTaskRunners(prev => ({ ...prev, [task.id]: e.target.value }))}
-                title="Select Tier 1 Execution Runner"
-                className="bg-forge-very-dark border border-forge-dark text-[8px] text-forge-neon rounded px-1 py-0.5 font-mono cursor-pointer hover:border-forge-neon"
+                title="Select Execution Runner"
+                className="bg-forge-very-dark border border-forge-dark text-[9px] text-forge-neon rounded px-1 py-0.5 font-mono cursor-pointer hover:border-forge-neon"
               >
-                <option value="claude-code">⚡ Claude</option>
-                <option value="codex-cli">⚡ Codex</option>
+                <option value="claude-code">Claude</option>
+                <option value="codex-cli">Codex</option>
               </select>
             )}
             {task.status !== 'done' && (
               <button
                 onClick={() => runTaskQuery(task)}
-                title={isBlocked ? 'Blocked by unfinished dependency' : `Run Task Agent with ${taskRunners[task.id] || 'claude-code'}`}
+                title={isBlocked ? 'Blocked by unfinished dependency' : `Run Task in Forge with ${taskRunners[task.id] || 'claude-code'}`}
                 disabled={isBlocked || isStreaming}
-                className="text-forge-neon hover:text-white disabled:text-forge-dark"
+                className="px-1.5 py-0.5 rounded border border-forge-neon/40 bg-forge-neon/15 hover:bg-forge-neon/30 text-forge-neon text-[9px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Play size={8} />
+                <span>Run</span>
               </button>
             )}
             {task.status !== 'done' && onOpenVibeTask && (
@@ -770,25 +818,26 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                 onClick={() => onOpenVibeTask(task.id)}
                 title={isBlocked ? 'Blocked by unfinished dependency' : 'Build this feature visually in Vibe Studio with live interactive preview'}
                 disabled={isBlocked || isStreaming}
-                className="px-1 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 text-[8px] font-mono font-bold flex items-center gap-0.5 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 text-[9px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <Sparkles size={7} />
+                <Sparkles size={8} />
                 <span>Vibe</span>
               </button>
             )}
             <button
               onClick={() => setHandoffModalTask(task)}
-              title="Push to... (Tier 1 In-App Runner or Tier 2 External Handoff)"
-              className="text-cyan-400 hover:text-white"
+              title="Push to... (In-App CLI Runner or External AI Editor)"
+              className="px-1.5 py-0.5 rounded border border-cyan-500/40 bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-400 text-[9px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-all"
             >
               <ExternalLink size={8} />
+              <span>Push</span>
             </button>
-            <button onClick={() => handleDeleteTask(task.id)} title="Delete Task" className="text-red-400 hover:text-white">
-              <Trash2 size={8} />
+            <button onClick={() => handleDeleteTask(task.id)} title="Delete Task" className="text-red-400 hover:text-white p-0.5">
+              <Trash2 size={9} />
             </button>
             {task.status !== 'done' && (
-              <button onClick={() => moveTask(task.id, 'forward')} title="Move forward" className="text-forge-neon hover:text-white">
-                <ArrowRight size={8} />
+              <button onClick={() => moveTask(task.id, 'forward')} title="Move forward" className="text-forge-neon hover:text-white p-0.5">
+                <ArrowRight size={9} />
               </button>
             )}
           </div>
@@ -841,6 +890,16 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                 <span>STOP</span>
               </button>
             )}
+            <button
+              type="button"
+              onClick={handleImportTodos}
+              disabled={importingTodos}
+              title="Scan existing codebase files for TODO / FIXME comments and import into Flow"
+              className="forge-secondary-button flex items-center gap-1 disabled:opacity-50"
+            >
+              <RefreshCw size={9} className={importingTodos ? 'animate-spin' : ''} />
+              <span>{importingTodos ? 'Importing' : 'Import TODOs'}</span>
+            </button>
             <button
               type="button"
               onClick={bootstrapScan}
@@ -904,7 +963,13 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                 todayItems.map((item, idx) => (
                   <div key={item.task.id} className="flex items-center gap-2 text-[9px]">
                     <span className="text-forge-dim w-3 shrink-0">{idx + 1}.</span>
-                    <SafeMarkdown text={item.task.title} className={`flex-1 truncate ${item.blocked ? 'text-forge-dim' : 'text-forge-text'}`} />
+                    <span
+                      onClick={() => setDrawerTask(item.task)}
+                      className={`flex-1 truncate cursor-pointer hover:text-white hover:underline transition-colors ${item.blocked ? 'text-forge-dim' : 'text-forge-text'}`}
+                      title="Click to view & edit task details"
+                    >
+                      <SafeMarkdown text={item.task.title} />
+                    </span>
                     {item.blocked && <span className="text-[8px] uppercase border border-red-700 text-red-300 rounded px-1">blocked</span>}
                     <span className="text-[8px] uppercase border border-forge-neon border-opacity-40 text-forge-neon rounded px-1" title="Priority score">
                       {item.score}
@@ -913,10 +978,11 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       type="button"
                       onClick={() => runTaskQuery(item.task)}
                       disabled={item.blocked || isStreaming}
-                      title={item.blocked ? 'Blocked by unfinished dependency' : 'Run this task'}
-                      className="text-forge-neon hover:text-white disabled:text-forge-dark shrink-0"
+                      title={item.blocked ? 'Blocked by unfinished dependency' : 'Run this task in Forge'}
+                      className="px-1.5 py-0.5 rounded border border-forge-neon/40 bg-forge-neon/10 text-forge-neon text-[8.5px] font-mono font-bold hover:bg-forge-neon/20 disabled:opacity-40 flex items-center gap-0.5 shrink-0 cursor-pointer"
                     >
-                      <Play size={9} />
+                      <Play size={8} />
+                      <span>Run</span>
                     </button>
                     {onOpenVibeTask && (
                       <button
@@ -924,12 +990,21 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                         onClick={() => onOpenVibeTask(item.task.id)}
                         disabled={item.blocked || isStreaming}
                         title="Build this task visually in Vibe Studio"
-                        className="px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[8px] font-mono font-bold hover:bg-emerald-500/20 disabled:opacity-40 flex items-center gap-0.5 shrink-0"
+                        className="px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[8.5px] font-mono font-bold hover:bg-emerald-500/20 disabled:opacity-40 flex items-center gap-0.5 shrink-0 cursor-pointer"
                       >
-                        <Sparkles size={7} />
+                        <Sparkles size={8} />
                         <span>Vibe</span>
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setHandoffModalTask(item.task)}
+                      title="Push to... (In-App CLI Runner or External AI Editor)"
+                      className="px-1.5 py-0.5 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-400 text-[8.5px] font-mono font-bold hover:bg-cyan-500/20 flex items-center gap-0.5 shrink-0 cursor-pointer"
+                    >
+                      <ExternalLink size={8} />
+                      <span>Push</span>
+                    </button>
                   </div>
                 ))
               )}
@@ -981,19 +1056,54 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           </button>
         </form>
 
-        <div className="flex-1 grid grid-cols-3 gap-2 overflow-hidden">
-          {columns.map(column => (
-            <div key={column.id} className="flex flex-col overflow-hidden forge-surface p-2">
-              <span className="text-[11px] text-forge-dim font-bold mb-2 pb-1 border-b border-forge-dark flex items-center gap-1.5">
-                {column.icon}
-                <span>{column.label} ({column.tasks.length})</span>
-              </span>
-              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
-                {column.tasks.map(renderTaskCard)}
-              </div>
+        {tasks.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center border border-dashed border-forge-dark rounded-lg bg-forge-very-dark/40">
+            <div className="text-sm font-bold text-forge-text mb-1.5">No tasks yet on the board</div>
+            <div className="text-xs text-forge-dim max-w-md mb-6 leading-relaxed">
+              Start by importing existing TODO comments from your codebase, verifying existing code structure, or creating your first task above.
             </div>
-          ))}
-        </div>
+            <div className="flex flex-wrap gap-3 justify-center">
+              <button
+                type="button"
+                onClick={handleImportTodos}
+                disabled={importingTodos}
+                className="forge-btn text-xs px-3 py-1.5 flex items-center gap-1.5"
+              >
+                <RefreshCw size={12} className={importingTodos ? 'animate-spin' : ''} />
+                <span>Import Code TODOs</span>
+              </button>
+              <button
+                type="button"
+                onClick={bootstrapScan}
+                disabled={bootstrapping}
+                className="forge-secondary-button text-xs px-3 py-1.5 flex items-center gap-1.5"
+              >
+                <FolderOpen size={12} />
+                <span>Verify Codebase Status</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 grid grid-cols-3 gap-2 overflow-hidden">
+            {columns.map(column => (
+              <div key={column.id} className="flex flex-col overflow-hidden forge-surface p-2">
+                <span className="text-[11px] text-forge-dim font-bold mb-2 pb-1 border-b border-forge-dark flex items-center gap-1.5">
+                  {column.icon}
+                  <span>{column.label} ({column.tasks.length})</span>
+                </span>
+                <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+                  {column.tasks.length === 0 ? (
+                    <div className="text-[10px] text-forge-dim/60 italic py-6 text-center border border-dashed border-forge-dark/30 rounded my-2">
+                      No {column.label.toLowerCase()} tasks
+                    </div>
+                  ) : (
+                    column.tasks.map(renderTaskCard)
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="w-[300px] flex flex-col forge-surface overflow-hidden">
@@ -1236,15 +1346,48 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
             </div>
 
             <div className="text-[10px] text-forge-dim mb-3 leading-relaxed">
-              Choose an execution path for this card. Run locally inside Forge via genuine BYOK CLI agents (Tier 1), or export a spec bundle and launch your desktop editor (Tier 2).
+              Choose an execution path for this card. Run locally inside Forge via terminal AI agents, build visually in Vibe Studio, or export a specification bundle to your desktop AI editor.
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-3.5 pr-1">
-              {/* Tier 1 In-App Runners */}
+              {/* Visual Studio Option */}
+              {onOpenVibeTask && (
+                <div className="border border-forge-dark rounded p-3 bg-forge-very-dark/60">
+                  <div className="flex items-center justify-between mb-2 border-b border-forge-dark pb-1">
+                    <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                      <Sparkles size={11} /> VISUAL VIBE STUDIO
+                    </span>
+                    <span className="text-[8px] border border-emerald-700 text-emerald-300 rounded px-1 font-bold">Live Interactive Preview</span>
+                  </div>
+                  <div className="text-[9px] text-forge-dim mb-2.5">
+                    Build and test this feature visually with live responsive device frames and natural language prompt assistance.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const taskId = handoffModalTask.id;
+                      setHandoffModalTask(null);
+                      onOpenVibeTask(taskId);
+                    }}
+                    className="w-full border border-emerald-500/40 hover:border-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 p-2.5 rounded text-left transition-colors flex items-center justify-between cursor-pointer"
+                  >
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Sparkles size={12} className="text-emerald-400" />
+                        <span>Vibe Studio</span>
+                      </div>
+                      <span className="text-[8px] text-forge-dim">Live desktop, tablet, and mobile testing canvas.</span>
+                    </div>
+                    <span className="text-[9px] font-mono text-emerald-400 font-bold">Open Canvas →</span>
+                  </button>
+                </div>
+              )}
+
+              {/* In-App CLI Runners */}
               <div className="border border-forge-dark rounded p-3 bg-forge-very-dark/60">
                 <div className="flex items-center justify-between mb-2 border-b border-forge-dark pb-1">
                   <span className="text-[10px] font-bold text-forge-neon flex items-center gap-1">
-                    ⚡ TIER 1: IN-APP RUNNERS
+                    <Terminal size={11} /> IN-APP CLI RUNNERS (FORGE)
                   </span>
                   <span className="text-[8px] border border-green-700 text-green-300 rounded px-1 font-bold">Runs inside Forge</span>
                 </div>
@@ -1259,7 +1402,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       setHandoffModalTask(null);
                       runTaskQuery(task, 'claude-code');
                     }}
-                    className="border border-forge-dark hover:border-forge-neon bg-forge-dark/30 hover:bg-forge-dark/60 p-2.5 rounded text-left transition-colors flex flex-col gap-1"
+                    className="border border-forge-dark hover:border-forge-neon bg-forge-dark/30 hover:bg-forge-dark/60 p-2.5 rounded text-left transition-colors flex flex-col gap-1 cursor-pointer"
                   >
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-white">Claude Code</span>
@@ -1275,7 +1418,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                       setHandoffModalTask(null);
                       runTaskQuery(task, 'codex-cli');
                     }}
-                    className="border border-forge-dark hover:border-forge-neon bg-forge-dark/30 hover:bg-forge-dark/60 p-2.5 rounded text-left transition-colors flex flex-col gap-1"
+                    className="border border-forge-dark hover:border-forge-neon bg-forge-dark/30 hover:bg-forge-dark/60 p-2.5 rounded text-left transition-colors flex flex-col gap-1 cursor-pointer"
                   >
                     <div className="flex justify-between items-center">
                       <span className="text-xs font-bold text-white">Codex CLI</span>
@@ -1286,11 +1429,11 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                 </div>
               </div>
 
-              {/* Tier 2 External Handoff */}
+              {/* External AI Editors & IDEs */}
               <div className="border border-forge-dark rounded p-3 bg-forge-very-dark/60">
                 <div className="flex items-center justify-between mb-2 border-b border-forge-dark pb-1">
                   <span className="text-[10px] font-bold text-cyan-400 flex items-center gap-1">
-                    🚀 TIER 2: EXTERNAL HANDOFF
+                    <ExternalLink size={11} /> EXTERNAL AI EDITORS & IDES
                   </span>
                   <span className="text-[8px] border border-cyan-700 text-cyan-300 rounded px-1 font-bold">Opens externally</span>
                 </div>
@@ -1331,6 +1474,25 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Linear-Style Task Detail Drawer */}
+      <TaskDetailDrawer
+        task={drawerTask}
+        isOpen={Boolean(drawerTask)}
+        onClose={() => setDrawerTask(null)}
+        onSaveTask={handleSaveTaskDetail}
+        allTasks={tasks}
+        worktrees={worktrees}
+        onMergeWorktree={handleMergeWorktree}
+        onRevertWorktree={handleRevertWorktree}
+        onRunInForge={(taskToRun, runner) => runTaskQuery(taskToRun, runner)}
+        onOpenVibe={onOpenVibeTask}
+        onPushHandoff={(taskToHandoff) => setHandoffModalTask(taskToHandoff)}
+        onDeleteTask={(taskId) => {
+          handleDeleteTask(taskId);
+          setDrawerTask(null);
+        }}
+      />
     </div>
   );
 };

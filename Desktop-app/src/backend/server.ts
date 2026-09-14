@@ -3129,6 +3129,47 @@ app.get('/api/plan/drift', async (_req, res) => {
   }
 });
 
+app.get('/api/plan/todos', async (req, res) => {
+  try {
+    const ws = (req.query.workspace as string) || (planningV2() as any).workspaceRoot || process.cwd();
+    let todos: Array<{ id: string; title: string; category: string; description: string; file: string; line: number }> = [];
+    try {
+      const { execSync } = await import('child_process');
+      const stdout = execSync('git grep -n -I -E "(TODO|FIXME|HACK):" -- ":!node_modules" ":!.git" ":!dist" ":!build" || true', {
+        cwd: ws,
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024
+      });
+      const lines = stdout.split('\n').filter(Boolean);
+      todos = lines.slice(0, 50).map((line, idx) => {
+        const parts = line.split(':');
+        const file = parts[0] || '';
+        const lineNum = parseInt(parts[1] || '1', 10);
+        const text = parts.slice(2).join(':').trim();
+        const cleanTitle = text.replace(/^(\/\*|\/\/|\*|#)\s*/, '').trim() || `Code TODO in ${file}:${lineNum}`;
+        let category = 'frontend';
+        if (/\b(test|spec|qa)\b/i.test(file + ' ' + cleanTitle)) category = 'testing';
+        else if (/\b(auth|sec|perm)\b/i.test(file + ' ' + cleanTitle)) category = 'security';
+        else if (/\b(doc|readme)\b/i.test(file + ' ' + cleanTitle)) category = 'docs';
+        else if (/\b(server|api|db|backend)\b/i.test(file + ' ' + cleanTitle)) category = 'backend';
+        return {
+          id: `todo_${Date.now()}_${idx}`,
+          title: cleanTitle,
+          category,
+          description: `Extracted from ${file} line ${lineNum}`,
+          file,
+          line: lineNum
+        };
+      });
+    } catch {
+      // Fallback empty
+    }
+    res.json({ success: true, todos });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Operation failed.' });
+  }
+});
+
 app.get('/api/plan/workspace', (req, res) => {
   try {
     res.json({ success: true, items: planningV2().getWorkspaceItems() });
