@@ -6,6 +6,7 @@ import { NotificationCenter, type AppNotification, type NotificationKind } from 
 import { hostedProviderForModel } from './shared/providerDisclosure';
 import { redactSensitiveData } from './shared/redact';
 import { checkForAppUpdates } from './shared/updateChecker';
+import { getDefaultCatalog, type ModelDefinition, type RoleModelMap } from './shared/modelCatalog';
 
 // Heavy / conditional components: lazy-load to keep the initial chunk below 500 kB.
 const CoworkSpace = lazy(() => import('./components/CoworkSpace').then(m => ({ default: m.CoworkSpace })));
@@ -100,6 +101,30 @@ function App() {
   const [anthropicBaseUrl, setAnthropicBaseUrl] = useState<string>(() => localStorage.getItem('matrix_anthropic_base_url') || '');
   const [openaiBaseUrl, setOpenaiBaseUrl] = useState<string>(() => localStorage.getItem('matrix_openai_base_url') || '');
   const [geminiBaseUrl, setGeminiBaseUrl] = useState<string>(() => localStorage.getItem('matrix_gemini_base_url') || '');
+  const [modelRoles, setModelRoles] = useState<RoleModelMap>(() => {
+    try {
+      const saved = localStorage.getItem('matrix_model_roles');
+      return saved ? JSON.parse(saved) : { chat: '', reasoning: '', coding: '', review: '', research: '', fast: '' };
+    } catch {
+      return { chat: '', reasoning: '', coding: '', review: '', research: '', fast: '' };
+    }
+  });
+  const [customPricing, setCustomPricing] = useState<Record<string, { input: number; output: number }>>(() => {
+    try {
+      const saved = localStorage.getItem('matrix_custom_pricing');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  const [syncedCatalog, setSyncedCatalog] = useState<ModelDefinition[]>(() => {
+    try {
+      const saved = localStorage.getItem('matrix_synced_catalog');
+      return saved ? JSON.parse(saved) : getDefaultCatalog();
+    } catch {
+      return getDefaultCatalog();
+    }
+  });
   const [ollamaDetected, setOllamaDetected] = useState(false);
   const [activationRevision, setActivationRevision] = useState(0);
   const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
@@ -301,6 +326,8 @@ function App() {
     useSearch,
     model,
     fastModel,
+    roleModels: modelRoles,
+    customPricing,
     customInstructions,
     responseMode,
     thinkingCapability,
@@ -329,6 +356,8 @@ function App() {
       useSearch,
       model,
       fastModel,
+      roleModels: modelRoles,
+      customPricing,
       customInstructions,
       responseMode,
       thinkingCapability,
@@ -351,6 +380,8 @@ function App() {
     useSearch,
     model,
     fastModel,
+    modelRoles,
+    customPricing,
     customInstructions,
     responseMode,
     thinkingCapability,
@@ -1007,6 +1038,9 @@ function App() {
     customInstructions?: string;
     responseMode?: ResponseMode;
     thinkingCapability?: 'low' | 'medium' | 'high' | 'ultra';
+    modelRoles?: RoleModelMap;
+    customPricing?: Record<string, { input: number; output: number }>;
+    syncedCatalog?: ModelDefinition[];
     githubToken?: string;
     githubRepoUrl?: string;
     zeroEgressMode?: boolean;
@@ -1122,6 +1156,18 @@ function App() {
         localStorage.setItem('matrix_zero_egress', 'true');
       }
     }
+    if (newConfig.modelRoles !== undefined) {
+      setModelRoles(newConfig.modelRoles);
+      localStorage.setItem('matrix_model_roles', JSON.stringify(newConfig.modelRoles));
+    }
+    if (newConfig.customPricing !== undefined) {
+      setCustomPricing(newConfig.customPricing);
+      localStorage.setItem('matrix_custom_pricing', JSON.stringify(newConfig.customPricing));
+    }
+    if (newConfig.syncedCatalog !== undefined) {
+      setSyncedCatalog(newConfig.syncedCatalog);
+      localStorage.setItem('matrix_synced_catalog', JSON.stringify(newConfig.syncedCatalog));
+    }
 
     if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
       const isPrivacy = newConfig.privacyMode !== undefined ? newConfig.privacyMode : privacyMode;
@@ -1147,6 +1193,8 @@ function App() {
         useSearch: newConfig.useSearch ?? useSearch,
         model: newConfig.model ?? model,
         fastModel: newConfig.fastModel ?? fastModel,
+        roleModels: newConfig.modelRoles ?? modelRoles,
+        customPricing: newConfig.customPricing ?? customPricing,
         customInstructions: newConfig.customInstructions ?? customInstructions,
         responseMode: newConfig.responseMode ?? responseMode,
         zeroEgressMode: isZeroEgress,
@@ -1736,6 +1784,9 @@ function App() {
             onNotify={notify}
             zeroEgressMode={zeroEgressMode}
             privacyMode={privacyMode}
+            modelRoles={modelRoles}
+            customPricing={customPricing}
+            syncedCatalog={syncedCatalog}
           />
         </div>
 

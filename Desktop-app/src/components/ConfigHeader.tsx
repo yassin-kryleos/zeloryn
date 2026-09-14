@@ -1,9 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Coffee, Heart } from 'lucide-react';
+import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Coffee, Heart, Cpu } from 'lucide-react';
 import type { ResponseMode } from '../backend/agents';
 import { FeatureBadge } from './FeatureBadge';
 import { APP_VERSION } from '../version';
 import { checkForAppUpdates } from '../shared/updateChecker';
+import {
+  getDefaultCatalog,
+  syncRemoteCatalog,
+  autoAssignRoles,
+  ROLE_SLOT_DESCRIPTIONS,
+  type ModelDefinition,
+  type RoleModelMap,
+  type RoleSlot,
+  type ModelProvider,
+  type ActiveKeySet
+} from '../shared/modelCatalog';
 
 interface PairedDeviceSummary {
   deviceId: string;
@@ -24,11 +35,10 @@ interface OllamaModelOption {
 
 function getThinkingLevel(model: string): string {
   const m = (model || '').toLowerCase();
-  if (m.includes('opus') || m === 'gpt-5.5') return 'Thinking: Godlike';
-  if (m === 'gpt-5.4' || m.includes('pro')) return 'Thinking: Ultra';
-  if (m.includes('sonnet') || m === 'gpt-4o') return 'Thinking: High';
+  if (m.includes('opus') || m.includes('gpt-6')) return 'Thinking: Godlike';
+  if (m.includes('reasoner') || m.includes('r1')) return 'Thinking: Ultra (Reasoner)';
+  if (m.includes('sonnet') || m.includes('gpt-5.6') || m.includes('glm-5.2') || m.includes('pro')) return 'Thinking: High';
   if (m.includes('flash') || m.includes('mini') || m.includes('haiku')) return 'Thinking: Fast';
-  if (m.includes('reasoner')) return 'Thinking: Ultra (Reasoner)';
   return 'Thinking: Standard';
 }
 
@@ -85,8 +95,14 @@ interface ConfigHeaderProps {
     githubRepoUrl?: string;
     zeroEgressMode?: boolean;
     privacyMode?: boolean;
+    modelRoles?: RoleModelMap;
+    customPricing?: Record<string, { input: number; output: number }>;
+    syncedCatalog?: ModelDefinition[];
   }) => void;
   fastModel?: string;
+  modelRoles?: RoleModelMap;
+  customPricing?: Record<string, { input: number; output: number }>;
+  syncedCatalog?: ModelDefinition[];
   piiFilterEnabled?: boolean;
   onTogglePiiFilter?: (val: boolean) => void;
   telemetry?: { bytesSent: number; bytesReceived: number; compressionSavingsRatio: number } | null;
@@ -117,6 +133,9 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   useSearch,
   model,
   fastModel = '',
+  modelRoles = { chat: '', reasoning: '', coding: '', review: '', research: '', fast: '' },
+  customPricing = {},
+  syncedCatalog = [],
   workspaceRoot,
   isConnected,
   theme,
@@ -232,7 +251,16 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [inputCustomInstructions, setInputCustomInstructions] = useState<string>(customInstructions);
   const [inputResponseMode, setInputResponseMode] = useState<ResponseMode>(responseMode);
   const [inputTheme, setInputTheme] = useState<string>(theme);
-  const [activeTab, setActiveTab] = useState<'api_keys' | 'workspace' | 'github_sync' | 'account_theme' | 'permissions' | 'agents' | 'artifacts'>('api_keys');
+  const [activeTab, setActiveTab] = useState<'api_keys' | 'models' | 'workspace' | 'github_sync' | 'account_theme' | 'permissions' | 'agents' | 'artifacts'>('api_keys');
+
+  // Model catalog and custom model registration state
+  const [showAddCustomModelModal, setShowAddCustomModelModal] = useState<boolean>(false);
+  const [newCustomModelId, setNewCustomModelId] = useState<string>('');
+  const [newCustomModelProvider, setNewCustomModelProvider] = useState<ModelProvider>('custom');
+  const [newCustomModelContext, setNewCustomModelContext] = useState<number>(128000);
+  const [newCustomModelInputCost, setNewCustomModelInputCost] = useState<number>(1.0);
+  const [newCustomModelOutputCost, setNewCustomModelOutputCost] = useState<number>(3.0);
+  const [isSyncingCatalog, setIsSyncingCatalog] = useState<boolean>(false);
 
   // Update checking state
   const [isCheckingUpdates, setIsCheckingUpdates] = useState<boolean>(false);
@@ -614,11 +642,90 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     return Array.from(new Set(list));
   }, [customModels, inputCustomModels, detectedCustomModels]);
 
+  const activeCatalog: ModelDefinition[] = React.useMemo(() => {
+    const base = (syncedCatalog && syncedCatalog.length > 0) ? syncedCatalog : getDefaultCatalog();
+    const existingIds = new Set(base.map(m => m.id));
+    const merged = [...base];
+    for (const cm of effectiveCustomModels) {
+      if (!existingIds.has(cm)) {
+        merged.push({
+          id: cm,
+          name: cm,
+          provider: 'custom',
+          contextWindow: 128000,
+          strengths: ['chat', 'coding'],
+          supportsTools: true,
+          pricing: { input: 1.0, output: 2.0 },
+          isCustom: true
+        });
+        existingIds.add(cm);
+      }
+    }
+    return merged;
+  }, [syncedCatalog, effectiveCustomModels]);
+
+  const hasRoleOverrides = Object.values(modelRoles || {}).some(v => v && v !== 'inherit' && v !== '');
+
+  const handleAutoAssign = () => {
+    const activeKeys: ActiveKeySet = {
+      anthropic: !!anthropicApiKey,
+      gemini: !!geminiApiKey,
+      openai: !!openaiApiKey,
+      ollama: ollamaOptions.length > 0 || !!ollamaUrl,
+      custom: !!customApiKey || !!customBaseUrl
+    };
+    const roster = autoAssignRoles(activeCatalog, activeKeys, model);
+    onUpdateConfig({
+      model: roster.masterDefault,
+      modelRoles: roster.roles
+    });
+    onNotify?.(`Optimal AI roster assigned based on active keys! (${roster.masterDefault})`, 'success');
+  };
+
+  const handleSyncCatalog = async () => {
+    if (zeroEgressMode) {
+      onNotify?.('Zero Egress Mode active: External catalog sync blocked.', 'warning');
+      return;
+    }
+    setIsSyncingCatalog(true);
+    try {
+      const result = await syncRemoteCatalog();
+      if (result.models.length > 0) {
+        onUpdateConfig({ syncedCatalog: result.models });
+        onNotify?.(`Model catalog synced! (${result.models.length} models)`, 'success');
+      } else {
+        onNotify?.(result.error || 'Using local bundled catalog.', 'info');
+      }
+    } catch (err: any) {
+      onNotify?.(`Catalog sync error: ${err?.message}`, 'error');
+    } finally {
+      setIsSyncingCatalog(false);
+    }
+  };
+
+  const handleAddCustomModel = () => {
+    if (!newCustomModelId.trim()) return;
+    const cleanId = newCustomModelId.trim();
+    const updatedCustomModels = Array.from(new Set([...effectiveCustomModels, cleanId]));
+    const updatedPricing = {
+      ...customPricing,
+      [cleanId]: { input: newCustomModelInputCost, output: newCustomModelOutputCost }
+    };
+    onUpdateConfig({
+      customModels: updatedCustomModels,
+      customPricing: updatedPricing
+    });
+    setNewCustomModelId('');
+    setShowAddCustomModelModal(false);
+    onNotify?.(`Registered custom model: ${cleanId}`, 'success');
+  };
+
   const knownStaticModels = [
-    'deepseek-chat', 'deepseek-reasoner',
-    'gemini-2.0-flash', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash',
-    'gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o1', 'gpt-4.5-preview',
-    'claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest',
+    'deepseek-v4', 'deepseek-reasoner-v4', 'deepseek-chat', 'deepseek-reasoner',
+    'gemini-3.8-flash', 'gemini-3.5-pro', 'gemini-3.5-flash', 'gemini-3.1-pro', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash',
+    'gpt-6', 'gpt-5.6', 'gpt-5.5', 'gpt-5.5-mini', 'gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o1',
+    'claude-5-sonnet', 'claude-5-opus', 'claude-4.5-sonnet', 'claude-4.5-haiku', 'claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest',
+    'glm-5.2', 'glm-5', 'glm-4-flash',
     'meta-llama/llama-3.3-70b-instruct', 'qwen/qwen-2.5-coder-32b-instruct'
   ];
   const isCustomOrUnknownSelected = Boolean(
@@ -681,7 +788,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           value={model}
           onChange={(e) => {
             if (e.target.value === '__open_config__') {
-              setActiveTab('api_keys');
+              setActiveTab('models');
               setShowConfigDrawer(true);
             } else {
               onUpdateConfig({ model: e.target.value });
@@ -689,41 +796,49 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           }}
           className="bg-transparent border-0 text-[11px] text-forge-text font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
         >
-          <optgroup label="DeepSeek (V3 / R1)">
+          <optgroup label="Google Gemini">
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+            <option value="gemini-3.5-pro">Gemini 3.5 Pro</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+            <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          </optgroup>
+          <optgroup label="Anthropic Claude">
+            <option value="claude-5-sonnet">Claude 5 Sonnet</option>
+            <option value="claude-5-opus">Claude 5 Opus</option>
+            <option value="claude-4.5-sonnet">Claude 4.5 Sonnet</option>
+            <option value="claude-4.5-haiku">Claude 4.5 Haiku</option>
+            <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet</option>
+            <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+          </optgroup>
+          <optgroup label="OpenAI GPT">
+            <option value="gpt-6">GPT-6</option>
+            <option value="gpt-5.6">GPT-5.6</option>
+            <option value="gpt-5.5">GPT-5.5</option>
+            <option value="gpt-5.5-mini">GPT-5.5 Mini</option>
+            <option value="o3-mini">o3-mini (Reasoning)</option>
+            <option value="o1">o1 (Full Reasoning)</option>
+            <option value="gpt-4o">GPT-4o</option>
+          </optgroup>
+          <optgroup label="DeepSeek">
+            <option value="deepseek-v4">DeepSeek V4</option>
+            <option value="deepseek-reasoner-v4">DeepSeek Reasoner V4</option>
             <option value="deepseek-chat">DeepSeek Chat V3</option>
             <option value="deepseek-reasoner">DeepSeek Reasoner R1</option>
           </optgroup>
-          <optgroup label="Google Gemini">
-            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Preview)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Preview)</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-          </optgroup>
-          <optgroup label="OpenAI GPT">
-            <option value="gpt-4o">GPT-4o</option>
-            <option value="gpt-4o-mini">GPT-4o Mini</option>
-            <option value="o3-mini">o3-mini (Reasoning)</option>
-            <option value="o1">o1 (Full Reasoning)</option>
-            <option value="gpt-4.5-preview">GPT-4.5 Preview</option>
-          </optgroup>
-          <optgroup label="Anthropic Claude">
-            <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet (Hybrid)</option>
-            <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-            <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
-            <option value="claude-3-opus-latest">Claude 3 Opus</option>
+          <optgroup label="Custom / ZLM / GLM">
+            <option value="glm-5.2">GLM-5.2 Flagship</option>
+            <option value="glm-5">GLM-5</option>
+            <option value="glm-4-flash">GLM-4 Flash</option>
+            {effectiveCustomModels.map(m => (
+              <option key={`custom-${m}`} value={m}>{m}</option>
+            ))}
           </optgroup>
           <optgroup label="OpenRouter">
             <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
             <option value="qwen/qwen-2.5-coder-32b-instruct">Qwen 2.5 Coder 32B</option>
           </optgroup>
-          {effectiveCustomModels.length > 0 && (
-            <optgroup label={customProviderName || 'Custom Provider / ZLM'}>
-              {effectiveCustomModels.map(m => (
-                <option key={`custom-${m}`} value={m}>{m}</option>
-              ))}
-            </optgroup>
-          )}
           <optgroup label="Local (Ollama)">
             {selectedDynamicOllamaMissing && (
               <option value={model}>{model.replace('ollama:', '')} (selected)</option>
@@ -743,6 +858,20 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         </select>
       </div>
 
+      {hasRoleOverrides && (
+        <button
+          type="button"
+          onClick={() => {
+            setShowConfigDrawer(true);
+            setActiveTab('models');
+          }}
+          className="px-1.5 py-0.5 bg-forge-neon/15 border border-forge-neon/40 text-forge-neon text-[9px] font-mono rounded cursor-pointer hover:bg-forge-neon/25 transition-all"
+          title="Specialized model roles active across agents (Chat, Reasoning, Coding, etc.)"
+        >
+          ⚡ ROLES ACTIVE
+        </button>
+      )}
+
       {/* Fast Model Selector Dropdown (Phase 9b: Cost-aware routing) */}
       <div className="flex items-center border border-forge-dark rounded p-0.5" title="Fast Model override for triage, Scope Guard review, and diff checks">
         <select
@@ -752,33 +881,29 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           className="bg-transparent border-0 text-[11px] text-forge-cyan font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
         >
           <option value="">Fast Model: (Default / Same)</option>
-          <optgroup label="DeepSeek">
-            <option value="deepseek-chat">Fast: DeepSeek Chat V3</option>
-          </optgroup>
           <optgroup label="Google Gemini">
-            <option value="gemini-2.0-flash">Fast: Gemini 2.0 Flash</option>
+            <option value="gemini-3.8-flash">Fast: Gemini 3.8 Flash</option>
+            <option value="gemini-3.5-flash">Fast: Gemini 3.5 Flash</option>
             <option value="gemini-2.5-flash">Fast: Gemini 2.5 Flash</option>
-            <option value="gemini-1.5-flash">Fast: Gemini 1.5 Flash</option>
+          </optgroup>
+          <optgroup label="Anthropic Claude">
+            <option value="claude-4.5-haiku">Fast: Claude 4.5 Haiku</option>
+            <option value="claude-3-5-haiku-latest">Fast: Claude 3.5 Haiku</option>
           </optgroup>
           <optgroup label="OpenAI GPT">
+            <option value="gpt-5.5-mini">Fast: GPT-5.5 Mini</option>
             <option value="gpt-4o-mini">Fast: GPT-4o Mini</option>
             <option value="o3-mini">Fast: o3-mini</option>
           </optgroup>
-          <optgroup label="Anthropic Claude">
-            <option value="claude-3-5-haiku-latest">Fast: Claude 3.5 Haiku</option>
-            <option value="claude-3-7-sonnet-latest">Fast: Claude 3.7 Sonnet</option>
+          <optgroup label="Custom / ZLM / GLM">
+            <option value="glm-4-flash">Fast: GLM-4 Flash</option>
+            {effectiveCustomModels.map(m => (
+              <option key={`fast-custom-${m}`} value={m}>Fast: {m}</option>
+            ))}
           </optgroup>
-          <optgroup label="OpenRouter">
-            <option value="qwen/qwen-2.5-coder-32b-instruct">Fast: Qwen 2.5 Coder 32B</option>
-            <option value="meta-llama/llama-3.3-70b-instruct">Fast: Llama 3.3 70B</option>
+          <optgroup label="DeepSeek">
+            <option value="deepseek-chat">Fast: DeepSeek Chat V3</option>
           </optgroup>
-          {effectiveCustomModels.length > 0 && (
-            <optgroup label={customProviderName || 'Custom Provider / ZLM'}>
-              {effectiveCustomModels.map(m => (
-                <option key={`fast-custom-${m}`} value={m}>Fast: {m}</option>
-              ))}
-            </optgroup>
-          )}
           <optgroup label="Local (Ollama)">
             {ollamaOptions.map(option => (
               <option key={`fast-${option.value}`} value={option.value}>Fast: {option.label}</option>
@@ -900,6 +1025,16 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'api_keys' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
               >
                 API Keys
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('models')}
+                className={`py-1 rounded border text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'models' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
+              >
+                <span>Models & Roles</span>
+                {hasRoleOverrides && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-forge-neon" title="Roles active" />
+                )}
               </button>
               <button
                 type="button"
@@ -1459,6 +1594,272 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                       <Search size={11} className="text-forge-neon" />
                       <span>Enable Google Search Grounding (Gemini)</span>
                     </label>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'models' && (
+                <div className="flex flex-col gap-3">
+                  {/* Top Action Header */}
+                  <div className="bg-forge-darker p-2.5 rounded border border-forge-dark flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <div className="text-[11px] font-mono font-bold text-forge-neon flex items-center gap-1.5">
+                        <Cpu className="w-3.5 h-3.5 text-forge-neon" />
+                        <span>AI MODEL ROSTER & ROLE SPECIALIZATION</span>
+                      </div>
+                      <div className="text-[9px] text-forge-dim font-mono mt-0.5">
+                        Assign specialized models to specific tasks, or auto-assign optimal slots across your connected providers.
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleAutoAssign}
+                        className="px-2.5 py-1 bg-forge-neon text-black font-mono font-bold text-[10px] rounded hover:bg-forge-neon/80 transition-all cursor-pointer flex items-center gap-1"
+                        title="Auto-detect active API keys and assign the optimal model to each role"
+                      >
+                        <span>⚡ Auto-Assign Roles</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSyncCatalog}
+                        disabled={isSyncingCatalog}
+                        className="px-2 py-1 bg-forge-dark text-forge-cyan font-mono text-[10px] rounded hover:bg-forge-very-dark border border-forge-cyan/40 transition-all cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                        title="Fetch latest Q3 2026 model definitions and pricing from GitHub"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSyncingCatalog ? 'animate-spin' : ''}`} />
+                        <span>Sync Catalog</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowAddCustomModelModal(!showAddCustomModelModal)}
+                        className="px-2 py-1 bg-forge-dark text-forge-text font-mono text-[10px] rounded hover:bg-forge-very-dark border border-forge-dark transition-all cursor-pointer"
+                      >
+                        {showAddCustomModelModal ? 'Close' : '+ Add Model'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Add Custom Model Subform */}
+                  {showAddCustomModelModal && (
+                    <div className="bg-forge-very-dark p-3 rounded border border-forge-neon/50 flex flex-col gap-2 font-mono">
+                      <div className="text-[10px] font-bold text-forge-neon">REGISTER UNLISTED / PROPRIETARY MODEL</div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <div>
+                          <label className="text-forge-dim block mb-0.5">Model ID / Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. glm-5.2, custom:my-llama"
+                            value={newCustomModelId}
+                            onChange={(e) => setNewCustomModelId(e.target.value)}
+                            className="w-full bg-forge-dark border border-forge-dark p-1 rounded text-forge-text text-[10px]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-forge-dim block mb-0.5">Provider Route</label>
+                          <select
+                            value={newCustomModelProvider}
+                            onChange={(e) => setNewCustomModelProvider(e.target.value as any)}
+                            className="w-full bg-forge-dark border border-forge-dark p-1 rounded text-forge-text text-[10px]"
+                          >
+                            <option value="custom">Custom / OpenAI-Compatible</option>
+                            <option value="ollama">Ollama (Local)</option>
+                            <option value="anthropic">Anthropic</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="deepseek">DeepSeek</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-forge-dim block mb-0.5">Input Price ($ / 1M tokens)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newCustomModelInputCost}
+                            onChange={(e) => setNewCustomModelInputCost(parseFloat(e.target.value) || 0)}
+                            className="w-full bg-forge-dark border border-forge-dark p-1 rounded text-forge-text text-[10px]"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-forge-dim block mb-0.5">Output Price ($ / 1M tokens)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={newCustomModelOutputCost}
+                            onChange={(e) => setNewCustomModelOutputCost(parseFloat(e.target.value) || 0)}
+                            className="w-full bg-forge-dark border border-forge-dark p-1 rounded text-forge-text text-[10px]"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-1">
+                        <button
+                          type="button"
+                          onClick={handleAddCustomModel}
+                          disabled={!newCustomModelId.trim()}
+                          className="px-3 py-1 bg-forge-neon text-black font-mono font-bold text-[10px] rounded hover:bg-forge-neon/80 disabled:opacity-50 cursor-pointer"
+                        >
+                          Save & Register
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Master Default Model Card */}
+                  <div className="bg-forge-darker p-2.5 rounded border border-forge-dark flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-mono font-bold text-forge-text flex items-center gap-1.5">
+                        <span>⭐ Master Default Model</span>
+                      </label>
+                      <span className="text-[9px] text-forge-dim font-mono">Used for all unassigned roles</span>
+                    </div>
+                    <select
+                      value={model}
+                      onChange={(e) => onUpdateConfig({ model: e.target.value })}
+                      className="w-full bg-forge-very-dark border border-forge-dark p-1 rounded text-[11px] text-forge-text font-mono cursor-pointer"
+                    >
+                      <optgroup label="Google Gemini">
+                        <option value="gemini-3.8-flash">Gemini 3.8 Flash (1M ctx)</option>
+                        <option value="gemini-3.5-pro">Gemini 3.5 Pro (2M ctx)</option>
+                        <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                        <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                      </optgroup>
+                      <optgroup label="Anthropic Claude">
+                        <option value="claude-5-sonnet">Claude 5 Sonnet (200k ctx)</option>
+                        <option value="claude-5-opus">Claude 5 Opus</option>
+                        <option value="claude-4.5-sonnet">Claude 4.5 Sonnet</option>
+                        <option value="claude-4.5-haiku">Claude 4.5 Haiku</option>
+                        <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet</option>
+                        <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+                      </optgroup>
+                      <optgroup label="OpenAI GPT">
+                        <option value="gpt-6">GPT-6 (256k ctx)</option>
+                        <option value="gpt-5.6">GPT-5.6</option>
+                        <option value="gpt-5.5">GPT-5.5</option>
+                        <option value="gpt-5.5-mini">GPT-5.5 Mini</option>
+                        <option value="o3-mini">o3-mini (Reasoning)</option>
+                        <option value="o1">o1 (Reasoning)</option>
+                        <option value="gpt-4o">GPT-4o</option>
+                      </optgroup>
+                      <optgroup label="DeepSeek">
+                        <option value="deepseek-v4">DeepSeek V4 (128k ctx)</option>
+                        <option value="deepseek-reasoner-v4">DeepSeek Reasoner V4</option>
+                        <option value="deepseek-chat">DeepSeek Chat V3</option>
+                        <option value="deepseek-reasoner">DeepSeek Reasoner R1</option>
+                      </optgroup>
+                      <optgroup label="Custom / ZLM / GLM">
+                        <option value="glm-5.2">GLM-5.2 Flagship</option>
+                        <option value="glm-5">GLM-5</option>
+                        <option value="glm-4-flash">GLM-4 Flash</option>
+                        {effectiveCustomModels.map(m => (
+                          <option key={`master-custom-${m}`} value={m}>{m}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Local (Ollama)">
+                        {ollamaOptions.map(option => (
+                          <option key={`master-${option.value}`} value={option.value}>{option.label}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  {/* Role Specialization Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(['chat', 'reasoning', 'coding', 'review', 'research', 'fast'] as RoleSlot[]).map((slotKey) => {
+                      const slotMeta = ROLE_SLOT_DESCRIPTIONS[slotKey];
+                      const assignedModelId = modelRoles[slotKey] || '';
+                      const effectiveModelId = assignedModelId || model;
+                      const modelDef = activeCatalog.find(m => m.id.toLowerCase() === effectiveModelId.toLowerCase());
+
+                      return (
+                        <div key={slotKey} className="bg-forge-darker p-2.5 rounded border border-forge-dark flex flex-col gap-1.5 font-mono">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-forge-cyan flex items-center gap-1">
+                              <span>{slotMeta.icon}</span>
+                              <span>{slotMeta.label}</span>
+                            </span>
+                            {assignedModelId ? (
+                              <button
+                                type="button"
+                                onClick={() => onUpdateConfig({ modelRoles: { ...modelRoles, [slotKey]: '' } })}
+                                className="text-[8px] text-forge-dim hover:text-forge-neon cursor-pointer underline"
+                              >
+                                Reset to Default
+                              </button>
+                            ) : (
+                              <span className="text-[8px] text-forge-dim">Inheriting Default</span>
+                            )}
+                          </div>
+                          <div className="text-[9px] text-forge-dim line-clamp-1">
+                            {slotMeta.desc}
+                          </div>
+                          <select
+                            value={assignedModelId}
+                            onChange={(e) => onUpdateConfig({ modelRoles: { ...modelRoles, [slotKey]: e.target.value } })}
+                            className="w-full bg-forge-very-dark border border-forge-dark p-1 rounded text-[10px] text-forge-text font-mono cursor-pointer"
+                          >
+                            <option value="">(Inherit Master Default: {model})</option>
+                            <optgroup label="Google Gemini">
+                              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+                              <option value="gemini-3.5-pro">Gemini 3.5 Pro</option>
+                              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+                            </optgroup>
+                            <optgroup label="Anthropic Claude">
+                              <option value="claude-5-sonnet">Claude 5 Sonnet</option>
+                              <option value="claude-5-opus">Claude 5 Opus</option>
+                              <option value="claude-4.5-sonnet">Claude 4.5 Sonnet</option>
+                              <option value="claude-4.5-haiku">Claude 4.5 Haiku</option>
+                            </optgroup>
+                            <optgroup label="OpenAI GPT">
+                              <option value="gpt-6">GPT-6</option>
+                              <option value="gpt-5.6">GPT-5.6</option>
+                              <option value="gpt-5.5">GPT-5.5</option>
+                              <option value="gpt-5.5-mini">GPT-5.5 Mini</option>
+                              <option value="o3-mini">o3-mini (Reasoning)</option>
+                            </optgroup>
+                            <optgroup label="DeepSeek">
+                              <option value="deepseek-v4">DeepSeek V4</option>
+                              <option value="deepseek-reasoner-v4">DeepSeek Reasoner V4</option>
+                              <option value="deepseek-chat">DeepSeek Chat V3</option>
+                            </optgroup>
+                            <optgroup label="Custom / ZLM / GLM">
+                              <option value="glm-5.2">GLM-5.2 Flagship</option>
+                              <option value="glm-5">GLM-5</option>
+                              <option value="glm-4-flash">GLM-4 Flash</option>
+                              {effectiveCustomModels.map(m => (
+                                <option key={`role-${slotKey}-${m}`} value={m}>{m}</option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Local (Ollama)">
+                              {ollamaOptions.map(option => (
+                                <option key={`role-${slotKey}-${option.value}`} value={option.value}>{option.label}</option>
+                              ))}
+                            </optgroup>
+                          </select>
+                          {modelDef && (
+                            <div className="flex items-center justify-between text-[8px] text-forge-dim pt-0.5">
+                              <span>
+                                ${modelDef.pricing.input.toFixed(2)} / ${modelDef.pricing.output.toFixed(2)} per 1M
+                              </span>
+                              <div className="flex items-center gap-1">
+                                {modelDef.reasoningOnly && (
+                                  <span className="px-1 bg-purple-900/40 text-purple-300 border border-purple-700/50 rounded">
+                                    ⚡ XML Tool
+                                  </span>
+                                )}
+                                {slotKey === 'research' && modelDef.contextWindow < 32000 && (
+                                  <span className="px-1 bg-amber-900/40 text-amber-300 border border-amber-700/50 rounded">
+                                    ⚠️ Small Ctx
+                                  </span>
+                                )}
+                                <span>{(modelDef.contextWindow / 1000).toFixed(0)}k ctx</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

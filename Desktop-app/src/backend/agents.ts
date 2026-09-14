@@ -6,6 +6,7 @@ import { ChatDatabase } from './db';
 import { recordDecisionSync } from './decisionMemory';
 
 export interface ChatClient {
+  model?: string;
   chatStream(
     messages: Message[],
     callbacks: {
@@ -113,6 +114,18 @@ export class AgentOrchestrator {
 
   public setFastClient(fastClient?: ChatClient) {
     this.fastClient = fastClient;
+  }
+
+  public roleClients: Map<string, ChatClient> = new Map();
+
+  public setRoleClient(role: string, client: ChatClient) {
+    this.roleClients.set(role, client);
+  }
+
+  public setRoleClients(clients: Record<string, ChatClient>) {
+    for (const [r, c] of Object.entries(clients)) {
+      if (c) this.roleClients.set(r, c);
+    }
   }
 
   public setCustomAgents(agents: Array<{ name: string; role: string; prompt: string }>) {
@@ -527,8 +540,9 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
       let coordContent = '';
       let coordReasoning = '';
 
+      const coordClient = this.roleClients.get('reasoning') || this.roleClients.get('coordinator') || this.client;
       try {
-        await this.client.chatStream(this.coordinatorHistory, {
+        await coordClient.chatStream(this.coordinatorHistory, {
           onReasoningChunk: (chunk) => {
             if (this.isAborted) return;
             coordReasoning += chunk;
@@ -921,13 +935,30 @@ ${customAgent.prompt}
       systemPrompt = this.getSystemPrompt(role as AgentRole);
     }
 
-    // 9b Cost-aware model routing: route lower-stakes steps (Scope Guard) to fast model if configured
-    const clientToUse = (role === 'scope_guard' && this.fastClient) ? this.fastClient : this.client;
+    // Role-based model routing: check roleClients first, then fallbacks
+    let clientToUse: ChatClient = this.client;
+    if (this.roleClients.has(role)) {
+      clientToUse = this.roleClients.get(role)!;
+    } else if (role === 'developer' && this.roleClients.has('coding')) {
+      clientToUse = this.roleClients.get('coding')!;
+    } else if (role === 'researcher' && this.roleClients.has('research')) {
+      clientToUse = this.roleClients.get('research')!;
+    } else if ((role === 'scope_guard' || role === 'debugger') && (this.roleClients.has('fast') || this.fastClient)) {
+      clientToUse = this.roleClients.get('fast') || this.fastClient!;
+    }
 
-    const messages: Message[] = [
+    let messages: Message[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: `TASK ASSIGNED: ${taskDescription}` }
     ];
+
+    // Adapter for pure reasoning models (e.g. DeepSeek Reasoner, o1) that reject system prompts
+    const targetModelName = ((clientToUse as any).model || '').toLowerCase();
+    if (targetModelName.includes('reasoner') || targetModelName.includes('r1') || targetModelName === 'o1') {
+      messages = [
+        { role: 'user', content: `[SYSTEM INSTRUCTIONS]\n${systemPrompt}\n\n[TASK ASSIGNED]\n${taskDescription}` }
+      ];
+    }
 
     let responseContent = '';
     let responseReasoning = '';

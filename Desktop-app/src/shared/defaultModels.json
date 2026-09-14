@@ -1,0 +1,194 @@
+[
+  {
+    "id": "gemini-3.8-flash",
+    "name": "Gemini 3.8 Flash",
+    "provider": "gemini",
+    "contextWindow": 1000000,
+    "strengths": ["research", "fast", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 0.15, "output": 0.60 }
+  },
+  {
+    "id": "gemini-3.5-pro",
+    "name": "Gemini 3.5 Pro",
+    "provider": "gemini",
+    "contextWindow": 2000000,
+    "strengths": ["coding", "reasoning", "review", "research"],
+    "supportsTools": true,
+    "pricing": { "input": 1.25, "output": 5.00 }
+  },
+  {
+    "id": "gemini-3.5-flash",
+    "name": "Gemini 3.5 Flash",
+    "provider": "gemini",
+    "contextWindow": 1000000,
+    "strengths": ["fast", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 0.10, "output": 0.40 }
+  },
+  {
+    "id": "gemini-3.1-pro",
+    "name": "Gemini 3.1 Pro",
+    "provider": "gemini",
+    "contextWindow": 2000000,
+    "strengths": ["coding", "reasoning"],
+    "supportsTools": true,
+    "pricing": { "input": 1.25, "output": 5.00 }
+  },
+  {
+    "id": "claude-5-sonnet",
+    "name": "Claude 5 Sonnet",
+    "provider": "anthropic",
+    "contextWindow": 200000,
+    "strengths": ["coding", "review", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 3.00, "output": 15.00 }
+  },
+  {
+    "id": "claude-5-opus",
+    "name": "Claude 5 Opus",
+    "provider": "anthropic",
+    "contextWindow": 200000,
+    "strengths": ["reasoning", "coding", "review"],
+    "supportsTools": true,
+    "pricing": { "input": 15.00, "output": 75.00 }
+  },
+  {
+    "id": "claude-4.5-sonnet",
+    "name": "Claude 4.5 Sonnet",
+    "provider": "anthropic",
+    "contextWindow": 200000,
+    "strengths": ["coding", "review"],
+    "supportsTools": true,
+    "pricing": { "input": 3.00, "output": 15.00 }
+  },
+  {
+    "id": "claude-4.5-haiku",
+    "name": "Claude 4.5 Haiku",
+    "provider": "anthropic",
+    "contextWindow": 200000,
+    "strengths": ["fast", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 0.80, "output": 4.00 }
+  },
+  {
+    "id": "gpt-6",
+    "name": "GPT-6",
+    "provider": "openai",
+    "contextWindow": 256000,
+    "strengths": ["reasoning", "coding", "review"],
+    "supportsTools": true,
+    "pricing": { "input": 5.00, "output": 20.00 }
+  },
+  {
+    "id": "gpt-5.6",
+    "name": "GPT-5.6",
+    "provider": "openai",
+    "contextWindow": 200000,
+    "strengths": ["coding", "review", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 2.50, "output": 10.00 }
+  },
+  {
+    "id": "gpt-5.5",
+    "name": "GPT-5.5",
+    "provider": "openai",
+    "contextWindow": 128000,
+    "strengths": ["chat", "coding"],
+    "supportsTools": true,
+    "pricing": { "input": 1.50, "output": 6.00 }
+  },
+  {
+    "id": "gpt-5.5-mini",
+    "name": "GPT-5.5 Mini",
+    "provider": "openai",
+    "contextWindow": 128000,
+    "strengths": ["fast", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 0.20, "output": 0.80 }
+  },
+  {
+    "id": "o3-mini",
+    "name": "OpenAI o3-mini",
+    "provider": "openai",
+    "contextWindow": 200000,
+    "strengths": ["reasoning", "coding"],
+    "supportsTools": true,
+    "reasoningOnly": true,
+    "pricing": { "input": 1.10, "output": 4.40 }
+  },
+  {
+    "id": "deepseek-v4",
+    "name": "DeepSeek V4",
+    "provider": "deepseek",
+    "contextWindow": 128000,
+    "strengths": ["coding", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 0.27, "output": 1.10 }
+  },
+  {
+    "id": "deepseek-reasoner-v4",
+    "name": "DeepSeek Reasoner V4",
+    "provider": "deepseek",
+    "contextWindow": 128000,
+    "strengths": ["reasoning"],
+    "supportsTools": false,
+    "reasoningOnly": true,
+    "pricing": { "input": 0.55, "output": 2.19 }
+  },
+  {
+    "id": "glm-5.2",
+    "name": "GLM-5.2 Flagship",
+    "provider": "custom",
+    "contextWindow": 128000,
+    "strengths": ["coding", "chat", "review"],
+    "supportsTools": true,
+    "pricing": { "input": 1.00, "output": 2.00 }
+  },
+  {
+    "id": "glm-5",
+    "name": "GLM-5",
+    "provider": "custom",
+    "contextWindow": 128000,
+    "strengths": ["chat", "coding"],
+    "supportsTools": true,
+    "pricing": { "input": 0.50, "output": 1.00 }
+  },
+  {
+    "id": "glm-4-flash",
+    "name": "GLM-4 Flash",
+    "provider": "custom",
+    "contextWindow": 128000,
+    "strengths": ["fast", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 0.05, "output": 0.10 }
+  },
+  {
+    "id": "ollama:qwen2.5-coder",
+    "name": "Qwen 2.5 Coder (Local)",
+    "provider": "ollama",
+    "contextWindow": 32768,
+    "strengths": ["coding", "chat"],
+    "supportsTools": true,
+    "pricing": { "input": 0.00, "output": 0.00 }
+  },
+  {
+    "id": "ollama:deepseek-r1",
+    "name": "DeepSeek R1 (Local)",
+    "provider": "ollama",
+    "contextWindow": 32768,
+    "strengths": ["reasoning"],
+    "supportsTools": false,
+    "reasoningOnly": true,
+    "pricing": { "input": 0.00, "output": 0.00 }
+  },
+  {
+    "id": "ollama:llama3.3",
+    "name": "Llama 3.3 (Local)",
+    "provider": "ollama",
+    "contextWindow": 32768,
+    "strengths": ["chat", "research"],
+    "supportsTools": true,
+    "pricing": { "input": 0.00, "output": 0.00 }
+  }
+]

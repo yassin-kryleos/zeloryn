@@ -22,7 +22,7 @@ import { generateWorkspaceGraph } from './graph';
 import { threeWayMerge } from './diff3';
 import { getPublicKey } from './security';
 import { PlanningV2Service } from './planningV2';
-import { CostGuard, estimateTokens, estimateCost, getProviderForModel } from './costGuard';
+import { CostGuard, estimateTokens, estimateCost, getProviderForModel, registerCustomModelPricing } from './costGuard';
 import { scanSecrets } from './secretScanner';
 import { companionHub, type ForgeRunner } from './companionHub';
 import { claudeCodeRun, findClaudeCodeBinary, cliAgentRegistry } from './cliAgentRunner';
@@ -506,7 +506,8 @@ async function startForgeRun(opts: {
         const { task } = await planningV2().getCriteria(planItemId);
         if (task) {
           send({ type: 'status', message: 'Running Post-Execution CREW reviewer...' });
-          const review = await runPostExecutionReview(sandbox.getWorkspaceRoot(), task, modelProxy);
+          const reviewClient = orchestrator.roleClients.get('review') || modelProxy;
+          const review = await runPostExecutionReview(sandbox.getWorkspaceRoot(), task, reviewClient);
           await planningV2().savePostExecutionReview(planItemId, review);
           send({ type: 'post_execution_review', planItemId, review });
           companionHub.broadcastSessionUpdate({ postExecutionReview: { planItemId, review } });
@@ -1545,95 +1546,95 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         onError: callbacks.onError
       };
 
-      if (isCustomModel(currentModel)) {
-        customClient.setModel(normalizeCustomModel(currentModel));
-        return customClient.chatStream(messages, adaptedCallbacks);
-      }
-      if (currentModel.startsWith('gemini')) {
-        return geminiClient.chatStream(messages, adaptedCallbacks);
-      }
-      if (currentModel.startsWith('gpt') || currentModel.startsWith('o1') || currentModel.startsWith('o3')) {
-        return openaiClient.chatStream(messages, adaptedCallbacks);
-      } else if (currentModel.startsWith('claude')) {
-        return anthropicClient.chatStream(messages, adaptedCallbacks);
-      } else if (isOllamaModel(currentModel)) {
-        ollamaClient.setModel(normalizeOllamaModel(currentModel));
-        return ollamaClient.chatStream(messages, adaptedCallbacks);
-      } else if (currentModel.includes('/') || currentModel.startsWith('meta-') || currentModel.startsWith('qwen/')) {
-        return openrouterClient.chatStream(messages, adaptedCallbacks);
-      } else {
-        return deepseekClient.chatStream(messages, adaptedCallbacks);
-      }
+      return dispatchModelStream(currentModel, messages, adaptedCallbacks);
+    }
+  };
+
+  const dispatchModelStream = (targetModel: string, messages: Message[], callbacks: any) => {
+    if (isCustomModel(targetModel)) {
+      customClient.setModel(normalizeCustomModel(targetModel));
+      return customClient.chatStream(messages, callbacks);
+    }
+    if (targetModel.startsWith('gemini')) {
+      return geminiClient.chatStream(messages, callbacks);
+    }
+    if (targetModel.startsWith('gpt') || targetModel.startsWith('o1') || targetModel.startsWith('o3')) {
+      return openaiClient.chatStream(messages, callbacks);
+    } else if (targetModel.startsWith('claude')) {
+      return anthropicClient.chatStream(messages, callbacks);
+    } else if (isOllamaModel(targetModel)) {
+      ollamaClient.setModel(normalizeOllamaModel(targetModel));
+      return ollamaClient.chatStream(messages, callbacks);
+    } else if (targetModel.includes('/') || targetModel.startsWith('meta-') || targetModel.startsWith('qwen/')) {
+      return openrouterClient.chatStream(messages, callbacks);
+    } else {
+      return deepseekClient.chatStream(messages, callbacks);
     }
   };
 
   let currentFastModel: string = '';
-
-  const fastModelProxy: ChatClient = {
-    chatStream: async (messages, callbacks) => {
-      const targetModel = currentFastModel || currentModel;
-      const adaptedCallbacks = {
-        onReasoningChunk: callbacks.onReasoningChunk,
-        onContentChunk: callbacks.onContentChunk,
-        onComplete: async (content: string, reasoning?: string) => {
-          let inputTokens = 0;
-          for (const msg of messages) {
-            inputTokens += estimateTokens(msg.content);
-          }
-          const outputTokens = estimateTokens(content);
-          const inputCost = estimateCost(messages.map(m => m.content).join(' '), targetModel, false);
-          const outputCost = estimateCost(content, targetModel, true);
-          const totalCost = inputCost + outputCost;
-
-          try {
-            const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
-            await costGuard.addRecord({
-              sessionId: currentSessionId,
-              model: targetModel,
-              provider: getProviderForModel(targetModel),
-              inputTokens,
-              outputTokens,
-              cost: totalCost,
-              tokenSavings: 0
-            });
-          } catch {}
-
-          try {
-            ws.send(JSON.stringify({
-              type: 'cost_update',
-              cost: totalCost,
-              inputTokens,
-              outputTokens,
-              model: targetModel,
-              provider: getProviderForModel(targetModel),
-              isFastRoute: true
-            }));
-          } catch (e) {}
-          callbacks.onComplete?.(content, reasoning || '');
-        },
-        onError: callbacks.onError
-      };
-
-      if (isCustomModel(targetModel)) {
-        customClient.setModel(normalizeCustomModel(targetModel));
-        return customClient.chatStream(messages, adaptedCallbacks);
-      }
-      if (targetModel.startsWith('gemini')) {
-        return geminiClient.chatStream(messages, adaptedCallbacks);
-      } else if (targetModel.startsWith('gpt') || targetModel.startsWith('o1') || targetModel.startsWith('o3')) {
-        return openaiClient.chatStream(messages, adaptedCallbacks);
-      } else if (targetModel.startsWith('claude')) {
-        return anthropicClient.chatStream(messages, adaptedCallbacks);
-      } else if (isOllamaModel(targetModel)) {
-        ollamaClient.setModel(normalizeOllamaModel(targetModel));
-        return ollamaClient.chatStream(messages, adaptedCallbacks);
-      } else if (targetModel.includes('/') || targetModel.startsWith('meta-') || targetModel.startsWith('qwen/')) {
-        return openrouterClient.chatStream(messages, adaptedCallbacks);
-      } else {
-        return deepseekClient.chatStream(messages, adaptedCallbacks);
-      }
-    }
+  let currentRoleModels: Record<string, string> = {
+    chat: '',
+    reasoning: '',
+    coding: '',
+    review: '',
+    research: '',
+    fast: ''
   };
+
+  const createRoleModelProxy = (role: string): ChatClient => {
+    return {
+      chatStream: async (messages, callbacks) => {
+        const targetModel = currentRoleModels[role] || (role === 'fast' ? currentFastModel : '') || currentModel;
+        const adaptedCallbacks = {
+          onReasoningChunk: callbacks.onReasoningChunk,
+          onContentChunk: callbacks.onContentChunk,
+          onComplete: async (content: string, reasoning?: string) => {
+            let inputTokens = 0;
+            for (const msg of messages) {
+              inputTokens += estimateTokens(msg.content);
+            }
+            const outputTokens = estimateTokens(content);
+            const inputCost = estimateCost(messages.map(m => m.content).join(' '), targetModel, false);
+            const outputCost = estimateCost(content, targetModel, true);
+            const totalCost = inputCost + outputCost;
+
+            try {
+              const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
+              await costGuard.addRecord({
+                sessionId: currentSessionId,
+                model: targetModel,
+                provider: getProviderForModel(targetModel),
+                inputTokens,
+                outputTokens,
+                cost: totalCost,
+                tokenSavings: 0
+              });
+            } catch {}
+
+            try {
+              ws.send(JSON.stringify({
+                type: 'cost_update',
+                cost: totalCost,
+                inputTokens,
+                outputTokens,
+                model: targetModel,
+                provider: getProviderForModel(targetModel),
+                role,
+                isFastRoute: role === 'fast'
+              }));
+            } catch (e) {}
+            callbacks.onComplete?.(content, reasoning || '');
+          },
+          onError: callbacks.onError
+        };
+
+        return dispatchModelStream(targetModel, messages, adaptedCallbacks);
+      }
+    };
+  };
+
+  const fastModelProxy: ChatClient = createRoleModelProxy('fast');
 
   let orchestrator = new AgentOrchestrator(
     sandbox,
@@ -1652,6 +1653,23 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
     },
     currentFastModel ? fastModelProxy : undefined
   );
+
+  const syncRoleClientsToOrchestrator = () => {
+    orchestrator.setRoleClients({
+      chat: createRoleModelProxy('chat'),
+      reasoning: createRoleModelProxy('reasoning'),
+      coordinator: createRoleModelProxy('reasoning'),
+      coding: createRoleModelProxy('coding'),
+      developer: createRoleModelProxy('coding'),
+      review: createRoleModelProxy('review'),
+      research: createRoleModelProxy('research'),
+      researcher: createRoleModelProxy('research'),
+      fast: createRoleModelProxy('fast'),
+      scope_guard: createRoleModelProxy('fast')
+    });
+  };
+  syncRoleClientsToOrchestrator();
+
   companionHub.registerOrchestrator(currentSessionId, orchestrator);
 
   // Phase 5.4: lets a paired companion launch a FORGE run for a plan item via
@@ -1849,6 +1867,17 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
           if (data.fastModel !== undefined) {
             currentFastModel = data.fastModel;
             orchestrator.setFastClient(currentFastModel ? fastModelProxy : undefined);
+          }
+          if (data.roleModels) {
+            currentRoleModels = { ...currentRoleModels, ...data.roleModels };
+            syncRoleClientsToOrchestrator();
+          }
+          if (data.customPricing && typeof data.customPricing === 'object') {
+            for (const [mId, p] of Object.entries(data.customPricing as Record<string, { input: number; output: number }>)) {
+              if (p && typeof p.input === 'number' && typeof p.output === 'number') {
+                registerCustomModelPricing(mId, p);
+              }
+            }
           }
           if (data.thinkingCapability) {
             openaiClient.setThinkingCapability(data.thinkingCapability);
@@ -2143,7 +2172,8 @@ ${getResponseModeInstructions(responseMode)}`;
                   try {
                     const { task } = await planningV2().getCriteria(data.planItemId);
                     if (task) {
-                      const review = await runPostExecutionReview(sandbox.getWorkspaceRoot(), task, modelProxy);
+                      const reviewClient = orchestrator.roleClients.get('review') || modelProxy;
+                      const review = await runPostExecutionReview(sandbox.getWorkspaceRoot(), task, reviewClient);
                       await planningV2().savePostExecutionReview(data.planItemId, review);
                       ws.send(JSON.stringify({ type: 'post_execution_review', planItemId: data.planItemId, review }));
                       companionHub.broadcastSessionUpdate({ postExecutionReview: { planItemId: data.planItemId, review } });

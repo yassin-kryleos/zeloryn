@@ -14,29 +14,56 @@ export interface CostRecord {
 }
 
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  'deepseek-chat': { input: 0.14 / 1000000, output: 0.28 / 1000000 },
-  'deepseek-reasoner': { input: 0.55 / 1000000, output: 2.19 / 1000000 },
-  'gemini-2.0-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
-  'gemini-2.5-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
+  // Q3 2026 Generation Flagships:
+  'gemini-3.8-flash': { input: 0.15 / 1000000, output: 0.60 / 1000000 },
+  'gemini-3.5-pro': { input: 1.25 / 1000000, output: 5.00 / 1000000 },
+  'gemini-3.5-flash': { input: 0.10 / 1000000, output: 0.40 / 1000000 },
+  'gemini-3.1-pro': { input: 1.25 / 1000000, output: 5.00 / 1000000 },
   'gemini-2.5-pro': { input: 1.25 / 1000000, output: 5.00 / 1000000 },
-  'gemini-3.5-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
+  'gemini-2.5-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
+  'gemini-2.0-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
+  'claude-5-sonnet': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
+  'claude-5-opus': { input: 15.00 / 1000000, output: 75.00 / 1000000 },
+  'claude-4.5-sonnet': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
+  'claude-4.5-haiku': { input: 0.80 / 1000000, output: 4.00 / 1000000 },
+  'claude-3-7-sonnet-latest': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
+  'claude-3-5-sonnet-latest': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
+  'claude-3-5-haiku-latest': { input: 0.80 / 1000000, output: 4.00 / 1000000 },
+  'gpt-6': { input: 5.00 / 1000000, output: 20.00 / 1000000 },
+  'gpt-5.6': { input: 2.50 / 1000000, output: 10.00 / 1000000 },
+  'gpt-5.5': { input: 1.50 / 1000000, output: 6.00 / 1000000 },
+  'gpt-5.5-mini': { input: 0.20 / 1000000, output: 0.80 / 1000000 },
   'gpt-4o': { input: 2.50 / 1000000, output: 10.00 / 1000000 },
   'gpt-4o-mini': { input: 0.15 / 1000000, output: 0.60 / 1000000 },
   'o3-mini': { input: 1.10 / 1000000, output: 4.40 / 1000000 },
   'o1': { input: 15.00 / 1000000, output: 60.00 / 1000000 },
-  'claude-3-7-sonnet-latest': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
-  'claude-3-5-sonnet-latest': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
-  'claude-3-5-haiku-latest': { input: 0.80 / 1000000, output: 4.00 / 1000000 },
+  'deepseek-v4': { input: 0.27 / 1000000, output: 1.10 / 1000000 },
+  'deepseek-reasoner-v4': { input: 0.55 / 1000000, output: 2.19 / 1000000 },
+  'deepseek-chat': { input: 0.14 / 1000000, output: 0.28 / 1000000 },
+  'deepseek-reasoner': { input: 0.55 / 1000000, output: 2.19 / 1000000 },
+  'glm-5.2': { input: 1.00 / 1000000, output: 2.00 / 1000000 },
+  'glm-5': { input: 0.50 / 1000000, output: 1.00 / 1000000 },
+  'glm-4-flash': { input: 0.05 / 1000000, output: 0.10 / 1000000 },
   'meta-llama/llama-3.3-70b-instruct': { input: 0.54 / 1000000, output: 0.54 / 1000000 },
   'qwen/qwen-2.5-coder-32b-instruct': { input: 0.40 / 1000000, output: 0.40 / 1000000 },
   // Default general fallback categories:
-  'custom': { input: 0.14 / 1000000, output: 0.28 / 1000000 },
-  'glm': { input: 0.14 / 1000000, output: 0.28 / 1000000 },
-  'gemini': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
-  'gpt': { input: 0.15 / 1000000, output: 0.60 / 1000000 },
+  'custom': { input: 0.50 / 1000000, output: 1.50 / 1000000 },
+  'glm': { input: 0.50 / 1000000, output: 1.50 / 1000000 },
+  'gemini': { input: 0.15 / 1000000, output: 0.60 / 1000000 },
+  'gpt': { input: 1.50 / 1000000, output: 6.00 / 1000000 },
   'claude': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
   'llama': { input: 0.54 / 1000000, output: 0.54 / 1000000 }
 };
+
+const dynamicPricingRegistry: Record<string, { input: number; output: number }> = {};
+
+export function registerCustomModelPricing(model: string, pricing: { input: number; output: number }): void {
+  const m = model.toLowerCase();
+  dynamicPricingRegistry[m] = {
+    input: pricing.input / 1000000,
+    output: pricing.output / 1000000
+  };
+}
 
 export function estimateTokens(text: string): number {
   if (!text) return 0;
@@ -45,7 +72,7 @@ export function estimateTokens(text: string): number {
 
 export function getProviderForModel(model: string): string {
   const m = model.toLowerCase();
-  if (m.startsWith('ollama:') || m === 'llama3' || m === 'qwen2.5-coder') return 'Ollama (Local)';
+  if (m.startsWith('ollama:') || m === 'llama3' || m === 'qwen2.5-coder' || m.includes('local')) return 'Ollama (Local)';
   if (m.startsWith('custom:') || m.startsWith('glm') || m.startsWith('zlm')) return 'Custom Provider';
   if (m.startsWith('gemini')) return 'Google Gemini';
   if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3')) return 'OpenAI';
@@ -57,9 +84,10 @@ export function getProviderForModel(model: string): string {
 
 export function getPricingForModel(model: string): { input: number; output: number } {
   const m = model.toLowerCase();
-  if (m.startsWith('ollama:') || m === 'llama3' || m === 'qwen2.5-coder') {
+  if (m.startsWith('ollama:') || m === 'llama3' || m === 'qwen2.5-coder' || m.includes('localhost') || m.includes('127.0.0.1')) {
     return { input: 0, output: 0 };
   }
+  if (dynamicPricingRegistry[m]) return dynamicPricingRegistry[m];
   if (MODEL_PRICING[m]) return MODEL_PRICING[m];
   if (m.startsWith('custom:') || m.startsWith('glm') || m.startsWith('zlm')) return MODEL_PRICING['custom'];
   if (m.startsWith('gemini')) return MODEL_PRICING['gemini'];
