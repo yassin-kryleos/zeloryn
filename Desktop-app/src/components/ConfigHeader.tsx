@@ -1548,7 +1548,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               <span className="text-forge-dim text-[8.5px]">
                 Zeloryn is completely free with no subscriptions. If it saves you engineering hours, consider buying a coffee to support development!
               </span>
-              <div className="flex gap-2 mt-1">
+              <div className="flex flex-wrap gap-2 mt-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -1567,6 +1567,21 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    const url = 'https://ko-fi.com/yassinkryleos';
+                    if ((window as any).electronAPI?.openExternal) {
+                      (window as any).electronAPI.openExternal(url);
+                    } else {
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                >
+                  <Coffee size={10} />
+                  <span>Ko-fi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     const url = 'https://github.com/sponsors/yassin-kryleos';
                     if ((window as any).electronAPI?.openExternal) {
                       (window as any).electronAPI.openExternal(url);
@@ -1578,6 +1593,20 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 >
                   <Heart size={10} />
                   <span>GitHub Sponsor</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = 'https://paypal.me/yassinkryleos';
+                    if ((window as any).electronAPI?.openExternal) {
+                      (window as any).electronAPI.openExternal(url);
+                    } else {
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                >
+                  <span>PayPal.me</span>
                 </button>
               </div>
             </div>

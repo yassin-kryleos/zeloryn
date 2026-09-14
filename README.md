@@ -7,7 +7,8 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-brightgreen.svg)]()
 [![BYOK](https://img.shields.io/badge/Model-100%25%20BYOK-orange.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)]()
-[![Support](https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-ffdd00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/yassinkryleos)
+[![Buy Me A Coffee](https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-ffdd00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/yassinkryleos)
+[![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/yassinkryleos)
 
 ---
 
@@ -256,7 +257,9 @@ We welcome contributions of all kinds! Please read [CONTRIBUTING.md](CONTRIBUTIN
 Zeloryn is 100% free, open-source, and local-first with no subscriptions. If Zeloryn saves you engineering hours, consider supporting ongoing development:
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/yassinkryleos)
-[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/yassin-kryleos)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-ff5e5b?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/yassinkryleos)
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-ea4aaa?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/yassin-kryleos)
+[![PayPal](https://img.shields.io/badge/PayPal.Me-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/yassinkryleos)
 
 ---
 
