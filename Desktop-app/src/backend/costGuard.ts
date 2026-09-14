@@ -16,15 +16,22 @@ export interface CostRecord {
 export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   'deepseek-chat': { input: 0.14 / 1000000, output: 0.28 / 1000000 },
   'deepseek-reasoner': { input: 0.55 / 1000000, output: 2.19 / 1000000 },
+  'gemini-2.0-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
   'gemini-2.5-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
   'gemini-2.5-pro': { input: 1.25 / 1000000, output: 5.00 / 1000000 },
+  'gemini-3.5-flash': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
   'gpt-4o': { input: 2.50 / 1000000, output: 10.00 / 1000000 },
   'gpt-4o-mini': { input: 0.15 / 1000000, output: 0.60 / 1000000 },
+  'o3-mini': { input: 1.10 / 1000000, output: 4.40 / 1000000 },
+  'o1': { input: 15.00 / 1000000, output: 60.00 / 1000000 },
+  'claude-3-7-sonnet-latest': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
   'claude-3-5-sonnet-latest': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
   'claude-3-5-haiku-latest': { input: 0.80 / 1000000, output: 4.00 / 1000000 },
   'meta-llama/llama-3.3-70b-instruct': { input: 0.54 / 1000000, output: 0.54 / 1000000 },
   'qwen/qwen-2.5-coder-32b-instruct': { input: 0.40 / 1000000, output: 0.40 / 1000000 },
   // Default general fallback categories:
+  'custom': { input: 0.14 / 1000000, output: 0.28 / 1000000 },
+  'glm': { input: 0.14 / 1000000, output: 0.28 / 1000000 },
   'gemini': { input: 0.075 / 1000000, output: 0.30 / 1000000 },
   'gpt': { input: 0.15 / 1000000, output: 0.60 / 1000000 },
   'claude': { input: 3.00 / 1000000, output: 15.00 / 1000000 },
@@ -39,12 +46,13 @@ export function estimateTokens(text: string): number {
 export function getProviderForModel(model: string): string {
   const m = model.toLowerCase();
   if (m.startsWith('ollama:') || m === 'llama3' || m === 'qwen2.5-coder') return 'Ollama (Local)';
+  if (m.startsWith('custom:') || m.startsWith('glm') || m.startsWith('zlm')) return 'Custom Provider';
   if (m.startsWith('gemini')) return 'Google Gemini';
-  if (m.startsWith('gpt')) return 'OpenAI';
+  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3')) return 'OpenAI';
   if (m.startsWith('claude')) return 'Anthropic';
   if (m.includes('/') || m.startsWith('meta-') || m.startsWith('qwen/')) return 'OpenRouter';
   if (m.startsWith('deepseek')) return 'DeepSeek';
-  return 'Unknown';
+  return 'Custom Provider';
 }
 
 export function getPricingForModel(model: string): { input: number; output: number } {
@@ -53,11 +61,12 @@ export function getPricingForModel(model: string): { input: number; output: numb
     return { input: 0, output: 0 };
   }
   if (MODEL_PRICING[m]) return MODEL_PRICING[m];
+  if (m.startsWith('custom:') || m.startsWith('glm') || m.startsWith('zlm')) return MODEL_PRICING['custom'];
   if (m.startsWith('gemini')) return MODEL_PRICING['gemini'];
-  if (m.startsWith('gpt')) return MODEL_PRICING['gpt'];
+  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3')) return MODEL_PRICING['gpt'];
   if (m.startsWith('claude')) return MODEL_PRICING['claude'];
   if (m.includes('llama')) return MODEL_PRICING['llama'];
-  return MODEL_PRICING['deepseek-chat']; // Fallback
+  return MODEL_PRICING['custom']; // Fallback
 }
 
 export function estimateCost(text: string, model: string, isOutput: boolean = false): number {

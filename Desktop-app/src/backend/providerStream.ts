@@ -60,6 +60,7 @@ export function streamSseLines(
 }
 
 import * as https from 'https';
+import * as http from 'http';
 
 export interface OpenAiStreamOptions {
   apiKey: string;
@@ -68,6 +69,7 @@ export interface OpenAiStreamOptions {
   messages: Array<{ role: string; content: string }>;
   errorPrefix: string;
   endpointPath?: string;
+  allowEmptyKey?: boolean;
   extraBody?: Record<string, any>;
   extraHeaders?: Record<string, string>;
   onContentChunk?: (chunk: string) => void;
@@ -78,7 +80,7 @@ export interface OpenAiStreamOptions {
 
 export function streamOpenAiCompatibleChat(opts: OpenAiStreamOptions): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    if (!opts.apiKey) {
+    if (!opts.apiKey && !opts.allowEmptyKey) {
       const err = new Error(`${opts.errorPrefix} Key is missing. Configure it in settings.`);
       opts.onError?.(err);
       reject(err);
@@ -92,19 +94,34 @@ export function streamOpenAiCompatibleChat(opts: OpenAiStreamOptions): Promise<v
       ...opts.extraBody
     });
 
-    const endpoint = opts.endpointPath || '/v1/chat/completions';
-    const url = new URL(`${opts.baseUrl}${endpoint}`);
+    const rawBase = (opts.baseUrl || 'https://api.openai.com').trim().replace(/\/+$/, '');
+    let endpoint = opts.endpointPath;
+    if (!endpoint) {
+      if (rawBase.endsWith('/chat/completions')) {
+        endpoint = '';
+      } else if (rawBase.endsWith('/v1') || rawBase.endsWith('/v4')) {
+        endpoint = '/chat/completions';
+      } else {
+        endpoint = '/v1/chat/completions';
+      }
+    }
+    const url = new URL(`${rawBase}${endpoint}`);
+    const client = url.protocol === 'http:' ? http : https;
+    const headers: Record<string, any> = {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData),
+      ...opts.extraHeaders
+    };
+    if (opts.apiKey) {
+      headers['Authorization'] = `Bearer ${opts.apiKey}`;
+    }
+
     const requestOptions = {
       hostname: url.hostname,
       port: url.port || undefined,
-      path: url.pathname,
+      path: `${url.pathname}${url.search}`,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${opts.apiKey}`,
-        'Content-Length': Buffer.byteLength(postData),
-        ...opts.extraHeaders
-      }
+      headers
     };
 
     let fullContent = '';
@@ -125,7 +142,7 @@ export function streamOpenAiCompatibleChat(opts: OpenAiStreamOptions): Promise<v
       } catch {}
     };
 
-    const req = https.request(requestOptions, (res: IncomingMessage) => {
+    const req = client.request(requestOptions, (res: IncomingMessage) => {
       if (handleHttpStreamError(res, `${opts.errorPrefix} Error`, opts.onError, reject)) return;
 
       streamSseLines(

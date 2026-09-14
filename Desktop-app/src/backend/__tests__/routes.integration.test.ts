@@ -125,8 +125,6 @@ describe('Route protection & error handling', () => {
   });
 });
 
-// ─── HTTP security headers ───────────────────────────────────────────────────
-
 describe('Security headers (Helmet)', () => {
   it('includes X-Content-Type-Options: nosniff', async () => {
     const res = await request(app).get('/api/sessions');
@@ -140,3 +138,19 @@ describe('Security headers (Helmet)', () => {
     expect(hasFrameHeader).toBe(true);
   });
 });
+
+describe('Custom Provider Endpoints', () => {
+  it('POST /api/providers/custom/models returns 400 if baseUrl is missing', async () => {
+    const res = await request(app).post('/api/providers/custom/models').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('POST /api/providers/test validates required provider parameter', async () => {
+    const res = await request(app).post('/api/providers/test').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Provider is required');
+  });
+});
+
+

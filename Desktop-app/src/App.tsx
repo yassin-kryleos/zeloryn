@@ -86,6 +86,20 @@ function App() {
   const [fastModel, setFastModel] = useState<string>(() => {
     return localStorage.getItem('matrix_fast_model') || '';
   });
+  const [customApiKey, setCustomApiKey] = useState<string>('');
+  const [customBaseUrl, setCustomBaseUrl] = useState<string>(() => localStorage.getItem('matrix_custom_base_url') || '');
+  const [customProviderName, setCustomProviderName] = useState<string>(() => localStorage.getItem('matrix_custom_provider_name') || 'Custom Provider');
+  const [customModels, setCustomModels] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('matrix_custom_models');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [anthropicBaseUrl, setAnthropicBaseUrl] = useState<string>(() => localStorage.getItem('matrix_anthropic_base_url') || '');
+  const [openaiBaseUrl, setOpenaiBaseUrl] = useState<string>(() => localStorage.getItem('matrix_openai_base_url') || '');
+  const [geminiBaseUrl, setGeminiBaseUrl] = useState<string>(() => localStorage.getItem('matrix_gemini_base_url') || '');
   const [ollamaDetected, setOllamaDetected] = useState(false);
   const [activationRevision, setActivationRevision] = useState(0);
   const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
@@ -277,6 +291,13 @@ function App() {
     anthropicApiKey,
     openrouterApiKey,
     ollamaUrl,
+    customApiKey,
+    customBaseUrl,
+    customProviderName,
+    customModels,
+    anthropicBaseUrl,
+    openaiBaseUrl,
+    geminiBaseUrl,
     useSearch,
     model,
     fastModel,
@@ -298,6 +319,13 @@ function App() {
       anthropicApiKey,
       openrouterApiKey,
       ollamaUrl,
+      customApiKey,
+      customBaseUrl,
+      customProviderName,
+      customModels,
+      anthropicBaseUrl,
+      openaiBaseUrl,
+      geminiBaseUrl,
       useSearch,
       model,
       fastModel,
@@ -313,6 +341,13 @@ function App() {
     anthropicApiKey,
     openrouterApiKey,
     ollamaUrl,
+    customApiKey,
+    customBaseUrl,
+    customProviderName,
+    customModels,
+    anthropicBaseUrl,
+    openaiBaseUrl,
+    geminiBaseUrl,
     useSearch,
     model,
     fastModel,
@@ -482,6 +517,7 @@ function App() {
         const openaiVal = await decrypt(data.openaiApiKey);
         const anthropicVal = await decrypt(data.anthropicApiKey);
         const openrouterVal = await decrypt(data.openrouterApiKey);
+        const customKeyVal = await decrypt(data.customApiKey);
         const ollamaVal = data.ollamaUrl || '';
         const gitTokenVal = await decrypt(data.githubToken);
         const gitRepoVal = data.githubRepoUrl || '';
@@ -491,6 +527,31 @@ function App() {
         if (openaiVal) setOpenaiApiKey(openaiVal);
         if (anthropicVal) setAnthropicApiKey(anthropicVal);
         if (openrouterVal) setOpenrouterApiKey(openrouterVal);
+        if (customKeyVal) setCustomApiKey(customKeyVal);
+        if (data.customBaseUrl) {
+          setCustomBaseUrl(data.customBaseUrl);
+          localStorage.setItem('matrix_custom_base_url', data.customBaseUrl);
+        }
+        if (data.customProviderName) {
+          setCustomProviderName(data.customProviderName);
+          localStorage.setItem('matrix_custom_provider_name', data.customProviderName);
+        }
+        if (data.customModels && Array.isArray(data.customModels)) {
+          setCustomModels(data.customModels);
+          localStorage.setItem('matrix_custom_models', JSON.stringify(data.customModels));
+        }
+        if (data.anthropicBaseUrl) {
+          setAnthropicBaseUrl(data.anthropicBaseUrl);
+          localStorage.setItem('matrix_anthropic_base_url', data.anthropicBaseUrl);
+        }
+        if (data.openaiBaseUrl) {
+          setOpenaiBaseUrl(data.openaiBaseUrl);
+          localStorage.setItem('matrix_openai_base_url', data.openaiBaseUrl);
+        }
+        if (data.geminiBaseUrl) {
+          setGeminiBaseUrl(data.geminiBaseUrl);
+          localStorage.setItem('matrix_gemini_base_url', data.geminiBaseUrl);
+        }
         if (ollamaVal) setOllamaUrl(ollamaVal);
         if (gitTokenVal) setGithubToken(gitTokenVal);
         if (gitRepoVal) setGithubRepoUrl(gitRepoVal);
@@ -506,6 +567,13 @@ function App() {
     openaiApiKey?: string;
     anthropicApiKey?: string;
     openrouterApiKey?: string;
+    customApiKey?: string;
+    customBaseUrl?: string;
+    customProviderName?: string;
+    customModels?: string[];
+    anthropicBaseUrl?: string;
+    openaiBaseUrl?: string;
+    geminiBaseUrl?: string;
     ollamaUrl?: string;
     githubToken?: string;
     githubRepoUrl?: string;
@@ -531,6 +599,13 @@ function App() {
         openaiApiKey: await encrypt(keys.openaiApiKey),
         anthropicApiKey: await encrypt(keys.anthropicApiKey),
         openrouterApiKey: await encrypt(keys.openrouterApiKey),
+        customApiKey: await encrypt(keys.customApiKey),
+        customBaseUrl: keys.customBaseUrl,
+        customProviderName: keys.customProviderName,
+        customModels: keys.customModels,
+        anthropicBaseUrl: keys.anthropicBaseUrl,
+        openaiBaseUrl: keys.openaiBaseUrl,
+        geminiBaseUrl: keys.geminiBaseUrl,
         ollamaUrl: keys.ollamaUrl,
         githubToken: await encrypt(keys.githubToken),
         githubRepoUrl: keys.githubRepoUrl
@@ -917,6 +992,13 @@ function App() {
     anthropicApiKey?: string;
     openrouterApiKey?: string;
     ollamaUrl?: string;
+    customApiKey?: string;
+    customBaseUrl?: string;
+    customProviderName?: string;
+    customModels?: string[];
+    anthropicBaseUrl?: string;
+    openaiBaseUrl?: string;
+    geminiBaseUrl?: string;
     useSearch?: boolean;
     model?: string; 
     fastModel?: string;
@@ -954,6 +1036,40 @@ function App() {
       setOllamaUrl(newConfig.ollamaUrl);
       localStorage.setItem('matrix_ollama_url', newConfig.ollamaUrl);
       saveCredentials({ ollamaUrl: newConfig.ollamaUrl });
+    }
+    if (newConfig.customApiKey !== undefined) {
+      setCustomApiKey(newConfig.customApiKey);
+      saveCredentials({ customApiKey: newConfig.customApiKey });
+    }
+    if (newConfig.customBaseUrl !== undefined) {
+      setCustomBaseUrl(newConfig.customBaseUrl);
+      localStorage.setItem('matrix_custom_base_url', newConfig.customBaseUrl);
+      saveCredentials({ customBaseUrl: newConfig.customBaseUrl });
+    }
+    if (newConfig.customProviderName !== undefined) {
+      setCustomProviderName(newConfig.customProviderName);
+      localStorage.setItem('matrix_custom_provider_name', newConfig.customProviderName);
+      saveCredentials({ customProviderName: newConfig.customProviderName });
+    }
+    if (newConfig.customModels !== undefined) {
+      setCustomModels(newConfig.customModels);
+      localStorage.setItem('matrix_custom_models', JSON.stringify(newConfig.customModels));
+      saveCredentials({ customModels: newConfig.customModels });
+    }
+    if (newConfig.anthropicBaseUrl !== undefined) {
+      setAnthropicBaseUrl(newConfig.anthropicBaseUrl);
+      localStorage.setItem('matrix_anthropic_base_url', newConfig.anthropicBaseUrl);
+      saveCredentials({ anthropicBaseUrl: newConfig.anthropicBaseUrl });
+    }
+    if (newConfig.openaiBaseUrl !== undefined) {
+      setOpenaiBaseUrl(newConfig.openaiBaseUrl);
+      localStorage.setItem('matrix_openai_base_url', newConfig.openaiBaseUrl);
+      saveCredentials({ openaiBaseUrl: newConfig.openaiBaseUrl });
+    }
+    if (newConfig.geminiBaseUrl !== undefined) {
+      setGeminiBaseUrl(newConfig.geminiBaseUrl);
+      localStorage.setItem('matrix_gemini_base_url', newConfig.geminiBaseUrl);
+      saveCredentials({ geminiBaseUrl: newConfig.geminiBaseUrl });
     }
     if (newConfig.useSearch !== undefined) {
       setUseSearch(newConfig.useSearch);
@@ -1021,6 +1137,13 @@ function App() {
         anthropicApiKey: newConfig.anthropicApiKey ?? anthropicApiKey,
         openrouterApiKey: newConfig.openrouterApiKey ?? openrouterApiKey,
         ollamaUrl: newConfig.ollamaUrl ?? ollamaUrl,
+        customApiKey: newConfig.customApiKey ?? customApiKey,
+        customBaseUrl: newConfig.customBaseUrl ?? customBaseUrl,
+        customProviderName: newConfig.customProviderName ?? customProviderName,
+        customModels: newConfig.customModels ?? customModels,
+        anthropicBaseUrl: newConfig.anthropicBaseUrl ?? anthropicBaseUrl,
+        openaiBaseUrl: newConfig.openaiBaseUrl ?? openaiBaseUrl,
+        geminiBaseUrl: newConfig.geminiBaseUrl ?? geminiBaseUrl,
         useSearch: newConfig.useSearch ?? useSearch,
         model: newConfig.model ?? model,
         fastModel: newConfig.fastModel ?? fastModel,
@@ -1574,6 +1697,13 @@ function App() {
             anthropicApiKey={anthropicApiKey}
             openrouterApiKey={openrouterApiKey}
             ollamaUrl={ollamaUrl}
+            customApiKey={customApiKey}
+            customBaseUrl={customBaseUrl}
+            customProviderName={customProviderName}
+            customModels={customModels}
+            anthropicBaseUrl={anthropicBaseUrl}
+            openaiBaseUrl={openaiBaseUrl}
+            geminiBaseUrl={geminiBaseUrl}
             useSearch={useSearch}
             model={model}
             fastModel={fastModel}

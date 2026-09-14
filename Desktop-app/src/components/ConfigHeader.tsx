@@ -39,6 +39,13 @@ interface ConfigHeaderProps {
   anthropicApiKey: string;
   openrouterApiKey: string;
   ollamaUrl: string;
+  customApiKey?: string;
+  customBaseUrl?: string;
+  customProviderName?: string;
+  customModels?: string[];
+  anthropicBaseUrl?: string;
+  openaiBaseUrl?: string;
+  geminiBaseUrl?: string;
   useSearch: boolean;
   model: string;
   workspaceRoot: string;
@@ -59,6 +66,13 @@ interface ConfigHeaderProps {
     anthropicApiKey?: string;
     openrouterApiKey?: string;
     ollamaUrl?: string;
+    customApiKey?: string;
+    customBaseUrl?: string;
+    customProviderName?: string;
+    customModels?: string[];
+    anthropicBaseUrl?: string;
+    openaiBaseUrl?: string;
+    geminiBaseUrl?: string;
     useSearch?: boolean;
     model?: string; 
     fastModel?: string;
@@ -93,6 +107,13 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   anthropicApiKey,
   openrouterApiKey,
   ollamaUrl,
+  customApiKey = '',
+  customBaseUrl = '',
+  customProviderName = 'Custom Provider',
+  customModels = [],
+  anthropicBaseUrl = '',
+  openaiBaseUrl = '',
+  geminiBaseUrl = '',
   useSearch,
   model,
   fastModel = '',
@@ -179,6 +200,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [showAnthropicKey, setShowAnthropicKey] = useState<boolean>(false);
   const [showOpenrouterKey, setShowOpenrouterKey] = useState<boolean>(false);
   const [showGithubToken, setShowGithubToken] = useState<boolean>(false);
+  const [showCustomKey, setShowCustomKey] = useState<boolean>(false);
 
   const [inputKey, setInputKey] = useState<string>(apiKey);
   const [inputGeminiKey, setInputGeminiKey] = useState<string>(geminiApiKey);
@@ -189,6 +211,18 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [ollamaModels, setOllamaModels] = useState<OllamaModelOption[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<string>('Ollama not checked');
   const [isLoadingOllamaModels, setIsLoadingOllamaModels] = useState<boolean>(false);
+  const [inputCustomKey, setInputCustomKey] = useState<string>(customApiKey);
+  const [inputCustomBaseUrl, setInputCustomBaseUrl] = useState<string>(customBaseUrl);
+  const [inputCustomProviderName, setInputCustomProviderName] = useState<string>(customProviderName);
+  const [inputCustomModels, setInputCustomModels] = useState<string>(customModels ? customModels.join(', ') : '');
+  const [detectedCustomModels, setDetectedCustomModels] = useState<string[]>([]);
+  const [isLoadingCustomModels, setIsLoadingCustomModels] = useState<boolean>(false);
+  const [customStatus, setCustomStatus] = useState<string>('Custom endpoint not checked');
+
+  const [inputAnthropicBaseUrl, setInputAnthropicBaseUrl] = useState<string>(anthropicBaseUrl);
+  const [inputOpenaiBaseUrl, setInputOpenaiBaseUrl] = useState<string>(openaiBaseUrl);
+  const [inputGeminiBaseUrl, setInputGeminiBaseUrl] = useState<string>(geminiBaseUrl);
+  const [showAdvancedBaseUrls, setShowAdvancedBaseUrls] = useState<boolean>(false);
   const [inputGithubToken, setInputGithubToken] = useState<string>(githubToken);
   const [inputGithubRepoUrl, setInputGithubRepoUrl] = useState<string>(githubRepoUrl);
 
@@ -233,6 +267,22 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   React.useEffect(() => {
     setInputTheme(theme);
   }, [theme]);
+
+  React.useEffect(() => { if (apiKey) setInputKey(apiKey); }, [apiKey]);
+  React.useEffect(() => { if (geminiApiKey) setInputGeminiKey(geminiApiKey); }, [geminiApiKey]);
+  React.useEffect(() => { if (openaiApiKey) setInputOpenaiKey(openaiApiKey); }, [openaiApiKey]);
+  React.useEffect(() => { if (anthropicApiKey) setInputAnthropicKey(anthropicApiKey); }, [anthropicApiKey]);
+  React.useEffect(() => { if (openrouterApiKey) setInputOpenrouterKey(openrouterApiKey); }, [openrouterApiKey]);
+  React.useEffect(() => { if (ollamaUrl) setInputOllamaUrl(ollamaUrl); }, [ollamaUrl]);
+  React.useEffect(() => { if (customApiKey) setInputCustomKey(customApiKey); }, [customApiKey]);
+  React.useEffect(() => { if (customBaseUrl) setInputCustomBaseUrl(customBaseUrl); }, [customBaseUrl]);
+  React.useEffect(() => { if (customProviderName) setInputCustomProviderName(customProviderName); }, [customProviderName]);
+  React.useEffect(() => {
+    if (customModels && customModels.length > 0) setInputCustomModels(customModels.join(', '));
+  }, [customModels]);
+  React.useEffect(() => { if (anthropicBaseUrl) setInputAnthropicBaseUrl(anthropicBaseUrl); }, [anthropicBaseUrl]);
+  React.useEffect(() => { if (openaiBaseUrl) setInputOpenaiBaseUrl(openaiBaseUrl); }, [openaiBaseUrl]);
+  React.useEffect(() => { if (geminiBaseUrl) setInputGeminiBaseUrl(geminiBaseUrl); }, [geminiBaseUrl]);
 
   const handleBrowseWorkspace = async () => {
     const electronAPI = (window as any).electronAPI;
@@ -344,16 +394,24 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     return `${provider.toUpperCase()} connection failed: ${error}. Check the key and network, then retry.`;
   };
 
-  const testKey = async (provider: string, apiKeyVal: string) => {
+  const testKey = async (provider: string, apiKeyVal: string, overrideBaseUrl?: string) => {
     setTestingKeys(prev => ({ ...prev, [provider]: true }));
     try {
+      let bUrl = overrideBaseUrl;
+      if (provider === 'ollama') bUrl = inputOllamaUrl;
+      else if (provider === 'anthropic' && inputAnthropicBaseUrl) bUrl = inputAnthropicBaseUrl;
+      else if (provider === 'openai' && inputOpenaiBaseUrl) bUrl = inputOpenaiBaseUrl;
+      else if (provider === 'gemini' && inputGeminiBaseUrl) bUrl = inputGeminiBaseUrl;
+      else if (provider === 'custom') bUrl = inputCustomBaseUrl;
+
       const res = await fetch('http://localhost:3001/api/providers/health-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           provider, 
           apiKey: apiKeyVal, 
-          baseUrl: provider === 'ollama' ? inputOllamaUrl : undefined 
+          baseUrl: bUrl,
+          providerName: provider === 'custom' ? inputCustomProviderName : undefined
         })
       });
       const data = await res.json();
@@ -363,9 +421,10 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       else if (provider === 'openai') setOpenaiStatus(isOnline ? 'online' : 'error');
       else if (provider === 'anthropic') setAnthropicStatus(isOnline ? 'online' : 'error');
       else if (provider === 'openrouter') setOpenrouterStatus(isOnline ? 'online' : 'error');
+      else if (provider === 'custom') setCustomStatus(isOnline ? 'online' : 'error');
       
       if (isOnline) {
-        onNotify?.(`${provider.toUpperCase()} connection successful!`, 'success');
+        onNotify?.(`${(provider === 'custom' ? inputCustomProviderName : provider).toUpperCase()} connection successful!`, 'success');
       } else {
         onNotify?.(providerFailureMessage(provider, data.error), 'error');
       }
@@ -375,9 +434,46 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       else if (provider === 'openai') setOpenaiStatus('error');
       else if (provider === 'anthropic') setAnthropicStatus('error');
       else if (provider === 'openrouter') setOpenrouterStatus('error');
+      else if (provider === 'custom') setCustomStatus('error');
       onNotify?.(providerFailureMessage(provider, err.message), 'error');
     } finally {
       setTestingKeys(prev => ({ ...prev, [provider]: false }));
+    }
+  };
+
+  const detectCustomModels = async () => {
+    if (!inputCustomBaseUrl) {
+      onNotify?.('Please enter a Base URL for the Custom Provider first.', 'warning');
+      return;
+    }
+    setIsLoadingCustomModels(true);
+    setCustomStatus('Querying /v1/models...');
+    try {
+      const res = await fetch('http://localhost:3001/api/providers/custom/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: inputCustomBaseUrl,
+          apiKey: inputCustomKey
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.models) && data.models.length > 0) {
+        setDetectedCustomModels(data.models);
+        const existing = inputCustomModels.split(',').map(s => s.trim()).filter(Boolean);
+        const merged = Array.from(new Set([...existing, ...data.models]));
+        setInputCustomModels(merged.join(', '));
+        setCustomStatus(`Online! Found ${data.models.length} models.`);
+        onNotify?.(`Detected ${data.models.length} custom models from endpoint!`, 'success');
+      } else {
+        setCustomStatus(data.error ? `Detection error: ${data.error}` : 'No models returned from /v1/models');
+        onNotify?.(data.error || 'No models returned from /v1/models endpoint.', 'warning');
+      }
+    } catch (err: any) {
+      setCustomStatus(`Failed: ${err.message}`);
+      onNotify?.(`Failed to probe custom models: ${err.message}`, 'error');
+    } finally {
+      setIsLoadingCustomModels(false);
     }
   };
 
@@ -503,8 +599,44 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const selectedDynamicOllamaMissing = model.startsWith('ollama:')
     && !ollamaOptions.some(option => option.value === model);
 
+  const effectiveCustomModels = React.useMemo(() => {
+    const list: string[] = [];
+    if (customModels && Array.isArray(customModels)) {
+      list.push(...customModels);
+    }
+    if (inputCustomModels) {
+      const parsed = inputCustomModels.split(',').map(s => s.trim()).filter(Boolean);
+      list.push(...parsed);
+    }
+    if (detectedCustomModels.length > 0) {
+      list.push(...detectedCustomModels);
+    }
+    return Array.from(new Set(list));
+  }, [customModels, inputCustomModels, detectedCustomModels]);
+
+  const knownStaticModels = [
+    'deepseek-chat', 'deepseek-reasoner',
+    'gemini-2.0-flash', 'gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash',
+    'gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o1', 'gpt-4.5-preview',
+    'claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest', 'claude-3-5-haiku-latest', 'claude-3-opus-latest',
+    'meta-llama/llama-3.3-70b-instruct', 'qwen/qwen-2.5-coder-32b-instruct'
+  ];
+  const isCustomOrUnknownSelected = Boolean(
+    model &&
+    !knownStaticModels.includes(model) &&
+    !effectiveCustomModels.includes(model) &&
+    !model.startsWith('ollama:') &&
+    model !== 'llama3' &&
+    model !== 'qwen2.5-coder'
+  );
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    const customModelsList = inputCustomModels
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+
     onUpdateConfig({
       apiKey: inputKey,
       geminiApiKey: inputGeminiKey,
@@ -512,6 +644,13 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       anthropicApiKey: inputAnthropicKey,
       openrouterApiKey: inputOpenrouterKey,
       ollamaUrl: inputOllamaUrl,
+      customApiKey: inputCustomKey,
+      customBaseUrl: inputCustomBaseUrl,
+      customProviderName: inputCustomProviderName,
+      customModels: customModelsList,
+      anthropicBaseUrl: inputAnthropicBaseUrl,
+      openaiBaseUrl: inputOpenaiBaseUrl,
+      geminiBaseUrl: inputGeminiBaseUrl,
       useSearch: inputUseSearch,
       workspaceRoot: inputWorkspace,
       theme: inputTheme,
@@ -540,7 +679,14 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         <select
           aria-label="AI model"
           value={model}
-          onChange={(e) => onUpdateConfig({ model: e.target.value })}
+          onChange={(e) => {
+            if (e.target.value === '__open_config__') {
+              setActiveTab('api_keys');
+              setShowConfigDrawer(true);
+            } else {
+              onUpdateConfig({ model: e.target.value });
+            }
+          }}
           className="bg-transparent border-0 text-[11px] text-forge-text font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
         >
           <optgroup label="DeepSeek (V3 / R1)">
@@ -548,28 +694,36 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
             <option value="deepseek-reasoner">DeepSeek Reasoner R1</option>
           </optgroup>
           <optgroup label="Google Gemini">
-            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-            <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro (Preview)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Preview)</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
           </optgroup>
           <optgroup label="OpenAI GPT">
-            <option value="gpt-5.5">GPT 5.5</option>
-            <option value="gpt-5.5-mini">GPT 5.5 Mini</option>
-            <option value="gpt-5.4">GPT 5.4</option>
-            <option value="gpt-4o">GPT-4o (Premium)</option>
+            <option value="gpt-4o">GPT-4o</option>
             <option value="gpt-4o-mini">GPT-4o Mini</option>
+            <option value="o3-mini">o3-mini (Reasoning)</option>
+            <option value="o1">o1 (Full Reasoning)</option>
+            <option value="gpt-4.5-preview">GPT-4.5 Preview</option>
           </optgroup>
           <optgroup label="Anthropic Claude">
-            <option value="claude-4-8-opus">Claude 4.8 Opus</option>
-            <option value="claude-4-6-sonnet">Claude 4.6 Sonnet</option>
+            <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet (Hybrid)</option>
             <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
             <option value="claude-3-5-haiku-latest">Claude 3.5 Haiku</option>
+            <option value="claude-3-opus-latest">Claude 3 Opus</option>
           </optgroup>
           <optgroup label="OpenRouter">
             <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
             <option value="qwen/qwen-2.5-coder-32b-instruct">Qwen 2.5 Coder 32B</option>
           </optgroup>
+          {effectiveCustomModels.length > 0 && (
+            <optgroup label={customProviderName || 'Custom Provider / ZLM'}>
+              {effectiveCustomModels.map(m => (
+                <option key={`custom-${m}`} value={m}>{m}</option>
+              ))}
+            </optgroup>
+          )}
           <optgroup label="Local (Ollama)">
             {selectedDynamicOllamaMissing && (
               <option value={model}>{model.replace('ollama:', '')} (selected)</option>
@@ -577,6 +731,14 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
             {ollamaOptions.map(option => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
+          </optgroup>
+          {isCustomOrUnknownSelected && (
+            <optgroup label="Custom / Active Model">
+              <option value={model}>{model} (active)</option>
+            </optgroup>
+          )}
+          <optgroup label="Configuration">
+            <option value="__open_config__">⚙ Configure Models & Endpoints...</option>
           </optgroup>
         </select>
       </div>
@@ -594,20 +756,29 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
             <option value="deepseek-chat">Fast: DeepSeek Chat V3</option>
           </optgroup>
           <optgroup label="Google Gemini">
+            <option value="gemini-2.0-flash">Fast: Gemini 2.0 Flash</option>
             <option value="gemini-2.5-flash">Fast: Gemini 2.5 Flash</option>
-            <option value="gemini-3.5-flash">Fast: Gemini 3.5 Flash</option>
+            <option value="gemini-1.5-flash">Fast: Gemini 1.5 Flash</option>
           </optgroup>
           <optgroup label="OpenAI GPT">
             <option value="gpt-4o-mini">Fast: GPT-4o Mini</option>
-            <option value="gpt-5.5-mini">Fast: GPT 5.5 Mini</option>
+            <option value="o3-mini">Fast: o3-mini</option>
           </optgroup>
           <optgroup label="Anthropic Claude">
             <option value="claude-3-5-haiku-latest">Fast: Claude 3.5 Haiku</option>
+            <option value="claude-3-7-sonnet-latest">Fast: Claude 3.7 Sonnet</option>
           </optgroup>
           <optgroup label="OpenRouter">
             <option value="qwen/qwen-2.5-coder-32b-instruct">Fast: Qwen 2.5 Coder 32B</option>
             <option value="meta-llama/llama-3.3-70b-instruct">Fast: Llama 3.3 70B</option>
           </optgroup>
+          {effectiveCustomModels.length > 0 && (
+            <optgroup label={customProviderName || 'Custom Provider / ZLM'}>
+              {effectiveCustomModels.map(m => (
+                <option key={`fast-custom-${m}`} value={m}>Fast: {m}</option>
+              ))}
+            </optgroup>
+          )}
           <optgroup label="Local (Ollama)">
             {ollamaOptions.map(option => (
               <option key={`fast-${option.value}`} value={option.value}>Fast: {option.label}</option>
@@ -1107,6 +1278,153 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                         <span>DETECT MODELS</span>
                       </button>
                     </div>
+                  </div>
+
+                  {/* Custom / OpenAI-Compatible Provider (ZLM / GLM / vLLM / Local) */}
+                  <div className="flex flex-col gap-1.5 border border-forge-dark bg-black bg-opacity-40 p-2.5 rounded">
+                    <label className="text-[10px] uppercase text-forge-dim flex items-center justify-between font-bold w-full font-mono">
+                      <span className="flex items-center gap-1.5 text-forge-neon">
+                        <Globe size={11} />
+                        <span>Custom / OpenAI-Compatible (ZLM / GLM / vLLM)</span>
+                      </span>
+                      <div className="flex items-center gap-1.5 text-[9px] font-mono">
+                        {customStatus.includes('Online') || customStatus === 'online' ? (
+                          <span className="text-forge-neon flex items-center gap-0.5"><CheckCircle2 size={10} /> Online</span>
+                        ) : customStatus === 'error' ? (
+                          <span className="text-forge-red flex items-center gap-0.5"><XCircle size={10} /> Error</span>
+                        ) : (
+                          <span className="text-forge-dim text-[8.5px]">{customStatus}</span>
+                        )}
+                      </div>
+                    </label>
+
+                    <div className="grid grid-cols-2 gap-2 font-mono">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[8.5px] text-forge-dim uppercase">Provider Label</span>
+                        <input
+                          type="text"
+                          value={inputCustomProviderName}
+                          onChange={(e) => setInputCustomProviderName(e.target.value)}
+                          placeholder="e.g. Zhipu GLM / vLLM"
+                          className="forge-input text-[10px] text-forge-text bg-black border-forge-dark px-1.5 py-1"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[8.5px] text-forge-dim uppercase">Base URL (OpenAI-Compatible)</span>
+                        <input
+                          type="text"
+                          value={inputCustomBaseUrl}
+                          onChange={(e) => setInputCustomBaseUrl(e.target.value)}
+                          placeholder="https://open.bigmodel.cn/api/paas/v4 or http://localhost:8000/v1"
+                          className="forge-input text-[10px] text-forge-neon bg-black border-forge-dark px-1.5 py-1"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5 font-mono">
+                      <span className="text-[8.5px] text-forge-dim uppercase">API Key (Optional for local servers)</span>
+                      <div className="flex gap-1.5 items-center">
+                        <div className="relative flex items-center flex-1">
+                          <input
+                            type={showCustomKey ? 'text' : 'password'}
+                            value={inputCustomKey}
+                            onChange={(e) => setInputCustomKey(e.target.value)}
+                            placeholder="sk-... or api key if required"
+                            className="forge-input w-full pr-8 text-[10px] text-forge-neon bg-black border-forge-dark py-1"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomKey(!showCustomKey)}
+                            className="absolute right-2 text-forge-dim hover:text-forge-neon"
+                          >
+                            {showCustomKey ? <EyeOff size={11} /> : <Eye size={11} />}
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => testKey('custom', inputCustomKey)}
+                          disabled={testingKeys['custom'] || !inputCustomBaseUrl}
+                          className="forge-btn text-[9px] px-2.5 py-1 font-bold font-mono shrink-0 disabled:opacity-40"
+                        >
+                          {testingKeys['custom'] ? 'TESTING...' : 'TEST'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={detectCustomModels}
+                          disabled={isLoadingCustomModels || !inputCustomBaseUrl}
+                          className="forge-btn text-[9px] px-2.5 py-1 font-bold font-mono shrink-0 disabled:opacity-40 flex items-center gap-1"
+                          title="Auto-discover models from /v1/models"
+                        >
+                          <RefreshCw size={9} className={isLoadingCustomModels ? 'animate-spin' : ''} />
+                          <span>DETECT MODELS</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-0.5 font-mono">
+                      <span className="text-[8.5px] text-forge-dim uppercase">Configured Models (comma-separated IDs)</span>
+                      <input
+                        type="text"
+                        value={inputCustomModels}
+                        onChange={(e) => setInputCustomModels(e.target.value)}
+                        placeholder="e.g. glm-4-plus, glm-4-flash, custom-model-1"
+                        className="forge-input text-[10px] text-forge-cyan bg-black border-forge-dark px-1.5 py-1"
+                      />
+                      <span className="text-[8px] text-forge-dim">
+                        Models configured here will appear in the top-bar Model selector under {inputCustomProviderName || 'Custom Provider'}.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Advanced Base URL Overrides (for Free-Claude, One-API, and custom proxies) */}
+                  <div className="flex flex-col gap-1 border border-forge-dark bg-black bg-opacity-30 p-2 rounded">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedBaseUrls(!showAdvancedBaseUrls)}
+                      className="text-[9.5px] uppercase font-bold text-forge-dim hover:text-forge-neon flex items-center justify-between font-mono w-full text-left"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Settings size={10} />
+                        <span>Advanced: Proxy Base URL Overrides (Free-Claude, Reverse Proxies)</span>
+                      </span>
+                      <span className="text-[9px] text-forge-neon">
+                        {showAdvancedBaseUrls ? '▲ HIDE' : '▼ SHOW'}
+                      </span>
+                    </button>
+                    {showAdvancedBaseUrls && (
+                      <div className="flex flex-col gap-2 pt-1 font-mono">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[8.5px] text-forge-dim uppercase">Anthropic Base URL (e.g. Free-Claude http://localhost:8000)</span>
+                          <input
+                            type="text"
+                            value={inputAnthropicBaseUrl}
+                            onChange={(e) => setInputAnthropicBaseUrl(e.target.value)}
+                            placeholder="https://api.anthropic.com or http://localhost:8000"
+                            className="forge-input text-[10px] text-forge-text bg-black border-forge-dark px-1.5 py-0.5"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[8.5px] text-forge-dim uppercase">OpenAI Base URL (e.g. proxy gateway)</span>
+                          <input
+                            type="text"
+                            value={inputOpenaiBaseUrl}
+                            onChange={(e) => setInputOpenaiBaseUrl(e.target.value)}
+                            placeholder="https://api.openai.com"
+                            className="forge-input text-[10px] text-forge-text bg-black border-forge-dark px-1.5 py-0.5"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[8.5px] text-forge-dim uppercase">Google Gemini Base URL</span>
+                          <input
+                            type="text"
+                            value={inputGeminiBaseUrl}
+                            onChange={(e) => setInputGeminiBaseUrl(e.target.value)}
+                            placeholder="https://generativelanguage.googleapis.com"
+                            className="forge-input text-[10px] text-forge-text bg-black border-forge-dark px-1.5 py-0.5"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Task recommendation tips */}

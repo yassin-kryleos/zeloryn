@@ -1,5 +1,6 @@
 import express from 'express';
 import * as http from 'http';
+import * as https from 'https';
 import { WebSocketServer, WebSocket } from 'ws';
 import helmet from 'helmet';
 import * as path from 'path';
@@ -14,6 +15,7 @@ import { AnthropicClient } from './anthropic';
 import { OpenRouterClient } from './openrouter';
 import { OllamaClient } from './ollama';
 import { GoogleClient } from './google';
+import { CustomOpenAiClient } from './customClient';
 import { AgentOrchestrator, type ChatClient, type ResponseMode } from './agents';
 import { ChatDatabase, type ChatSession, type ProjectTask } from './db';
 import { generateWorkspaceGraph } from './graph';
@@ -585,6 +587,32 @@ const openrouterClient = new OpenRouterClient({
 const ollamaClient = new OllamaClient({
   model: 'llama3'
 });
+const customClient = new CustomOpenAiClient({
+  baseUrl: 'http://localhost:8000/v1',
+  providerName: 'Custom Provider'
+});
+
+let registeredCustomModels = new Set<string>();
+
+function isCustomModel(model: string): boolean {
+  if (!model) return false;
+  const m = model.toLowerCase();
+  return m.startsWith('custom:') || m.startsWith('glm') || m.startsWith('zlm') || registeredCustomModels.has(model);
+}
+
+function normalizeCustomModel(model: string): string {
+  return model.startsWith('custom:') ? model.slice('custom:'.length) : model;
+}
+
+function isLocalCustomEndpoint(baseUrl?: string): boolean {
+  if (!baseUrl) return false;
+  try {
+    const u = new URL(baseUrl);
+    return u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1';
+  } catch {
+    return false;
+  }
+}
 
 function isOllamaModel(model: string): boolean {
   return model.startsWith('ollama:') || model === 'llama3' || model === 'qwen2.5-coder';
@@ -600,7 +628,7 @@ function normalizeOllamaModel(model: string): string {
 let activeModel = 'ollama:qwen2.5-coder';
 const getModelClient = (overridePrivacy?: boolean): ChatClient => ({
   async chatStream(messages, callbacks) {
-    if ((globalZeroEgressMode || globalPrivacyMode) && !isOllamaModel(activeModel)) {
+    if ((globalZeroEgressMode || globalPrivacyMode) && !isOllamaModel(activeModel) && !(isCustomModel(activeModel) && isLocalCustomEndpoint(customClient.getBaseUrl()))) {
       if (globalPrivacyMode && overridePrivacy) {
         // Allowed manual override
       } else {
@@ -610,6 +638,10 @@ const getModelClient = (overridePrivacy?: boolean): ChatClient => ({
         return;
       }
     }
+    if (isCustomModel(activeModel)) {
+      customClient.setModel(normalizeCustomModel(activeModel));
+      return customClient.chatStream(messages, callbacks);
+    }
     if (activeModel.startsWith('gemini')) {
       return geminiClient.chatStream(messages, callbacks);
     }
@@ -618,7 +650,7 @@ const getModelClient = (overridePrivacy?: boolean): ChatClient => ({
       onComplete: (content: string) => callbacks.onComplete?.(content, ''),
       onError: callbacks.onError
     };
-    if (activeModel.startsWith('gpt')) return openaiClient.chatStream(messages, adapted);
+    if (activeModel.startsWith('gpt') || activeModel.startsWith('o1') || activeModel.startsWith('o3')) return openaiClient.chatStream(messages, adapted);
     if (activeModel.startsWith('claude')) return anthropicClient.chatStream(messages, adapted);
     if (isOllamaModel(activeModel)) {
       ollamaClient.setModel(normalizeOllamaModel(activeModel));
@@ -1450,7 +1482,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
 
   const modelProxy: ChatClient = {
     async chatStream(messages, callbacks) {
-      if ((zeroEgressMode || privacyMode) && !isOllamaModel(currentModel)) {
+      if ((zeroEgressMode || privacyMode) && !isOllamaModel(currentModel) && !(isCustomModel(currentModel) && isLocalCustomEndpoint(customClient.getBaseUrl()))) {
         if (privacyMode && overrideHostedActive) {
           // Allow manually overridden hosted model calls
         } else {
@@ -1472,6 +1504,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
       }
 
       const adaptedCallbacks = {
+        onReasoningChunk: callbacks.onReasoningChunk,
         onContentChunk: callbacks.onContentChunk,
         onComplete: async (content: string, reasoning?: string) => {
           const outputTokens = estimateTokens(content);
@@ -1512,10 +1545,14 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         onError: callbacks.onError
       };
 
+      if (isCustomModel(currentModel)) {
+        customClient.setModel(normalizeCustomModel(currentModel));
+        return customClient.chatStream(messages, adaptedCallbacks);
+      }
       if (currentModel.startsWith('gemini')) {
         return geminiClient.chatStream(messages, adaptedCallbacks);
       }
-      if (currentModel.startsWith('gpt')) {
+      if (currentModel.startsWith('gpt') || currentModel.startsWith('o1') || currentModel.startsWith('o3')) {
         return openaiClient.chatStream(messages, adaptedCallbacks);
       } else if (currentModel.startsWith('claude')) {
         return anthropicClient.chatStream(messages, adaptedCallbacks);
@@ -1577,9 +1614,13 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         onError: callbacks.onError
       };
 
+      if (isCustomModel(targetModel)) {
+        customClient.setModel(normalizeCustomModel(targetModel));
+        return customClient.chatStream(messages, adaptedCallbacks);
+      }
       if (targetModel.startsWith('gemini')) {
         return geminiClient.chatStream(messages, adaptedCallbacks);
-      } else if (targetModel.startsWith('gpt')) {
+      } else if (targetModel.startsWith('gpt') || targetModel.startsWith('o1') || targetModel.startsWith('o3')) {
         return openaiClient.chatStream(messages, adaptedCallbacks);
       } else if (targetModel.startsWith('claude')) {
         return anthropicClient.chatStream(messages, adaptedCallbacks);
@@ -1761,15 +1802,38 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
           if (data.ollamaUrl) {
             ollamaClient.setBaseUrl(data.ollamaUrl);
           }
+          if (data.customApiKey !== undefined) {
+            customClient.setApiKey(data.customApiKey);
+          }
+          if (data.customBaseUrl !== undefined) {
+            customClient.setBaseUrl(data.customBaseUrl);
+          }
+          if (data.customProviderName !== undefined) {
+            customClient.setProviderName(data.customProviderName);
+          }
+          if (Array.isArray(data.customModels)) {
+            registeredCustomModels = new Set(data.customModels);
+          }
+          if (data.anthropicBaseUrl !== undefined) {
+            anthropicClient.setBaseUrl(data.anthropicBaseUrl);
+          }
+          if (data.openaiBaseUrl !== undefined) {
+            openaiClient.setBaseUrl(data.openaiBaseUrl);
+          }
+          if (data.geminiBaseUrl !== undefined) {
+            geminiClient.setBaseUrl(data.geminiBaseUrl);
+          }
           if (data.useSearch !== undefined) {
             geminiClient.setUseSearch(data.useSearch);
           }
           if (data.model) {
             currentModel = data.model;
             activeModel = data.model;
-            if (currentModel.startsWith('gemini')) {
+            if (isCustomModel(currentModel)) {
+              customClient.setModel(normalizeCustomModel(currentModel));
+            } else if (currentModel.startsWith('gemini')) {
               geminiClient.setModel(currentModel as any);
-            } else if (currentModel.startsWith('gpt')) {
+            } else if (currentModel.startsWith('gpt') || currentModel.startsWith('o1') || currentModel.startsWith('o3')) {
               openaiClient.setModel(currentModel as any);
             } else if (currentModel.startsWith('claude')) {
               anthropicClient.setModel(currentModel as any);
@@ -1780,7 +1844,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
             } else {
               deepseekClient.setModel(currentModel as any);
             }
-            orchestrator.setLocalModel(isOllamaModel(currentModel));
+            orchestrator.setLocalModel(isOllamaModel(currentModel) || (isCustomModel(currentModel) && isLocalCustomEndpoint(customClient.getBaseUrl())));
           }
           if (data.fastModel !== undefined) {
             currentFastModel = data.fastModel;
@@ -3690,17 +3754,19 @@ app.post('/api/providers/health-check', async (req, res) => {
     const testMessages: Message[] = [{ role: 'user', content: 'Say OK' }];
     
     if (provider === 'openai') {
-      client = new OpenAIClient({ apiKey, model: model || 'gpt-4o-mini' });
+      client = new OpenAIClient({ apiKey, model: model || 'gpt-4o-mini', baseUrl });
     } else if (provider === 'gemini') {
-      client = new GeminiClient({ apiKey, model: model || 'gemini-2.5-flash', useSearch: false });
+      client = new GeminiClient({ apiKey, model: model || 'gemini-2.0-flash', useSearch: false, baseUrl });
     } else if (provider === 'anthropic') {
-      client = new AnthropicClient({ apiKey, model: model || 'claude-3-5-haiku-latest' });
+      client = new AnthropicClient({ apiKey, model: model || 'claude-3-5-haiku-latest', baseUrl });
     } else if (provider === 'deepseek') {
       client = new DeepSeekClient({ apiKey, model: model || 'deepseek-chat' });
     } else if (provider === 'openrouter') {
       client = new OpenRouterClient({ apiKey, model: model || 'meta-llama/llama-3.3-70b-instruct' });
     } else if (provider === 'ollama') {
       client = new OllamaClient({ model: model || 'llama3', baseUrl: baseUrl || 'http://localhost:11434' });
+    } else if (provider === 'custom') {
+      client = new CustomOpenAiClient({ apiKey: apiKey || '', model: model || 'default', baseUrl: baseUrl || 'http://localhost:8000/v1', providerName: req.body.providerName || 'Custom Provider' });
     }
 
     if (!client) {
@@ -3720,20 +3786,79 @@ app.post('/api/providers/health-check', async (req, res) => {
   }
 });
 
+app.post('/api/providers/custom/models', async (req, res) => {
+  try {
+    const { baseUrl, apiKey } = req.body;
+    if (!baseUrl) {
+      return res.status(400).json({ success: false, error: 'baseUrl is required' });
+    }
+    const rawBase = (baseUrl || '').trim().replace(/\/+$/, '');
+    let endpoint = '/v1/models';
+    if (rawBase.endsWith('/v1') || rawBase.endsWith('/v4')) {
+      endpoint = '/models';
+    }
+    const url = new URL(`${rawBase}${endpoint}`);
+    const clientMod = url.protocol === 'http:' ? http : https;
+    const headers: Record<string, string> = {};
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+    const requestOptions = {
+      hostname: url.hostname,
+      port: url.port || undefined,
+      path: `${url.pathname}${url.search}`,
+      method: 'GET',
+      headers,
+      timeout: 5000
+    };
+
+    const fetchReq = clientMod.request(requestOptions, (fetchRes) => {
+      let data = '';
+      fetchRes.on('data', (chunk) => { data += chunk; });
+      fetchRes.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          let models: string[] = [];
+          if (Array.isArray(parsed.data)) {
+            models = parsed.data.map((m: any) => m.id || m.name).filter(Boolean);
+          } else if (Array.isArray(parsed.models)) {
+            models = parsed.models.map((m: any) => m.name || m.id).filter(Boolean);
+          }
+          res.json({ success: true, models });
+        } catch {
+          res.json({ success: false, error: 'Failed to parse models JSON response', raw: data });
+        }
+      });
+    });
+
+    fetchReq.on('error', (err) => {
+      res.json({ success: false, error: err.message });
+    });
+    fetchReq.on('timeout', () => {
+      fetchReq.destroy();
+      res.json({ success: false, error: 'Request timed out' });
+    });
+    fetchReq.end();
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Operation failed' });
+  }
+});
+
 app.post('/api/providers/test', async (req, res) => {
   try {
-    const { provider, apiKey, model, message, baseUrl } = req.body;
+    const { provider, apiKey, model, message, baseUrl, providerName } = req.body;
     if (!provider) return res.status(400).json({ error: 'Provider is required' });
     const prompt = message || 'Hello, are you online? Respond in under 10 words.';
     const testMessages: Message[] = [{ role: 'user', content: prompt }];
     
     let client: ChatClient | null = null;
-    if (provider === 'openai') client = new OpenAIClient({ apiKey, model: model || 'gpt-4o-mini' });
-    else if (provider === 'gemini') client = new GeminiClient({ apiKey, model: model || 'gemini-2.5-flash', useSearch: false });
-    else if (provider === 'anthropic') client = new AnthropicClient({ apiKey, model: model || 'claude-3-5-haiku-latest' });
+    if (provider === 'openai') client = new OpenAIClient({ apiKey, model: model || 'gpt-4o-mini', baseUrl });
+    else if (provider === 'gemini') client = new GeminiClient({ apiKey, model: model || 'gemini-2.0-flash', useSearch: false, baseUrl });
+    else if (provider === 'anthropic') client = new AnthropicClient({ apiKey, model: model || 'claude-3-5-haiku-latest', baseUrl });
     else if (provider === 'deepseek') client = new DeepSeekClient({ apiKey, model: model || 'deepseek-chat' });
     else if (provider === 'openrouter') client = new OpenRouterClient({ apiKey, model: model || 'meta-llama/llama-3.3-70b-instruct' });
     else if (provider === 'ollama') client = new OllamaClient({ model: model || 'llama3', baseUrl: baseUrl || 'http://localhost:11434' });
+    else if (provider === 'custom') client = new CustomOpenAiClient({ apiKey: apiKey || '', model: model || 'default', baseUrl: baseUrl || 'http://localhost:8000/v1', providerName: providerName || 'Custom Provider' });
 
     if (!client) return res.status(400).json({ error: `Unsupported provider: ${provider}` });
 

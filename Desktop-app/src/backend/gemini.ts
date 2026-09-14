@@ -3,7 +3,8 @@ import type { Message } from './deepseek';
 
 export interface GeminiConfig {
   apiKey: string;
-  model: 'gemini-2.5-flash' | 'gemini-2.5-pro';
+  model: string;
+  baseUrl?: string;
   useSearch?: boolean;
 }
 
@@ -14,20 +15,27 @@ export class GeminiClient {
   constructor(config: GeminiConfig) {
     this.config = config;
     if (config.apiKey) {
-      this.ai = new GoogleGenAI({ apiKey: config.apiKey });
+      this.ai = new GoogleGenAI({ apiKey: config.apiKey, ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}) });
     }
   }
 
   public setApiKey(apiKey: string) {
     this.config.apiKey = apiKey;
     if (apiKey) {
-      this.ai = new GoogleGenAI({ apiKey });
+      this.ai = new GoogleGenAI({ apiKey, ...(this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}) });
     } else {
       this.ai = null;
     }
   }
 
-  public setModel(model: 'gemini-2.5-flash' | 'gemini-2.5-pro') {
+  public setBaseUrl(baseUrl: string) {
+    this.config.baseUrl = baseUrl;
+    if (this.config.apiKey) {
+      this.ai = new GoogleGenAI({ apiKey: this.config.apiKey, ...(baseUrl ? { baseUrl } : {}) });
+    }
+  }
+
+  public setModel(model: string) {
     this.config.model = model;
   }
 

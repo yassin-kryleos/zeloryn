@@ -1,11 +1,12 @@
 import { IncomingMessage } from 'http';
 import * as https from 'https';
+import * as http from 'http';
 import type { Message } from './deepseek';
 import { handleHttpStreamError, streamSseLines } from './providerStream';
 
 export interface AnthropicConfig {
   apiKey: string;
-  model: 'claude-3-5-sonnet-latest' | 'claude-3-5-haiku-latest';
+  model: string;
   baseUrl?: string;
 }
 
@@ -23,7 +24,11 @@ export class AnthropicClient {
     this.config.apiKey = apiKey;
   }
 
-  public setModel(model: 'claude-3-5-sonnet-latest' | 'claude-3-5-haiku-latest') {
+  public setBaseUrl(baseUrl: string) {
+    this.config.baseUrl = baseUrl;
+  }
+
+  public setModel(model: string) {
     this.config.model = model;
   }
 
@@ -60,10 +65,14 @@ export class AnthropicClient {
         ...(systemMsg ? { system: systemMsg.content } : {})
       });
 
-      const url = new URL(`${this.config.baseUrl}/v1/messages`);
+      const rawBase = (this.config.baseUrl || 'https://api.anthropic.com').trim().replace(/\/+$/, '');
+      const endpoint = rawBase.endsWith('/messages') ? '' : (rawBase.endsWith('/v1') ? '/messages' : '/v1/messages');
+      const url = new URL(`${rawBase}${endpoint}`);
+      const client = url.protocol === 'http:' ? http : https;
       const options = {
         hostname: url.hostname,
-        path: url.pathname,
+        port: url.port || undefined,
+        path: `${url.pathname}${url.search}`,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,7 +84,7 @@ export class AnthropicClient {
 
       let fullContent = '';
 
-      const req = https.request(options, (res: IncomingMessage) => {
+      const req = client.request(options, (res: IncomingMessage) => {
         if (handleHttpStreamError(res, 'Anthropic API Error', callbacks.onError, reject)) return;
 
         streamSseLines(res, (cleanedLine) => {
