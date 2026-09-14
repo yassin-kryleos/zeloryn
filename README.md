@@ -290,14 +290,17 @@ Forge provides transparent, explicit safety controls with a clearly defined trus
 - [x] **Phase 5: Multi-Engine Execution & External Handoff**: Pluggable in-app execution for BYOK CLI agents (Claude Code, Codex CLI) with live PTY streaming + structured external handoff (Cursor, Antigravity, VS Code, Windsurf, Clipboard).
 - [x] **Phase 6: Retrieval, Verification Loops & Merge Safety**: Post-execution CREW reviewer, 3-attempt Sentinel check retry loop with test runner integration, Tree-sitter + PageRank semantic index, worktree staging-branch merge with secret scanning, durable card rollback, and spend enforcement.
 - [x] **Phase 7: Raw-CLI Approval-Gate Gap & Boundary Specification**: Comprehensive evaluation of MCP routing, PTY interactive mode, and OS-level syscall interception. Documented the explicit architectural trust boundary.
-- [x] **Phase 8: Zeloryn UI/UX Evolution, Instant Theme Switching & Vibe Studio**:
+- [x] **Phase 8: Zeloryn UI/UX Evolution, Vibe Studio & Brownfield Workflows**:
   - **Zeloryn Unified Branding**: Complete rebranding of desktop cockpit, window titles, workspace configurations, and internal signals to Zeloryn v0.1.0.
-  - **Cockpit Declutter & Engine Status Pill**: Consolidated fragmented technical badges into a single compact **Engine Status Pill** (`● Connected · Local [MEDIUM] +0 v`) with interactive popover telemetry, eliminating topbar wrapping.
-  - **Interactive Activation Checklist**: Clickable and toggleable quick-start onboarding checklist directly in the cockpit header.
-  - **Instant Live Theme Switching**: Real-time CSS theme application on click (Midnight, Cyberpunk, Forest, Crimson, Paper, Obsidian, High Contrast) without settings save delays.
-  - **Vibe Coding Studio (`⚡ Vibe`)**: Dedicated beginner-friendly space for non-coders and rapid prototyping with starter idea chips (Portfolio, Habit Tracker, SaaS Landing, Retro Arcade Game), natural language app generation, and a live responsive canvas (`<iframe>`) supporting Desktop, Tablet, and Mobile viewports with instant Pro mode switching.
-  - **Role-Based Slot Auto-Configuration**: Automated matching and slot assignment for multi-agent roles based on user-provided API keys and detected local models.
-  - **Linux In-Place Update & Packaging**: Verified Linux AppImage distribution (`Zeloryn-0.1.0-x86_64.AppImage`), desktop launcher entry, and clean uninstall paths.
+  - **Universal Command Palette (`Ctrl+K` / `Cmd+K`)**: Global accessible fuzzy search across workspace navigation (Plan, Crew, Flow, Forge, Vibe), actions (codebase scanning, TODO import, project management), theme switching, and live task card search.
+  - **Header Context Breadcrumb & Workspace Switcher**: High-contrast topbar (`[Folder] <project-name> / [GitBranch] <branch> / [Cpu] <model> / [Diff & Undo] / [Ctrl+K]`) with 1-click modal access.
+  - **Native OS Folder Picker**: Dedicated `Browse...` buttons in project setup and settings wired to `window.electronAPI.selectDirectory()`.
+  - **Linear-Style Task Detail Drawer (`TaskDetailDrawer.tsx`)**: Slide-over drawer with markdown editor, interactive acceptance criteria checklist, blocker dependency picker with cycle prevention, Git branch/worktree merge/revert actions, and 1-click dispatch (`[Run in Forge]`, `[Vibe Studio]`, `[Push / Handoff]`).
+  - **Diff & Undo Safety Drawer (`DiffSafetyDrawer.tsx`)**: Full visibility into AI modifications with syntax-highlighted diffs (`+` / `-`) and safe 1-click **Discard Changes (Undo)**.
+  - **Brownfield Codebase Ingestion & Tinkering**: "Analyze Codebase" architectural mapping in Plan, automated `TODO:`/`FIXME:`/`HACK:` comment extraction into Flow (`/api/plan/todos`), and codebase-grounded discussion starters in Crew.
+  - **Vibe Coding Studio**: Rapid visual prototyping canvas with starter idea templates (Portfolio, Habit Tracker, SaaS Landing, Retro Arcade Game), natural language app generation, and an embedded responsive preview canvas (`<iframe>`) supporting Desktop, Tablet, and Mobile viewports with instant Pro mode switching.
+  - **Sanitization & Anti-Gatekeeping**: Removed all fake `[ENTERPRISE]` badges, removed obsolete matrix theme, and sanitized all unicode emojis across UI buttons, tabs, and badges into clean Lucide SVG icons.
+  - **Linux In-Place Update & Packaging**: Verified Linux AppImage distribution (`Zeloryn-0.1.0-x86_64.AppImage`), desktop launcher entry, and clean uninstall paths (`zeloryn uninstall --purge`).
 
 ---
 

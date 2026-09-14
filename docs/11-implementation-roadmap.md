@@ -314,7 +314,7 @@ Deliverables:
 - Decluttered cockpit header with consolidated Engine Status Pill (`● Connected · Local [MEDIUM] +0 v`) and rich popover telemetry.
 - Interactive onboarding activation checklist directly accessible from cockpit topbar.
 - Instant live CSS theme preview on click without requiring settings save.
-- Vibe Coding Studio (`⚡ Vibe`) with starter project inspiration chips (Portfolio, Habit Tracker, SaaS Landing, Retro Arcade Game), natural language app generation, and an embedded responsive preview canvas (`<iframe>`) with Desktop, Tablet, and Mobile viewports.
+- Vibe Coding Studio with starter project inspiration chips (Portfolio, Habit Tracker, SaaS Landing, Retro Arcade Game), natural language app generation, and an embedded responsive preview canvas (`<iframe>`) with Desktop, Tablet, and Mobile viewports.
 - Role-Based Model Slot Architecture (Coordinator, Planner, Coder, Reviewer) with automated slot assignment based on detected API keys and local Ollama models.
 
 Done when:
@@ -324,6 +324,27 @@ Done when:
 - Themes switch immediately on click.
 - Model slots auto-populate from active provider credentials.
 - Linux AppImage updates in-place at `~/.local/share/zeloryn/Zeloryn.AppImage`.
+
+## Phase 12 - Comprehensive UI/UX Overhaul, Command Palette, and Brownfield Tinkering
+
+Deliverables:
+
+- Universal Command Palette (`Ctrl+K` / `Cmd+K`) with accessible keyboard navigation across all spaces, actions, themes, and tasks.
+- Header Context Breadcrumb & Workspace Switcher (`[Folder] / [Branch] / [Model]`) with instant 1-click modals.
+- Native OS Directory Picker (`Browse...`) wired to desktop Electron dialogs.
+- Linear-Style Task Detail Drawer in Flow (`TaskDetailDrawer.tsx`) with markdown editing, interactive acceptance criteria checklist, blocker dependency picker with cycle prevention, Git worktree actions, and 1-click dispatch.
+- "Diff & Undo" Safety Drawer (`DiffSafetyDrawer.tsx`) allowing users to review AI modifications with syntax-highlighted diffs and safely revert changes via `/api/review/revert`.
+- Brownfield Repository Ingestion: "Analyze Codebase" in Plan, automated `TODO:`/`FIXME:` extraction in Flow (`/api/plan/todos`), and codebase-grounded discussion starters in Crew.
+- Actionable Empty States across Plan, Flow, and Crew.
+- Sanitization & Anti-Gatekeeping: Complete removal of false enterprise/pro badges, removal of obsolete matrix theme, and replacement of all unicode emojis with clean Lucide SVG icons.
+
+Done when:
+
+- Pressing `Ctrl+K` opens the Command Palette anywhere in the app.
+- Clicking any task title opens the Task Detail Drawer.
+- Existing repositories can be inspected, mapped in Plan, and have code TODOs extracted into tasks in Flow.
+- All AI file edits can be inspected and cleanly reverted with 1-click Undo.
+- Zero fake badges and zero unicode emojis exist in UI controls.
 
 ## Later Phases
 
