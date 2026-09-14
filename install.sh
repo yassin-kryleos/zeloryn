@@ -13,6 +13,16 @@ GITHUB_REPO="${REPO_OWNER}/${REPO_NAME}"
 BINARY_NAME="zeloryn"
 APP_NAME="Zeloryn"
 
+# Handle --uninstall flag
+if [ "$1" = "--uninstall" ] || [ "$1" = "uninstall" ]; then
+  DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+  if [ -f "$DIR/uninstall.sh" ]; then
+    exec "$DIR/uninstall.sh" "${@:2}"
+  else
+    exec curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPO}/main/uninstall.sh" | bash -s -- "${@:2}"
+  fi
+fi
+
 # Formatting helpers
 BOLD="\033[1m"
 GREEN="\033[0;32m"
@@ -142,6 +152,23 @@ if [ "$PLATFORM" = "linux" ]; then
   WRAPPER_SCRIPT="${INSTALL_BIN_DIR}/${BINARY_NAME}"
   cat << EOF > "$WRAPPER_SCRIPT"
 #!/bin/sh
+if [ "\$1" = "uninstall" ] || [ "\$1" = "--uninstall" ]; then
+  echo "Uninstalling Zeloryn..."
+  pkill -f "zeloryn" 2>/dev/null || true
+  rm -f "\$HOME/.local/share/applications/zeloryn.desktop"
+  rm -rf "\$HOME/.local/share/zeloryn"
+  rm -f "\$HOME/.local/share/icons/hicolor"/*/apps/zeloryn.png 2>/dev/null || true
+  if [ "\$2" = "--purge" ] || [ "\$2" = "-p" ]; then
+    echo "Purging configuration and keys..."
+    rm -rf "\$HOME/.config/zeloryn"
+    rm -rf "\$HOME/.config/Kryleos Forge"
+  else
+    echo "Note: Configuration preserved at ~/.config/zeloryn (use 'zeloryn uninstall --purge' to wipe)."
+  fi
+  echo "Zeloryn has been uninstalled."
+  rm -f "\$0"
+  exit 0
+fi
 export APPIMAGE_EXTRACT_AND_RUN=1
 exec "$TARGET_APPIMAGE" "\$@"
 EOF
@@ -206,6 +233,21 @@ elif [ "$PLATFORM" = "mac" ]; then
   WRAPPER_SCRIPT="${INSTALL_BIN_DIR}/${BINARY_NAME}"
   cat << EOF > "$WRAPPER_SCRIPT"
 #!/bin/sh
+if [ "\$1" = "uninstall" ] || [ "\$1" = "--uninstall" ]; then
+  echo "Uninstalling Zeloryn..."
+  pkill -f "zeloryn" 2>/dev/null || true
+  rm -rf "${TARGET_APP_DIR}/${APP_NAME}.app"
+  if [ "\$2" = "--purge" ] || [ "\$2" = "-p" ]; then
+    echo "Purging configuration and keys..."
+    rm -rf "\$HOME/Library/Application Support/zeloryn"
+    rm -rf "\$HOME/Library/Application Support/Kryleos Forge"
+  else
+    echo "Note: Configuration preserved at ~/Library/Application Support/zeloryn (use 'zeloryn uninstall --purge' to wipe)."
+  fi
+  echo "Zeloryn has been uninstalled."
+  rm -f "\$0"
+  exit 0
+fi
 open -a "${TARGET_APP_DIR}/${APP_NAME}.app" --args "\$@"
 EOF
   chmod +x "$WRAPPER_SCRIPT"
