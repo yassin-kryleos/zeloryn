@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, safeStorage, shell, crashReporter } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, safeStorage, shell, crashReporter, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const http = require('http');
@@ -8,6 +8,25 @@ const { spawn } = require('child_process');
 
 let mainWindow;
 let backendProcess = null;
+
+// Set Application User Model ID for Windows taskbar grouping & shortcut binding
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.zeloryn.app');
+}
+
+// Ensure a valid local session secret is available for backend and IPC
+let localSessionSecret = process.env.KRYLEOS_LOCAL_SESSION_SECRET || '';
+function getLocalSessionSecret() {
+  if (!localSessionSecret || localSessionSecret.length < 32) {
+    localSessionSecret = crypto.randomBytes(32).toString('hex');
+    process.env.KRYLEOS_LOCAL_SESSION_SECRET = localSessionSecret;
+  }
+  return localSessionSecret;
+}
+
+ipcMain.on('get-session-secret-sync', (event) => {
+  event.returnValue = getLocalSessionSecret();
+});
 
 crashReporter.start({ uploadToServer: false });
 
@@ -207,9 +226,11 @@ function startBackend() {
     console.error('[backend] could not create default workspace dir:', err);
   }
 
+  const secret = getLocalSessionSecret();
+
   backendProcess = spawn(process.execPath, [serverPath], {
     cwd: workspaceDir,
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', PORT: '3001' },
+    env: { ...process.env, KRYLEOS_LOCAL_SESSION_SECRET: secret, ELECTRON_RUN_AS_NODE: '1', PORT: '3001' },
     stdio: 'inherit'
   });
 
@@ -339,6 +360,15 @@ function createWindow() {
 }
 
 app.on('ready', () => {
+  if (session && session.defaultSession) {
+    session.defaultSession.webRequest.onBeforeSendHeaders(
+      { urls: ['http://localhost:3001/*', 'http://127.0.0.1:3001/*', 'ws://localhost:3001/*', 'ws://127.0.0.1:3001/*'] },
+      (details, callback) => {
+        details.requestHeaders['X-Kryleos-Session'] = getLocalSessionSecret();
+        callback({ requestHeaders: details.requestHeaders });
+      }
+    );
+  }
   startBackend();
   createWindow();
   setupAutoUpdater();

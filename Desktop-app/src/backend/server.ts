@@ -342,7 +342,8 @@ export function isTrustedLocalWebSocketRequest(req: Pick<http.IncomingMessage, '
 export function isAuthenticatedLocalWebSocketRequest(req: Pick<http.IncomingMessage, 'headers' | 'socket' | 'url'>): boolean {
   if (!isTrustedLocalWebSocketRequest(req)) return false;
   const url = new URL(req.url || '/', 'http://localhost');
-  return isValidLocalSessionSecret(url.searchParams.get('session'));
+  return isValidLocalSessionSecret(url.searchParams.get('session')) ||
+    isValidLocalSessionSecret(req.headers?.['x-kryleos-session']);
 }
 
 function rejectUpgrade(socket: import('node:stream').Duplex, status = '403 Forbidden') {

@@ -1,42 +1,84 @@
-# Zeloryn — Windows PowerShell Installer
+# Zeloryn — Universal Windows PowerShell Installer
 # Usage: irm https://raw.githubusercontent.com/yassin-kryleos/zeloryn/main/install.ps1 | iex
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = "Stop"
 
 $RepoOwner = "yassin-kryleos"
-$RepoName  = "zeloryn"
-$GithubRepo = "$RepoOwner/$RepoName"
+$RepoName = "zeloryn"
+$GitHubRepo = "$RepoOwner/$RepoName"
+$AppName = "Zeloryn"
 
 Write-Host ""
-Write-Host "==> Installing Zeloryn for Windows..." -ForegroundColor Cyan
+Write-Host "  ______    _                        " -ForegroundColor Green
+Write-Host " |___  /   | |                       " -ForegroundColor Green
+Write-Host "    / / ___| | ___  _ __ _   _ _ __  " -ForegroundColor Green
+Write-Host "   / / / _ \ |/ _ \| '__| | | | '_ \ " -ForegroundColor Green
+Write-Host "  / /_|  __/ | (_) | |  | |_| | | | |" -ForegroundColor Green
+Write-Host " /_____\___|_|\___/|_|   \__, |_| |_|" -ForegroundColor Green
+Write-Host "                          __/ |      " -ForegroundColor Green
+Write-Host "                         |___/       " -ForegroundColor Green
+Write-Host "  Free, Open-Source, Local-First AI Software Engineering Cockpit`n" -ForegroundColor DarkGray
+
+# Architecture detection
+$Arch = if ([System.Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
+if ($Arch -ne "x64") {
+    Write-Error "Zeloryn currently requires a 64-bit (x64) Windows operating system."
+    exit 1
+}
+
+Write-Host "==> " -ForegroundColor Blue -NoNewline
+Write-Host "Detected environment: Windows ($Arch)"
+
+# Determine installation version
+$Version = $env:FORGE_VERSION
+if (-not $Version) {
+    Write-Host "==> " -ForegroundColor Blue -NoNewline
+    Write-Host "Resolving latest release from GitHub..."
+    try {
+        $ReleaseResponse = Invoke-RestMethod -Uri "https://api.github.com/repos/$GitHubRepo/releases/latest" -Headers @{ "User-Agent" = "PowerShell" }
+        $Version = $ReleaseResponse.tag_name
+    } catch {
+        $Version = "v0.1.0"
+        Write-Warning "Could not query GitHub Releases API (rate limit or offline). Falling back to $Version."
+    }
+}
+
+$CleanVersion = $Version.TrimStart("v")
+$InstallerName = "$AppName-Setup-$CleanVersion.exe"
+$DownloadUrl = "https://github.com/$GitHubRepo/releases/download/$Version/$InstallerName"
+
+$TempDir = [System.IO.Path]::GetTempPath()
+$TempInstallerPath = Join-Path $TempDir $InstallerName
+
+Write-Host "==> " -ForegroundColor Blue -NoNewline
+Write-Host "Downloading $InstallerName ($Version)..."
 
 try {
-    Write-Host "==> Resolving latest release..." -ForegroundColor Gray
-    $ReleaseUrl = "https://api.github.com/repos/$GithubRepo/releases/latest"
-    $Release = Invoke-RestMethod -Uri $ReleaseUrl -Headers @{ "User-Agent" = "PowerShell" }
-    $Tag = $Release.tag_name
-    Write-Host "==> Found version: $Tag" -ForegroundColor Green
-
-    # Find installer asset (.exe)
-    $Asset = $Release.assets | Where-Object { $_.name -like "*Setup*.exe" -or $_.name -like "*.exe" } | Select-Object -First 1
-
-    if (-not $Asset) {
-        throw "Could not locate a Windows .exe installer asset in release $Tag."
-    }
-
-    $InstallerUrl = $Asset.browser_download_url
-    $TempInstaller = Join-Path $env:TEMP $Asset.name
-
-    Write-Host "==> Downloading $($Asset.name)..." -ForegroundColor Gray
-    Invoke-WebRequest -Uri $InstallerUrl -OutFile $TempInstaller
-
-    Write-Host "==> Launching installer..." -ForegroundColor Green
-    Start-Process -FilePath $TempInstaller -Wait
-
-    Write-Host "==> Zeloryn installation complete!" -ForegroundColor Green
-    Write-Host "    Launch Zeloryn from your Start Menu or Desktop shortcut." -ForegroundColor Cyan
+    Invoke-WebRequest -Uri $DownloadUrl -OutFile $TempInstallerPath -UseBasicParsing
+} catch {
+    Write-Error "Failed to download $InstallerName from GitHub Releases ($DownloadUrl). Please check https://github.com/$GitHubRepo/releases."
+    exit 1
 }
-catch {
-    Write-Host "ERROR: Installation failed: $_" -ForegroundColor Red
-    Write-Host "Please download the installer directly from https://github.com/$GithubRepo/releases" -ForegroundColor Yellow
-}
+
+Write-Host "==> " -ForegroundColor Green -NoNewline
+Write-Host "Launching $AppName installer..."
+
+# Launch the NSIS installer
+Start-Process -FilePath $TempInstallerPath
+
+Write-Host ""
+Write-Host "==> " -ForegroundColor Green -NoNewline
+Write-Host "$AppName ($Version) installer started!"
+Write-Host ""
+Write-Host "What gets created:"
+Write-Host "  * Start Menu / App Drawer shortcut (Zeloryn)"
+Write-Host "  * Desktop shortcut (Zeloryn)"
+Write-Host "  * Windows Programs list (Control Panel / Settings)"
+Write-Host "  * Pin to Taskbar: Right-click Zeloryn in Start Menu or Desktop and select 'Pin to taskbar'"
+Write-Host ""
+Write-Host "Bring Your Own Key (BYOK):"
+Write-Host "  Configure your Anthropic, OpenAI, or Ollama keys in the CONFIG modal."
+Write-Host "  Visit https://github.com/$GitHubRepo for documentation and guides.`n"
+Write-Host "Support development:"
+Write-Host "  Buy Me a Coffee: https://buymeacoffee.com/yassinkryleos"
+Write-Host "  Ko-fi:           https://ko-fi.com/yassinkryleos`n"

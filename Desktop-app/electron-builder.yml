@@ -34,6 +34,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  shortcutName: "Zeloryn"
 mac:
   # pkg target dropped: it needs a Developer ID Installer signing identity
   # that electron-builder doesn't handle gracefully when unsigned (fails

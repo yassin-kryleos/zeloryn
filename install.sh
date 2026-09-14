@@ -142,6 +142,7 @@ if [ "$PLATFORM" = "linux" ]; then
   WRAPPER_SCRIPT="${INSTALL_BIN_DIR}/${BINARY_NAME}"
   cat << EOF > "$WRAPPER_SCRIPT"
 #!/bin/sh
+export APPIMAGE_EXTRACT_AND_RUN=1
 exec "$TARGET_APPIMAGE" "\$@"
 EOF
   chmod +x "$WRAPPER_SCRIPT"
