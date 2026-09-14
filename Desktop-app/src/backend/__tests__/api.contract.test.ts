@@ -92,9 +92,51 @@ describe('GET /api/companion/status — contract', () => {
   });
 });
 
+// ─── /api/docs/templates ─────────────────────────────────────────────────────
 
+describe('GET /api/docs/templates — contract', () => {
+  it('responds with 200 and application/json', async () => {
+    const res = await request(app).get('/api/docs/templates');
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+  });
 
-// ─── 404 handling ────────────────────────────────────────────────────────────
+  it('returns success: true and templates array', async () => {
+    const res = await request(app).get('/api/docs/templates');
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.templates)).toBe(true);
+    expect(res.body.templates.length).toBeGreaterThan(0);
+  });
+
+  it('each template has id, name, description, and requiredTier', async () => {
+    const res = await request(app).get('/api/docs/templates');
+    for (const tpl of res.body.templates) {
+      expect(typeof tpl.id).toBe('string');
+      expect(typeof tpl.name).toBe('string');
+      expect(typeof tpl.description).toBe('string');
+      expect(typeof tpl.requiredTier).toBe('string');
+      // Verify safe uppercase conversion without throwing
+      expect(() => {
+        const label = `${tpl.name}${tpl.requiredTier ? ` (${String(tpl.requiredTier).toUpperCase()})` : ''}`;
+        expect(label).toBeTruthy();
+      }).not.toThrow();
+    }
+  });
+
+  it('safely handles templates with missing or undefined requiredTier without crashing', () => {
+    const mockTemplates = [
+      { id: 'custom_1', name: 'Custom Doc', description: 'No tier specified' },
+      { id: 'custom_2', name: 'Tiered Doc', description: 'With tier', requiredTier: 'free' }
+    ];
+    for (const t of mockTemplates as any[]) {
+      expect(() => {
+        const label = `${t.name || t.id}${t.requiredTier ? ` (${String(t.requiredTier).toUpperCase()})` : ''}`;
+        expect(label).toBeDefined();
+      }).not.toThrow();
+    }
+  });
+});
+
 
 describe('Unknown route — contract', () => {
   it('returns 404 for unknown GET route', async () => {

@@ -262,7 +262,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
 
   // Maps backend roles to Forge team names
   const getAgentCodename = (sender: string): string => {
-    switch (sender.toLowerCase()) {
+    switch ((sender || '').toLowerCase()) {
       case 'coordinator':
         return 'Planner';
       case 'developer':
@@ -272,12 +272,12 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
       case 'debugger':
         return 'Reviewer';
       default:
-        return sender;
+        return sender || 'Agent';
     }
   };
 
   const getSenderColor = (sender: string) => {
-    switch (sender.toLowerCase()) {
+    switch ((sender || '').toLowerCase()) {
       case 'coordinator':
       case 'planner':
         return 'text-forge-neon';
@@ -318,7 +318,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
             {isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
             <span className="flex items-center gap-1.5">
               <Brain size={12} />
-              <span>COGNITIVE TRACE // {agentName.toUpperCase()}</span>
+              <span>COGNITIVE TRACE // {(agentName || '').toUpperCase()}</span>
             </span>
           </button>
           {!isCollapsed && (
@@ -393,7 +393,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
       return (
         <div key={index} className="my-1.5 font-mono border-l-2 border-forge-dark pl-3 py-0.5">
           <div className="flex items-center gap-4 text-[10px] text-forge-dim tracking-wider mb-1">
-            <span>[OUTPUT DELTA // FROM: {agentName.toUpperCase()}]</span>
+            <span>[OUTPUT DELTA // FROM: {(agentName || '').toUpperCase()}]</span>
             {(isLongMessage || hasDiff) && (
               <button
                 onClick={() => toggleResult(index)}

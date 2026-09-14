@@ -574,7 +574,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
             {/* Modal Title bar */}
             <div className="flex items-center justify-between border-b border-forge-neon pb-2 mb-3">
               <span className="text-xs font-bold text-forge-neon tracking-widest">
-                {isEditing ? 'EDITING' : 'PREVIEW'} // {previewFile.name.toUpperCase()}
+                {isEditing ? 'EDITING' : 'PREVIEW'} // {previewFile.name ? previewFile.name.toUpperCase() : ''}
               </span>
               <div className="flex gap-3">
                 {!isEditing && (

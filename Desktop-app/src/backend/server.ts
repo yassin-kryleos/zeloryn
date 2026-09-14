@@ -3287,19 +3287,19 @@ app.post('/api/crew/sync', async (req, res) => {
 
 // --- GitHub & Docs Autopilot Integrations ---
 const templates = [
-  { id: 'project_brief', name: 'Project Brief', description: 'High-level project goals, features, and non-goals.' },
-  { id: 'user_guide', name: 'User Guide', description: 'Step-by-step user onboarding and workflow instructions.' },
-  { id: 'architecture', name: 'System Architecture', description: 'Core components, data flow, and directory layout.' },
-  { id: 'release_checklist', name: 'Release Checklist', description: 'Sanity checks, build steps, and verification commands.' },
-  { id: 'api_integrations', name: 'API & Integrations', description: 'REST endpoints, payload models, and integration specs.' },
-  { id: 'data_storage', name: 'Data & Storage', description: 'Database schema, caching layout, and persistency rules.' },
-  { id: 'security_privacy', name: 'Security & Privacy', description: 'Threat modeling, access control, and credential handling.' },
-  { id: 'test_plan', name: 'Test Plan', description: 'Unit/integration testing strategy and coverage targets.' },
-  { id: 'prd', name: 'Product Requirements (PRD)', description: 'Product goals, user personas, roadmap, and edge cases.' },
-  { id: 'technical_design', name: 'Technical Design Document', description: 'Detailed technical specs, algorithmic loops, and tradeoffs.' },
-  { id: 'founder_summary', name: 'Founder Summary', description: 'Elevator pitch, MRR prospects, and investor readiness status.' },
-  { id: 'project_brochure', name: 'Project Brochure', description: 'Sales copy, premium value proposition, and branding overview.' },
-  { id: 'client_handoff', name: 'Client Handoff Pack', description: 'Branded deliverable details, system credentials, and maintenance guide.' }
+  { id: 'project_brief', name: 'Project Brief', description: 'High-level project goals, features, and non-goals.', requiredTier: 'free' },
+  { id: 'user_guide', name: 'User Guide', description: 'Step-by-step user onboarding and workflow instructions.', requiredTier: 'free' },
+  { id: 'architecture', name: 'System Architecture', description: 'Core components, data flow, and directory layout.', requiredTier: 'free' },
+  { id: 'release_checklist', name: 'Release Checklist', description: 'Sanity checks, build steps, and verification commands.', requiredTier: 'free' },
+  { id: 'api_integrations', name: 'API & Integrations', description: 'REST endpoints, payload models, and integration specs.', requiredTier: 'free' },
+  { id: 'data_storage', name: 'Data & Storage', description: 'Database schema, caching layout, and persistency rules.', requiredTier: 'free' },
+  { id: 'security_privacy', name: 'Security & Privacy', description: 'Threat modeling, access control, and credential handling.', requiredTier: 'free' },
+  { id: 'test_plan', name: 'Test Plan', description: 'Unit/integration testing strategy and coverage targets.', requiredTier: 'free' },
+  { id: 'prd', name: 'Product Requirements (PRD)', description: 'Product goals, user personas, roadmap, and edge cases.', requiredTier: 'free' },
+  { id: 'technical_design', name: 'Technical Design Document', description: 'Detailed technical specs, algorithmic loops, and tradeoffs.', requiredTier: 'free' },
+  { id: 'founder_summary', name: 'Founder Summary', description: 'Elevator pitch, MRR prospects, and investor readiness status.', requiredTier: 'free' },
+  { id: 'project_brochure', name: 'Project Brochure', description: 'Sales copy, premium value proposition, and branding overview.', requiredTier: 'free' },
+  { id: 'client_handoff', name: 'Client Handoff Pack', description: 'Branded deliverable details, system credentials, and maintenance guide.', requiredTier: 'free' }
 ];
 
 function parseGithubRepo(url: string): { owner: string; repo: string } | null {

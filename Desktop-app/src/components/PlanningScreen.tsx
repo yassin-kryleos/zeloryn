@@ -87,7 +87,7 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
 };
 
 function getPricingForModel(model: string): { input: number; output: number } {
-  const m = model.toLowerCase();
+  const m = (model || '').toLowerCase();
   if (m.startsWith('ollama:') || m === 'llama3' || m === 'qwen2.5-coder') {
     return { input: 0, output: 0 };
   }
@@ -100,7 +100,7 @@ function getPricingForModel(model: string): { input: number; output: number } {
 }
 
 function isLowCapacityModel(modelName: string): boolean {
-  const m = modelName.toLowerCase();
+  const m = (modelName || '').toLowerCase();
   if (m.startsWith('ollama:') || m === 'llama3' || m === 'qwen2.5-coder') return true;
   if (m === 'gpt-4o-mini' || m.startsWith('claude-3-5-haiku') || m === 'gemini-2.5-flash') return true;
   return false;
@@ -1106,7 +1106,7 @@ export function PlanningScreen({
   const tracedItems = driftItems.filter(item => item.latestTrace);
 
   const getCategoryColor = (cat: string) => {
-    switch (cat.toLowerCase()) {
+    switch ((cat || '').toLowerCase()) {
       case 'frontend': return 'border-cyan-800 text-cyan-300 bg-cyan-950/40';
       case 'backend': return 'border-purple-800 text-purple-300 bg-purple-950/40';
       case 'testing': return 'border-green-800 text-green-300 bg-green-950/40';
@@ -1941,7 +1941,7 @@ export function PlanningScreen({
                 >
                   {docTemplates.map(t => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.requiredTier.toUpperCase()})
+                      {t.name || t.id}{t.requiredTier ? ` (${String(t.requiredTier).toUpperCase()})` : ''}
                     </option>
                   ))}
                 </select>
@@ -2808,8 +2808,8 @@ export function PlanningScreen({
                   <div className="space-y-1.5 max-h-[260px] overflow-y-auto">
                     {gitIssues
                       .filter(issue => {
-                        const s = gitIssuesSearch.toLowerCase();
-                        return String(issue.number).includes(s) || issue.title.toLowerCase().includes(s);
+                        const s = (gitIssuesSearch || '').toLowerCase();
+                        return String(issue.number || '').includes(s) || (issue.title || '').toLowerCase().includes(s);
                       })
                       .map(issue => {
                         const isSelected = selectedGitIssueIds.has(issue.id);
