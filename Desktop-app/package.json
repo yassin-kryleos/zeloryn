@@ -12,6 +12,7 @@
   "type": "module",
   "main": "src/backend/electron.cjs",
   "scripts": {
+    "postinstall": "node scripts/patch-tree-sitter-cxx20.mjs",
     "dev": "concurrently -n \"vite,server,electron\" -c \"blue,green,magenta\" \"vite\" \"tsx src/backend/server.ts\" \"electron .\"",
     "dev:e2e": "concurrently -n \"vite,server\" -c \"blue,green\" \"vite --mode test --port 5174\" \"tsx src/backend/server.ts\"",
     "server": "tsx src/backend/server.ts",
