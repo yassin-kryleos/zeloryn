@@ -705,6 +705,41 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
     return null;
   }
 
+  private sanitizeJsonStringLiterals(jsonStr: string): string {
+    let inString = false;
+    let escaped = false;
+    let result = '';
+    for (let i = 0; i < jsonStr.length; i++) {
+      const char = jsonStr[i];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          result += char;
+        } else if (char === '\\') {
+          escaped = true;
+          result += char;
+        } else if (char === '"') {
+          inString = false;
+          result += char;
+        } else if (char === '\n') {
+          result += '\\n';
+        } else if (char === '\r') {
+          result += '\\r';
+        } else if (char === '\t') {
+          result += '\\t';
+        } else {
+          result += char;
+        }
+      } else {
+        if (char === '"') {
+          inString = true;
+        }
+        result += char;
+      }
+    }
+    return result;
+  }
+
   // Parse a coordinator action. Prefers an <action>...</action> block, then a
   // ```json fenced block, then bare JSON — tolerating loose local-model output.
   private parseActionBlock(text: string): AgentAction | null {
@@ -724,66 +759,108 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
 
     if (!rawJson) return null;
 
+    let parsed: AgentAction | null = null;
     try {
-      const parsed = JSON.parse(rawJson) as AgentAction;
+      parsed = JSON.parse(rawJson) as AgentAction;
+    } catch {
+      try {
+        parsed = JSON.parse(this.sanitizeJsonStringLiterals(rawJson)) as AgentAction;
+      } catch {}
+    }
+
+    if (parsed) {
       if (!parsed.type && (parsed as any).tool) {
         parsed.type = 'tool';
       }
+      if (parsed.type === 'tool' && (!parsed.arguments || Object.keys(parsed.arguments).length === 0)) {
+        const rootArgs: Record<string, any> = (parsed as any).parameters || (parsed as any).params || (parsed as any).args || {};
+        if ((parsed as any).path) rootArgs.path = (parsed as any).path;
+        if ((parsed as any).file) rootArgs.path = (parsed as any).file;
+        if ((parsed as any).filePath) rootArgs.path = (parsed as any).filePath;
+        if ((parsed as any).content !== undefined) rootArgs.content = (parsed as any).content;
+        if ((parsed as any).code !== undefined) rootArgs.content = (parsed as any).code;
+        if ((parsed as any).command) rootArgs.command = (parsed as any).command;
+        if ((parsed as any).query) rootArgs.query = (parsed as any).query;
+        if (Object.keys(rootArgs).length > 0) {
+          parsed.arguments = rootArgs;
+        }
+      }
       return parsed;
-    } catch (err) {
-      // Lenient regex parsing fallback for handling raw newlines generated inside JSON strings
-      try {
-        const toolMatch = rawJson.match(/"tool"\s*:\s*"([^"]+)"/i);
-        const tool = toolMatch ? toolMatch[1] : undefined;
+    }
 
-        const typeMatch = rawJson.match(/"type"\s*:\s*"([^"]+)"/i);
-        const type = typeMatch ? typeMatch[1] : (tool ? 'tool' : 'respond');
-        
-        const messageMatch = rawJson.match(/"message"\s*:\s*"([\s\S]*?)"\s*}/) || 
-                             rawJson.match(/"message"\s*:\s*"([\s\S]*?)"\s*(,\s*"|$)/) ||
-                             rawJson.match(/"message"\s*:\s*"([\s\S]*?)"/);
-        const message = messageMatch ? messageMatch[1] : '';
+    // Lenient regex parsing fallback for handling raw newlines or malformed JSON from small models
+    try {
+      const toolMatch = rawJson.match(/"tool"\s*:\s*"([^"]+)"/i);
+      const tool = toolMatch ? toolMatch[1] : undefined;
 
-        const planMatch = rawJson.match(/"plan"\s*:\s*\[([\s\S]*?)\]/i);
-        const plan = planMatch 
-          ? planMatch[1].split(',').map(s => s.trim().replace(/^"|"$/g, '')) 
-          : [];
+      const typeMatch = rawJson.match(/"type"\s*:\s*"([^"]+)"/i);
+      const type = typeMatch ? typeMatch[1] : (tool ? 'tool' : 'respond');
+      
+      const messageMatch = rawJson.match(/"message"\s*:\s*"([\s\S]*?)"\s*}/) || 
+                           rawJson.match(/"message"\s*:\s*"([\s\S]*?)"\s*(,\s*"|$)/) ||
+                           rawJson.match(/"message"\s*:\s*"([\s\S]*?)"/);
+      const message = messageMatch ? messageMatch[1] : '';
 
-        const argsMatch = rawJson.match(/"arguments"\s*:\s*({[\s\S]*?})/);
-        let parsedArgs = {};
-        if (argsMatch) {
+      const planMatch = rawJson.match(/"plan"\s*:\s*\[([\s\S]*?)\]/i);
+      const plan = planMatch 
+        ? planMatch[1].split(',').map(s => s.trim().replace(/^"|"$/g, '')) 
+        : [];
+
+      let parsedArgs: Record<string, any> = {};
+      const argsMatch = rawJson.match(/"(?:arguments|parameters|params|args)"\s*:\s*({[\s\S]*})/);
+      if (argsMatch) {
+        try {
+          parsedArgs = JSON.parse(argsMatch[1]);
+        } catch {
           try {
-            parsedArgs = JSON.parse(argsMatch[1]);
+            parsedArgs = JSON.parse(this.sanitizeJsonStringLiterals(argsMatch[1]));
           } catch {}
         }
-
-        return {
-          type: type as any,
-          tool: tool as any,
-          arguments: parsedArgs,
-          plan: plan,
-          message: message
-        };
-      } catch (fallbackErr) {
-        this.addLog('SYSTEM', 'coordinator', `Failed to parse action JSON: ${rawJson}`, 'error');
-        return null;
       }
+
+      const pathMatch = rawJson.match(/"(?:path|filePath|file|filename)"\s*:\s*"([^"]+)"/i);
+      if (!parsedArgs.path && pathMatch) parsedArgs.path = pathMatch[1];
+
+      const contentMatch = rawJson.match(/"(?:content|code|text)"\s*:\s*"([\s\S]*?)"\s*(?:,\s*"[a-zA-Z0-9_]+"\s*:|\s*})/);
+      if (parsedArgs.content === undefined && contentMatch) {
+        parsedArgs.content = contentMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+      }
+
+      const commandMatch = rawJson.match(/"(?:command|cmd)"\s*:\s*"([^"]+)"/i);
+      if (!parsedArgs.command && commandMatch) parsedArgs.command = commandMatch[1];
+
+      return {
+        type: type as any,
+        tool: tool as any,
+        arguments: parsedArgs,
+        plan: plan,
+        message: message
+      };
+    } catch (fallbackErr) {
+      this.addLog('SYSTEM', 'coordinator', `Failed to parse action JSON: ${rawJson}`, 'error');
+      return null;
     }
   }
 
   // Execute tool calls in sandbox
   private async executeTool(tool: string, args: any): Promise<string> {
     try {
+      const normalizedArgs = args || {};
       switch (tool) {
-        case 'readFile':
-          if (!args.path) return 'Error: Missing path argument';
-          const fileContent = await this.sandbox.readFile(args.path);
-          return `File contents of "${args.path}":\n\`\`\`\n${fileContent}\n\`\`\``;
+        case 'readFile': {
+          const filePath = normalizedArgs.path || normalizedArgs.file || normalizedArgs.filePath || normalizedArgs.filename;
+          if (!filePath) return 'Error: Missing path argument';
+          const fileContent = await this.sandbox.readFile(filePath);
+          return `File contents of "${filePath}":\n\`\`\`\n${fileContent}\n\`\`\``;
+        }
         
-        case 'writeFile':
-          if (!args.path || args.content === undefined) return 'Error: Missing path or content argument';
-          await this.sandbox.writeFile(args.path, args.content);
-          return `Successfully wrote file "${args.path}"`;
+        case 'writeFile': {
+          const filePath = normalizedArgs.path || normalizedArgs.file || normalizedArgs.filePath || normalizedArgs.filename;
+          const fileContent = normalizedArgs.content !== undefined ? normalizedArgs.content : (normalizedArgs.code !== undefined ? normalizedArgs.code : normalizedArgs.text);
+          if (!filePath || fileContent === undefined) return 'Error: Missing path or content argument';
+          await this.sandbox.writeFile(filePath, fileContent);
+          return `Successfully wrote file "${filePath}"`;
+        }
         
         case 'modifyFile':
           if (!args.path || !args.targetContent || !args.replacementContent) {

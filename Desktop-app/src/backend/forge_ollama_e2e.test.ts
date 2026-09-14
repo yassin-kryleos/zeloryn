@@ -49,7 +49,7 @@ describe.runIf(RUN)('Forge Ollama end-to-end (money path)', () => {
     await orchestrator.handleUserQuery(
       'Use the writeFile tool to overwrite "src/greeting.ts" with this content:\n' +
       'export function greetUser(name: string): string {\n' +
-      '  return `Hello, ${name}!`;\n' +
+      '  return "Hello, " + name + "!";\n' +
       '}\n' +
       'Emit an action using tool "writeFile" for "src/greeting.ts".'
     );
@@ -57,10 +57,8 @@ describe.runIf(RUN)('Forge Ollama end-to-end (money path)', () => {
     let updated = fs.readFileSync(path.join(tmp, 'src', 'greeting.ts'), 'utf-8');
     if (!/greetUser/.test(updated)) {
       await orchestrator.handleUserQuery(
-        'Call writeFile on "src/greeting.ts":\n' +
-        '<action>\n' +
-        '{"type":"tool","tool":"writeFile","arguments":{"path":"src/greeting.ts","content":"export function greetUser(name: string): string { return \\"Hello, \\" + name + \\"!\\"; }"},"message":"writing greetUser"}\n' +
-        '</action>'
+        'Call writeFile on "src/greeting.ts" with exported greetUser function: ' +
+        '{"tool":"writeFile","path":"src/greeting.ts","content":"export function greetUser(name: string): string { return \\"Hello, \\" + name + \\"!\\"; }"}'
       );
       updated = fs.readFileSync(path.join(tmp, 'src', 'greeting.ts'), 'utf-8');
     }

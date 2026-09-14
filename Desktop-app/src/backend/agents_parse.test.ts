@@ -51,6 +51,34 @@ describe('parseActionBlock — local-model tolerant parsing', () => {
     expect(a.tool).toBe('writeFile');
   });
 
+  it('parses action with unescaped newlines and curly braces in content string', () => {
+    const raw = '<action>\n{\n  "type": "tool",\n  "tool": "writeFile",\n  "arguments": {\n    "path": "src/greeting.ts",\n    "content": "export function greetUser(name: string): string {\n  return `Hello, ${name}!`;\n}"\n  }\n}\n</action>';
+    const a = parse(raw);
+    expect(a.type).toBe('tool');
+    expect(a.tool).toBe('writeFile');
+    expect(a.arguments.path).toBe('src/greeting.ts');
+    expect(a.arguments.content).toContain('greetUser');
+    expect(a.arguments.content).toContain('return `Hello');
+  });
+
+  it('collects root-level properties into arguments if arguments is missing', () => {
+    const raw = '<action>\n{"tool":"writeFile","path":"src/root.ts","content":"const x = 1;"}\n</action>';
+    const a = parse(raw);
+    expect(a.type).toBe('tool');
+    expect(a.tool).toBe('writeFile');
+    expect(a.arguments.path).toBe('src/root.ts');
+    expect(a.arguments.content).toBe('const x = 1;');
+  });
+
+  it('handles parameters object alias for arguments', () => {
+    const raw = '<action>\n{"tool":"writeFile","parameters":{"path":"src/param.ts","content":"let y = 2;"}}\n</action>';
+    const a = parse(raw);
+    expect(a.type).toBe('tool');
+    expect(a.tool).toBe('writeFile');
+    expect(a.arguments.path).toBe('src/param.ts');
+    expect(a.arguments.content).toBe('let y = 2;');
+  });
+
   it('returns null when there is no JSON action at all', () => {
     expect(parse('Node version is v20. No action needed.')).toBeNull();
   });
