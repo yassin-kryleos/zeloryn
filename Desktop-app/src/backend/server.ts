@@ -1460,7 +1460,9 @@ app.delete('/api/companion/devices/:deviceId', (req, res) => {
 const collabRooms = new Map<string, Set<WebSocket>>();
 
 wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
-  console.log('Client connected to Kryleos Forge WS server');
+  if (process.env.DEBUG) {
+    console.log('Client connected to Zeloryn WS server');
+  }
 
   // Hook ws.send to track bytes sent
   const originalSend = ws.send;
@@ -1971,7 +1973,7 @@ features and requirements — NOT to implement them. Rules:
 - Execution happens later in FORGE; criteria are drafted in FLOW.
 ` : '';
 
-              const systemContent = `You are a helpful assistant in the Kryleos Forge workspace environment.
+              const systemContent = `You are a helpful assistant in the Zeloryn workspace environment.
 Current Project: ${projectName || 'Unnamed Project'}
 Workspace Root: ${sandbox.getWorkspaceRoot()}
 ${scratchbookGuidance}${customInstructions ? `\nUSER SPECIFIC CUSTOM INSTRUCTIONS:\n${customInstructions}\n` : ''}
@@ -2534,7 +2536,9 @@ ${getResponseModeInstructions(responseMode)}`;
         pendingTerminalApprovals.delete(id);
       }
     }
-    console.log('Client disconnected');
+    if (process.env.DEBUG) {
+      console.log('Client disconnected from Zeloryn WS server');
+    }
     const roomToken = (ws as any).collabRoomToken;
     if (roomToken && collabRooms.has(roomToken)) {
       collabRooms.get(roomToken)!.delete(ws);
@@ -2745,7 +2749,7 @@ app.post('/api/artifacts/publish', async (req, res) => {
         'User-Agent': 'Kryleos-Forge'
       },
       body: JSON.stringify({
-        description: `Shared via Kryleos Forge`,
+        description: `Shared via Zeloryn`,
         public: true,
         files: {
           [fileName]: { content }
@@ -3967,10 +3971,10 @@ if (COMPANION_BIND_HOST !== '127.0.0.1' && !COMPANION_AUTH_TOKEN) {
 }
 if (process.env.NODE_ENV !== 'test') {
   server.listen(Number(PORT), BIND_HOST, () => {
-    console.log(`Kryleos Forge backend running on http://${BIND_HOST}:${PORT}`);
+    console.log(`Zeloryn backend running on http://${BIND_HOST}:${PORT}`);
   });
   companionServer.listen(COMPANION_PORT, COMPANION_BIND_HOST, () => {
-    console.log(`Kryleos Forge companion channel running on ws://${COMPANION_BIND_HOST}:${COMPANION_PORT}/api/companion/ws`);
+    console.log(`Zeloryn companion channel running on ws://${COMPANION_BIND_HOST}:${COMPANION_PORT}/api/companion/ws`);
   });
 }
 

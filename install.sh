@@ -148,6 +148,18 @@ if [ "$PLATFORM" = "linux" ]; then
   mv "${TMP_DIR}/${ASSET_NAME}" "$TARGET_APPIMAGE"
   chmod +x "$TARGET_APPIMAGE"
 
+  # Pre-extract runtime silently to ensure instant launch and zero FUSE/stdout spam
+  EXTRACTED_APP="${APP_DIR}/app"
+  log_info "Preparing application runtime..."
+  TMP_EXTRACT="${APP_DIR}/.extract_tmp_$$"
+  mkdir -p "$TMP_EXTRACT"
+  (cd "$TMP_EXTRACT" && "$TARGET_APPIMAGE" --appimage-extract > /dev/null 2>&1)
+  if [ -x "$TMP_EXTRACT/squashfs-root/zeloryn" ]; then
+    rm -rf "$EXTRACTED_APP"
+    mv "$TMP_EXTRACT/squashfs-root" "$EXTRACTED_APP"
+  fi
+  rm -rf "$TMP_EXTRACT" 2>/dev/null || true
+
   # Create executable symlink/wrapper in ~/.local/bin
   WRAPPER_SCRIPT="${INSTALL_BIN_DIR}/${BINARY_NAME}"
   cat << EOF > "$WRAPPER_SCRIPT"
@@ -169,8 +181,31 @@ if [ "\$1" = "uninstall" ] || [ "\$1" = "--uninstall" ]; then
   rm -f "\$0"
   exit 0
 fi
-export APPIMAGE_EXTRACT_AND_RUN=1
-exec "$TARGET_APPIMAGE" "\$@"
+
+APP_DIR="\$HOME/.local/share/zeloryn"
+EXTRACTED_APP="\$APP_DIR/app"
+TARGET_APPIMAGE="\$APP_DIR/Zeloryn.AppImage"
+
+# Ensure extracted application is present and synchronized with the AppImage
+if [ ! -x "\$EXTRACTED_APP/zeloryn" ] || [ "\$TARGET_APPIMAGE" -nt "\$EXTRACTED_APP/zeloryn" ]; then
+  TMP_EXTRACT="\$APP_DIR/.extract_tmp_\$\$"
+  mkdir -p "\$TMP_EXTRACT" 2>/dev/null
+  if [ -x "\$TARGET_APPIMAGE" ]; then
+    (cd "\$TMP_EXTRACT" && "\$TARGET_APPIMAGE" --appimage-extract > /dev/null 2>&1)
+    if [ -x "\$TMP_EXTRACT/squashfs-root/zeloryn" ]; then
+      rm -rf "\$EXTRACTED_APP"
+      mv "\$TMP_EXTRACT/squashfs-root" "\$EXTRACTED_APP"
+    fi
+    rm -rf "\$TMP_EXTRACT" 2>/dev/null
+  fi
+fi
+
+if [ -x "\$EXTRACTED_APP/zeloryn" ]; then
+  exec "\$EXTRACTED_APP/zeloryn" "\$@"
+else
+  export APPIMAGE_EXTRACT_AND_RUN=1
+  exec "$TARGET_APPIMAGE" "\$@"
+fi
 EOF
   chmod +x "$WRAPPER_SCRIPT"
 

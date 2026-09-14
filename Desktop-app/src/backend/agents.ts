@@ -323,7 +323,7 @@ export class AgentOrchestrator {
   // System Prompts for each specialist agent
   private getSystemPrompt(role: AgentRole): string {
     const commonInstructions = `
-You are part of the Kryleos Forge multi-agent coding team operating in a local sandboxed workspace.
+You are part of the Zeloryn multi-agent coding team operating in a local sandboxed workspace.
 The workspace directory is: "${this.sandbox.getWorkspaceRoot()}". All paths you work with should be relative to this directory.
 Always maintain high-quality coding practices, clean formatting, and write fully implemented code (do not use placeholders or comments like "todo: implement here").
 ${this.customInstructions ? `\nUSER SPECIFIC CUSTOM INSTRUCTIONS:\n${this.customInstructions}\n` : ''}
@@ -921,7 +921,7 @@ Execute the compilation or testing command, analyze stdout/stderr, and report ba
     this.addLog('coordinator', role, `Task assigned: ${taskDescription}`, 'info');
 
     const commonInstructions = `
-You are part of the Kryleos Forge multi-agent coding team operating in a local sandboxed workspace.
+You are part of the Zeloryn multi-agent coding team operating in a local sandboxed workspace.
 The workspace directory is: "${this.sandbox.getWorkspaceRoot()}". All paths you work with should be relative to this directory.
 Always maintain high-quality coding practices, clean formatting, and write fully implemented code (do not use placeholders or comments like "todo: implement here").
 `;

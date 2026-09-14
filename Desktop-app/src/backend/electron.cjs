@@ -230,7 +230,12 @@ function startBackend() {
   if (!app.isPackaged) return;
 
   // Check if port 3001 is already active before spawning a new child process
-  const req = http.get('http://127.0.0.1:3001/', () => {
+  const req = http.get({
+    hostname: '127.0.0.1',
+    port: 3001,
+    path: '/',
+    headers: { 'x-kryleos-session': getLocalSessionSecret() }
+  }, () => {
     console.log('[backend] An active backend is already responding on port 3001. Skipping child process spawn.');
   });
   req.on('error', () => {
@@ -350,7 +355,12 @@ function createWindow() {
     const indexPath = path.join(__dirname, '..', '..', 'dist', 'index.html');
 
     function loadWhenBackendReady() {
-      http.get('http://127.0.0.1:3001/', () => {
+      http.get({
+        hostname: '127.0.0.1',
+        port: 3001,
+        path: '/',
+        headers: { 'x-kryleos-session': getLocalSessionSecret() }
+      }, () => {
         mainWindow.loadFile(indexPath);
         mainWindow.once('ready-to-show', () => {
           mainWindow.show();

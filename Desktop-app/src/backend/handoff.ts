@@ -173,7 +173,7 @@ export function generateHandoffBundle(payload: CardHandoffPayload, target: Hando
   parts.push(`1. Review the task objective and acceptance criteria above.`);
   parts.push(`2. Implement the required modifications directly in \`${payload.workspaceRoot}\`.`);
   parts.push(`3. Run test suites and verify all acceptance criteria pass.`);
-  parts.push(`4. Return to Kryleos Forge and move this card to DONE once finished.`);
+  parts.push(`4. Return to Zeloryn and move this card to DONE once finished.`);
 
   return parts.join('\n');
 }
