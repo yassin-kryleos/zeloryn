@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square, GitBranch, GitFork, ExternalLink, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square, GitBranch, GitFork, ExternalLink, RotateCcw, ShieldCheck, Sparkles } from 'lucide-react';
 import type { AcceptanceCriterion, AcceptanceCriterionType, CriterionPhase, ProjectTask } from '../backend/db';
 import { scoreTodayTasks } from '../shared/todayScore';
 import { driftClass } from '../shared/driftClassification';
@@ -19,6 +19,7 @@ interface ProjectBoardProps {
   onNotify?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
   onAbort?: () => void;
   installedAgents?: InstalledAgent[];
+  onOpenVibeTask?: (taskId: string) => void;
 }
 
 const categories = ['frontend', 'backend', 'testing', 'security', 'docs', 'infra'];
@@ -46,7 +47,8 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   onUpdateWorkspaceRoot,
   onNotify,
   onAbort,
-  installedAgents = []
+  installedAgents = [],
+  onOpenVibeTask
 }) => {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('Builder');
@@ -762,6 +764,18 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                 <Play size={8} />
               </button>
             )}
+            {task.status !== 'done' && onOpenVibeTask && (
+              <button
+                type="button"
+                onClick={() => onOpenVibeTask(task.id)}
+                title={isBlocked ? 'Blocked by unfinished dependency' : 'Build this feature visually in Vibe Studio with live interactive preview'}
+                disabled={isBlocked || isStreaming}
+                className="px-1 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 text-[8px] font-mono font-bold flex items-center gap-0.5 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Sparkles size={7} />
+                <span>Vibe</span>
+              </button>
+            )}
             <button
               onClick={() => setHandoffModalTask(task)}
               title="Push to... (Tier 1 In-App Runner or Tier 2 External Handoff)"
@@ -904,6 +918,18 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
                     >
                       <Play size={9} />
                     </button>
+                    {onOpenVibeTask && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenVibeTask(item.task.id)}
+                        disabled={item.blocked || isStreaming}
+                        title="Build this task visually in Vibe Studio"
+                        className="px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[8px] font-mono font-bold hover:bg-emerald-500/20 disabled:opacity-40 flex items-center gap-0.5 shrink-0"
+                      >
+                        <Sparkles size={7} />
+                        <span>Vibe</span>
+                      </button>
+                    )}
                   </div>
                 ))
               )}

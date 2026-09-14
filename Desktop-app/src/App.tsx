@@ -316,6 +316,7 @@ function App() {
   const [planningResetKey, setPlanningResetKey] = useState<number>(0);
 
   // Persistent Chat Sessions
+  const [selectedVibeTaskId, setSelectedVibeTaskId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionMeta[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>('planning_session');
   const [commandPendingApproval, setCommandPendingApproval] = useState<{ tool: string; command: string; commandId?: string } | null>(null);
@@ -827,19 +828,19 @@ function App() {
       if (isStreaming) return;
       if (e.key === 'F1') {
         e.preventDefault();
-        handleSpaceChange('vibe');
+        handleSpaceChange('plan');
       } else if (e.key === 'F2') {
         e.preventDefault();
-        handleSpaceChange('plan');
+        handleSpaceChange('cowork');
       } else if (e.key === 'F3') {
         e.preventDefault();
-        handleSpaceChange('cowork');
+        handleSpaceChange('project');
       } else if (e.key === 'F4') {
         e.preventDefault();
-        handleSpaceChange('project');
+        handleSpaceChange('code');
       } else if (e.key === 'F5') {
         e.preventDefault();
-        handleSpaceChange('code');
+        handleSpaceChange('vibe');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1716,18 +1717,10 @@ function App() {
             {/* Switchable Spaces tab bar */}
             <div className="forge-tabs ml-3">
               <button
-                onClick={() => handleSpaceChange('vibe')}
-                disabled={isStreaming}
-                className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${activeSpace === 'vibe' ? 'forge-tab-active text-forge-neon font-bold' : ''}`}
-                title="Vibe Coding Studio (F1)"
-              >
-                <span>⚡ Vibe</span>
-              </button>
-              <button
                 onClick={() => handleSpaceChange('plan')}
                 disabled={isStreaming}
                 className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'plan' ? 'forge-tab-active' : ''}`}
-                title="F2: Plan"
+                title="Plan (F1)"
               >
                 Plan
               </button>
@@ -1735,7 +1728,7 @@ function App() {
                 onClick={() => handleSpaceChange('cowork')}
                 disabled={isStreaming}
                 className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'cowork' ? 'forge-tab-active' : ''}`}
-                title="F2"
+                title="Crew (F2)"
               >
                 Crew
               </button>
@@ -1743,7 +1736,7 @@ function App() {
                 onClick={() => handleSpaceChange('project')}
                 disabled={isStreaming}
                 className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'project' ? 'forge-tab-active' : ''}`}
-                title="F3"
+                title="Flow (F3)"
               >
                 Flow
               </button>
@@ -1751,9 +1744,17 @@ function App() {
                 onClick={() => handleSpaceChange('code')}
                 disabled={isStreaming}
                 className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'code' ? 'forge-tab-active' : ''}`}
-                title="F4"
+                title="Forge (F4)"
               >
                 Forge
+              </button>
+              <button
+                onClick={() => handleSpaceChange('vibe')}
+                disabled={isStreaming}
+                className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${activeSpace === 'vibe' ? 'forge-tab-active text-forge-neon font-bold' : ''}`}
+                title="Vibe Coding Studio (F5)"
+              >
+                <span>⚡ Vibe</span>
               </button>
 
               {isStreaming && (
@@ -1926,13 +1927,17 @@ function App() {
         {/* Switchable Workspaces Render Tree */}
           <Suspense fallback={<SpaceLoading />}>
           {activeSpace === 'vibe' ? (
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden h-full w-full flex flex-col">
               <VibeStudio
                 activeProject={activeProject}
                 workspaceRoot={workspaceRoot}
                 isStreaming={isStreaming}
                 streamingContent={streamingContent}
                 logs={logs}
+                tasks={tasks}
+                onSaveTasks={handleSaveTasks}
+                selectedTaskId={selectedVibeTaskId}
+                onSelectTask={setSelectedVibeTaskId}
                 onSendQuery={(query) => handleSendQuery(query, 'code')}
                 onAbort={handleAbortWorkflow}
                 onNotify={notify}
@@ -2028,6 +2033,10 @@ function App() {
                 workspaceRoot={workspaceRoot}
                 onSaveTasks={handleSaveTasks}
                 onSendQuery={handleSendQuery}
+                onOpenVibeTask={(taskId) => {
+                  setSelectedVibeTaskId(taskId);
+                  handleSpaceChange('vibe');
+                }}
                 onUpdateWorkspaceRoot={newPath => handleUpdateConfig({ workspaceRoot: newPath })}
                 onNotify={notify}
                 onAbort={handleAbortWorkflow}

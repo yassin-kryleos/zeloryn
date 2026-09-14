@@ -792,6 +792,15 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     setShowConfigDrawer(false);
   };
 
+  const hasConfiguredKeys = !!geminiApiKey || !!anthropicApiKey || !!openaiApiKey || !!apiKey || !!openrouterApiKey || !!customApiKey || !!customBaseUrl || ollamaOptions.length > 0;
+  const showGemini = !hasConfiguredKeys || !!geminiApiKey;
+  const showAnthropic = !hasConfiguredKeys || !!anthropicApiKey;
+  const showOpenai = !hasConfiguredKeys || !!openaiApiKey;
+  const showDeepseek = !hasConfiguredKeys || !!apiKey;
+  const showCustom = !hasConfiguredKeys || !!customApiKey || !!customBaseUrl;
+  const showOpenrouter = !hasConfiguredKeys || !!openrouterApiKey;
+  const showOllama = !hasConfiguredKeys || ollamaOptions.length > 0 || !!ollamaUrl;
+
   return (
     <div className="flex items-center gap-3 font-mono text-xs select-none flex-wrap justify-end">
       
@@ -810,57 +819,71 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           }}
           className="bg-transparent border-0 text-[11px] text-forge-text font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
         >
-          <optgroup label="Google Gemini">
-            <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
-            <option value="gemini-3.5-pro">Gemini 3.5 Pro</option>
-            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
-            <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-          </optgroup>
-          <optgroup label="Anthropic Claude">
-            <option value="claude-5-sonnet">Claude 5 Sonnet</option>
-            <option value="claude-5-opus">Claude 5 Opus</option>
-            <option value="claude-4.5-sonnet">Claude 4.5 Sonnet</option>
-            <option value="claude-4.5-haiku">Claude 4.5 Haiku</option>
-            <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet</option>
-            <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
-          </optgroup>
-          <optgroup label="OpenAI GPT">
-            <option value="gpt-6">GPT-6</option>
-            <option value="gpt-5.6">GPT-5.6</option>
-            <option value="gpt-5.5">GPT-5.5</option>
-            <option value="gpt-5.5-mini">GPT-5.5 Mini</option>
-            <option value="o3-mini">o3-mini (Reasoning)</option>
-            <option value="o1">o1 (Full Reasoning)</option>
-            <option value="gpt-4o">GPT-4o</option>
-          </optgroup>
-          <optgroup label="DeepSeek">
-            <option value="deepseek-v4">DeepSeek V4</option>
-            <option value="deepseek-reasoner-v4">DeepSeek Reasoner V4</option>
-            <option value="deepseek-chat">DeepSeek Chat V3</option>
-            <option value="deepseek-reasoner">DeepSeek Reasoner R1</option>
-          </optgroup>
-          <optgroup label="Custom / ZLM / GLM">
-            <option value="glm-5.2">GLM-5.2 Flagship</option>
-            <option value="glm-5">GLM-5</option>
-            <option value="glm-4-flash">GLM-4 Flash</option>
-            {effectiveCustomModels.map(m => (
-              <option key={`custom-${m}`} value={m}>{m}</option>
-            ))}
-          </optgroup>
-          <optgroup label="OpenRouter">
-            <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
-            <option value="qwen/qwen-2.5-coder-32b-instruct">Qwen 2.5 Coder 32B</option>
-          </optgroup>
-          <optgroup label="Local (Ollama)">
-            {selectedDynamicOllamaMissing && (
-              <option value={model}>{model.replace('ollama:', '')} (selected)</option>
-            )}
-            {ollamaOptions.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </optgroup>
+          {showGemini && (
+            <optgroup label="Google Gemini">
+              <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+              <option value="gemini-3.5-pro">Gemini 3.5 Pro</option>
+              <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+              <option value="gemini-3.1-pro">Gemini 3.1 Pro</option>
+              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            </optgroup>
+          )}
+          {showAnthropic && (
+            <optgroup label="Anthropic Claude">
+              <option value="claude-5-sonnet">Claude 5 Sonnet</option>
+              <option value="claude-5-opus">Claude 5 Opus</option>
+              <option value="claude-4.5-sonnet">Claude 4.5 Sonnet</option>
+              <option value="claude-4.5-haiku">Claude 4.5 Haiku</option>
+              <option value="claude-3-7-sonnet-latest">Claude 3.7 Sonnet</option>
+              <option value="claude-3-5-sonnet-latest">Claude 3.5 Sonnet</option>
+            </optgroup>
+          )}
+          {showOpenai && (
+            <optgroup label="OpenAI GPT">
+              <option value="gpt-6">GPT-6</option>
+              <option value="gpt-5.6">GPT-5.6</option>
+              <option value="gpt-5.5">GPT-5.5</option>
+              <option value="gpt-5.5-mini">GPT-5.5 Mini</option>
+              <option value="o3-mini">o3-mini (Reasoning)</option>
+              <option value="o1">o1 (Full Reasoning)</option>
+              <option value="gpt-4o">GPT-4o</option>
+            </optgroup>
+          )}
+          {showDeepseek && (
+            <optgroup label="DeepSeek">
+              <option value="deepseek-v4">DeepSeek V4</option>
+              <option value="deepseek-reasoner-v4">DeepSeek Reasoner V4</option>
+              <option value="deepseek-chat">DeepSeek Chat V3</option>
+              <option value="deepseek-reasoner">DeepSeek Reasoner R1</option>
+            </optgroup>
+          )}
+          {showCustom && (
+            <optgroup label="Custom / ZLM / GLM">
+              <option value="glm-5.2">GLM-5.2 Flagship</option>
+              <option value="glm-5">GLM-5</option>
+              <option value="glm-4-flash">GLM-4 Flash</option>
+              {effectiveCustomModels.map(m => (
+                <option key={`custom-${m}`} value={m}>{m}</option>
+              ))}
+            </optgroup>
+          )}
+          {showOpenrouter && (
+            <optgroup label="OpenRouter">
+              <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</option>
+              <option value="qwen/qwen-2.5-coder-32b-instruct">Qwen 2.5 Coder 32B</option>
+            </optgroup>
+          )}
+          {showOllama && (
+            <optgroup label="Local (Ollama)">
+              {selectedDynamicOllamaMissing && (
+                <option value={model}>{model.replace('ollama:', '')} (selected)</option>
+              )}
+              {ollamaOptions.map(option => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </optgroup>
+          )}
           {isCustomOrUnknownSelected && (
             <optgroup label="Custom / Active Model">
               <option value={model}>{model} (active)</option>
@@ -895,34 +918,46 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           className="bg-transparent border-0 text-[11px] text-forge-cyan font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
         >
           <option value="">Fast Model: (Default / Same)</option>
-          <optgroup label="Google Gemini">
-            <option value="gemini-3.8-flash">Fast: Gemini 3.8 Flash</option>
-            <option value="gemini-3.5-flash">Fast: Gemini 3.5 Flash</option>
-            <option value="gemini-2.5-flash">Fast: Gemini 2.5 Flash</option>
-          </optgroup>
-          <optgroup label="Anthropic Claude">
-            <option value="claude-4.5-haiku">Fast: Claude 4.5 Haiku</option>
-            <option value="claude-3-5-haiku-latest">Fast: Claude 3.5 Haiku</option>
-          </optgroup>
-          <optgroup label="OpenAI GPT">
-            <option value="gpt-5.5-mini">Fast: GPT-5.5 Mini</option>
-            <option value="gpt-4o-mini">Fast: GPT-4o Mini</option>
-            <option value="o3-mini">Fast: o3-mini</option>
-          </optgroup>
-          <optgroup label="Custom / ZLM / GLM">
-            <option value="glm-4-flash">Fast: GLM-4 Flash</option>
-            {effectiveCustomModels.map(m => (
-              <option key={`fast-custom-${m}`} value={m}>Fast: {m}</option>
-            ))}
-          </optgroup>
-          <optgroup label="DeepSeek">
-            <option value="deepseek-chat">Fast: DeepSeek Chat V3</option>
-          </optgroup>
-          <optgroup label="Local (Ollama)">
-            {ollamaOptions.map(option => (
-              <option key={`fast-${option.value}`} value={option.value}>Fast: {option.label}</option>
-            ))}
-          </optgroup>
+          {showGemini && (
+            <optgroup label="Google Gemini">
+              <option value="gemini-3.8-flash">Fast: Gemini 3.8 Flash</option>
+              <option value="gemini-3.5-flash">Fast: Gemini 3.5 Flash</option>
+              <option value="gemini-2.5-flash">Fast: Gemini 2.5 Flash</option>
+            </optgroup>
+          )}
+          {showAnthropic && (
+            <optgroup label="Anthropic Claude">
+              <option value="claude-4.5-haiku">Fast: Claude 4.5 Haiku</option>
+              <option value="claude-3-5-haiku-latest">Fast: Claude 3.5 Haiku</option>
+            </optgroup>
+          )}
+          {showOpenai && (
+            <optgroup label="OpenAI GPT">
+              <option value="gpt-5.5-mini">Fast: GPT-5.5 Mini</option>
+              <option value="gpt-4o-mini">Fast: GPT-4o Mini</option>
+              <option value="o3-mini">Fast: o3-mini</option>
+            </optgroup>
+          )}
+          {showCustom && (
+            <optgroup label="Custom / ZLM / GLM">
+              <option value="glm-4-flash">Fast: GLM-4 Flash</option>
+              {effectiveCustomModels.map(m => (
+                <option key={`fast-custom-${m}`} value={m}>Fast: {m}</option>
+              ))}
+            </optgroup>
+          )}
+          {showDeepseek && (
+            <optgroup label="DeepSeek">
+              <option value="deepseek-chat">Fast: DeepSeek Chat V3</option>
+            </optgroup>
+          )}
+          {showOllama && (
+            <optgroup label="Local (Ollama)">
+              {ollamaOptions.map(option => (
+                <option key={`fast-${option.value}`} value={option.value}>Fast: {option.label}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </div>
 
@@ -2584,7 +2619,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                     <span>Privacy & Data Disclosures</span>
                   </div>
                   <p className="text-[10px] leading-relaxed text-forge-dim">
-                    Kryleos Forge utilizes advanced LLM providers. Depending on your configuration, source code snippets, prompt directions, and compiler/linter error messages may be transmitted to external model servers to synthesize solutions.
+                    Zeloryn utilizes advanced LLM providers. Depending on your configuration, source code snippets, prompt directions, and compiler/linter error messages may be transmitted to external model servers to synthesize solutions.
                   </p>
                   
                   <div className="border border-forge-neon/20 bg-forge-neon/5 p-2.5 rounded flex flex-col gap-1.5 font-mono text-[9px]">

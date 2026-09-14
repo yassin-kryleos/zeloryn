@@ -497,7 +497,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
       >
         {logs.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center text-forge-dim font-mono py-20 select-none">
-            <span className="text-sm tracking-widest text-forge-neon font-bold">KRYLEOS FORGE ONLINE // WORKSPACE LINKED</span>
+            <span className="text-sm tracking-widest text-forge-neon font-bold">ZELORYN ONLINE // WORKSPACE LINKED</span>
             <span className="text-[10px] mt-1 text-forge-dim">
               Enter a request to route work through the agent team.
             </span>
@@ -591,7 +591,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
       <form onSubmit={handleSubmit} className="forge-composer font-mono select-none">
         <div className="flex items-center justify-between gap-2 mb-1.5">
           <span className="text-forge-text text-xs font-bold select-none">
-            {activeAgent !== 'system' ? 'Working...' : 'Ask Forge'}
+            {activeAgent !== 'system' ? 'Working...' : 'Ask Zeloryn'}
           </span>
           <div className="flex items-center gap-1.5">
             <button
@@ -681,6 +681,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
           <span className="text-forge-neon font-bold">F2 Crew</span>
           <span className="text-forge-neon font-bold">F3 Flow</span>
           <span className="text-forge-neon font-bold">F4 Forge</span>
+          <span className="text-forge-neon font-bold">F5 Vibe</span>
         </div>
         <div>
           <span>Tip: Type <span className="text-forge-neon font-bold">@filename</span> to pin files</span>
