@@ -253,6 +253,17 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [inputTheme, setInputTheme] = useState<string>(theme);
   const [activeTab, setActiveTab] = useState<'api_keys' | 'models' | 'workspace' | 'github_sync' | 'account_theme' | 'permissions' | 'agents' | 'artifacts'>('api_keys');
 
+  useEffect(() => {
+    const handleOpen = (e?: any) => {
+      setShowConfigDrawer(true);
+      if (e?.detail?.tab) {
+        setActiveTab(e.detail.tab);
+      }
+    };
+    window.addEventListener('open-config-drawer', handleOpen);
+    return () => window.removeEventListener('open-config-drawer', handleOpen);
+  }, []);
+
   // Model catalog and custom model registration state
   const [showAddCustomModelModal, setShowAddCustomModelModal] = useState<boolean>(false);
   const [newCustomModelId, setNewCustomModelId] = useState<string>('');

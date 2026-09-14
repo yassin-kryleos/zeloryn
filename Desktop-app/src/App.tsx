@@ -3,6 +3,7 @@ import { ConfigHeader } from './components/ConfigHeader';
 import { ChatConsole } from './components/ChatConsole';
 import { AgentDashboard } from './components/AgentDashboard';
 import { NotificationCenter, type AppNotification, type NotificationKind } from './components/NotificationCenter';
+import { ActivationChecklist } from './components/ActivationChecklist';
 import { hostedProviderForModel } from './shared/providerDisclosure';
 import { redactSensitiveData } from './shared/redact';
 import { checkForAppUpdates } from './shared/updateChecker';
@@ -2253,7 +2254,11 @@ function App() {
               onStart={handleStartBuilding}
               onRunDemo={handleRunDemo}
               onUpdateWorkspaceRoot={(newPath) => handleUpdateConfig({ workspaceRoot: newPath })}
-              onOpenConfig={() => { localStorage.setItem('matrix_setup_done', 'true'); setShowSetup(false); }}
+              onOpenConfig={() => {
+                localStorage.setItem('matrix_setup_done', 'true');
+                setShowSetup(false);
+                window.dispatchEvent(new CustomEvent('open-config-drawer', { detail: { tab: 'api_keys' } }));
+              }}
             />
           </div>
         )}
@@ -2271,25 +2276,24 @@ function App() {
         />
         {!showSetup && (() => {
           void activationRevision;
-          const activationSteps = [
-            { label: 'Connect model', done: Boolean(apiKey || geminiApiKey || openaiApiKey || anthropicApiKey || openrouterApiKey || ollamaDetected) },
-            { label: 'Run demo trace', done: localStorage.getItem('matrix_activation_demo') === 'true' },
-            { label: 'Point at repo', done: localStorage.getItem('matrix_activation_repo') === 'true' }
-          ];
-          if (activationSteps.every(step => step.done)) return null;
+          const hasModel = Boolean(apiKey || geminiApiKey || openaiApiKey || anthropicApiKey || openrouterApiKey || ollamaDetected);
+          const hasDemo = localStorage.getItem('matrix_activation_demo') === 'true';
+          const hasRepo = localStorage.getItem('matrix_activation_repo') === 'true' || Boolean(activeProject && activeProject.id !== 'project_demo');
+
           return (
-            <div className="fixed bottom-3 right-3 z-40 w-64 border border-forge-neon/40 bg-forge-panel-bg shadow-lg rounded p-3 font-mono text-[10px] space-y-2 pointer-events-none">
-              <div className="text-forge-neon uppercase font-bold">Activation checklist</div>
-              {activationSteps.map(step => (
-                <div key={step.label} className={step.done ? 'text-emerald-400' : 'text-forge-dim'}>
-                  {step.done ? '[x]' : '[ ]'} {step.label}
-                </div>
-              ))}
-              <div className="flex gap-1 pointer-events-auto">
-                {!activationSteps[1].done && <button type="button" onClick={handleRunDemo} className="forge-btn px-2 py-1">RUN DEMO</button>}
-                {!activationSteps[2].done && <button type="button" onClick={() => setIsProjectModalOpen(true)} className="forge-secondary-button px-2 py-1">ADD REPO</button>}
-              </div>
-            </div>
+            <ActivationChecklist
+              hasModel={hasModel}
+              isDemoDone={hasDemo}
+              isRepoDone={hasRepo}
+              onConnectModel={() => {
+                window.dispatchEvent(new CustomEvent('open-config-drawer', { detail: { tab: 'api_keys' } }));
+              }}
+              onRunDemo={handleRunDemo}
+              onPointAtRepo={() => {
+                setIsProjectModalOpen(true);
+                setIsCreateProjectOpen(true);
+              }}
+            />
           );
         })()}
 
