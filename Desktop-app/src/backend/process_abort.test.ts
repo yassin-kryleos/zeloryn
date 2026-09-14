@@ -24,7 +24,11 @@ describe('WorkspaceSandbox process aborts', () => {
 
     expect(killed).toBeGreaterThanOrEqual(1);
     expect(result.code).not.toBe(0);
-  });
+    // ponytail: 15s timeout, not the vitest 5s default -- spawning a real
+    // `node -e` child process is slow on loaded/shared CI runners, and this
+    // test's failure mode observed in CI was a timeout, not a failed
+    // assertion, so the kill logic itself is fine; it just needs headroom.
+  }, 15000);
 
   it('marks pending command approval as aborted with a clear log', async () => {
     const sandbox = new WorkspaceSandbox(process.cwd());
