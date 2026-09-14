@@ -6,10 +6,10 @@ import * as path from 'path';
 function packagedExecutable(): string {
   const root = path.resolve('dist-desktop');
   const candidates = process.platform === 'win32'
-    ? [path.join(root, 'win-unpacked', 'Kryleos Forge.exe')]
+    ? [path.join(root, 'win-unpacked', 'Zeloryn.exe'), path.join(root, 'win-unpacked', 'Kryleos Forge.exe')]
     : process.platform === 'darwin'
-      ? [path.join(root, 'mac', 'Kryleos Forge.app', 'Contents', 'MacOS', 'Kryleos Forge')]
-      : [path.join(root, 'linux-unpacked', 'kryleos-forge'), path.join(root, 'linux-unpacked', 'Kryleos Forge')];
+      ? [path.join(root, 'mac', 'Zeloryn.app', 'Contents', 'MacOS', 'Zeloryn'), path.join(root, 'mac', 'Kryleos Forge.app', 'Contents', 'MacOS', 'Kryleos Forge')]
+      : [path.join(root, 'linux-unpacked', 'zeloryn'), path.join(root, 'linux-unpacked', 'Zeloryn'), path.join(root, 'linux-unpacked', 'kryleos-forge'), path.join(root, 'linux-unpacked', 'Kryleos Forge')];
   const executable = candidates.find(candidate => fs.existsSync(candidate));
   if (!executable) throw new Error(`Packaged executable not found. Checked: ${candidates.join(', ')}`);
   return executable;
@@ -24,7 +24,7 @@ test('packaged Electron reaches a green no-key demo trace', async () => {
   });
   try {
     const page = await app.firstWindow();
-    await expect(page).toHaveTitle(/Kryleos Forge/i);
+    await expect(page).toHaveTitle(/Zeloryn|Kryleos Forge/i);
     await page.evaluate(() => {
       localStorage.removeItem('matrix_setup_done');
       localStorage.removeItem('matrix_activation_demo');

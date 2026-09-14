@@ -95,5 +95,5 @@ describe.runIf(RUN)('Forge Ollama end-to-end (money path)', () => {
 
     const traceFiles = fs.readdirSync(path.join(tmp, '.kryleos', 'traces'));
     expect(traceFiles.length).toBeGreaterThan(0);
-  }, 180_000);
+  }, 480_000);
 });

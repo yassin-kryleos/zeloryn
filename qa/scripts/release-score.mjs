@@ -279,20 +279,34 @@ function packagedArtifactPaths(desktopDir) {
   const output = path.join(desktopDir, 'dist-desktop');
   if (process.platform === 'win32') {
     const root = path.join(output, 'win-unpacked');
+    const winCandidates = [
+      path.join(root, 'Zeloryn.exe'),
+      path.join(root, 'Kryleos Forge.exe'),
+    ];
     return {
-      executable: path.join(root, 'Kryleos Forge.exe'),
+      executable: winCandidates.find(existsSync) || winCandidates[0],
       serverBundle: path.join(root, 'resources', 'app.asar.unpacked', 'dist-backend', 'server.cjs'),
     };
   }
   if (process.platform === 'darwin') {
-    const appRoot = path.join(output, 'mac', 'Kryleos Forge.app', 'Contents');
+    const macCandidates = [
+      path.join(output, 'mac', 'Zeloryn.app', 'Contents'),
+      path.join(output, 'mac', 'Kryleos Forge.app', 'Contents'),
+    ];
+    const appRoot = macCandidates.find(existsSync) || macCandidates[0];
+    const macExecCandidates = [
+      path.join(appRoot, 'MacOS', 'Zeloryn'),
+      path.join(appRoot, 'MacOS', 'Kryleos Forge'),
+    ];
     return {
-      executable: path.join(appRoot, 'MacOS', 'Kryleos Forge'),
+      executable: macExecCandidates.find(existsSync) || macExecCandidates[0],
       serverBundle: path.join(appRoot, 'Resources', 'app.asar.unpacked', 'dist-backend', 'server.cjs'),
     };
   }
   const root = path.join(output, 'linux-unpacked');
   const executableCandidates = [
+    path.join(root, 'zeloryn'),
+    path.join(root, 'Zeloryn'),
     path.join(root, 'kryleos-forge'),
     path.join(root, 'Kryleos Forge'),
   ];
