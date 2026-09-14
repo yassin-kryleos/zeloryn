@@ -16,11 +16,13 @@ publish:
   owner: yassin-kryleos
   repo: zeloryn
 win:
+  # msi target dropped: WiX's linker fails referencing an icon identifier
+  # that doesn't exist because no custom .ico is configured (no icon file
+  # exists in the project yet). nsis (the primary Windows installer) and
+  # zip both work fine with the default Electron icon. Re-add msi once a
+  # real app icon is added.
   target:
     - target: nsis
-      arch:
-        - x64
-    - target: msi
       arch:
         - x64
     - target: zip

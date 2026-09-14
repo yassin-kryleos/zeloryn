@@ -101,7 +101,7 @@ winget install Zeloryn
 irm https://raw.githubusercontent.com/yassin-kryleos/zeloryn/main/install.ps1 | iex
 ```
 
-Direct binary downloads (`.dmg`, `.AppImage`, `.deb`, `.exe`, `.msi`) are always available on our [GitHub Releases](https://github.com/yassin-kryleos/zeloryn/releases) page.
+Direct binary downloads (`.dmg`, `.AppImage`, `.deb`, `.exe`) are always available on our [GitHub Releases](https://github.com/yassin-kryleos/zeloryn/releases) page.
 
 ---
 
