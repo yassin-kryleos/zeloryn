@@ -190,36 +190,20 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
       // Themes
       {
-        id: 'theme-forge',
-        category: 'Themes',
-        label: 'Theme: Forge (Default Dark)',
-        description: 'Clean high-contrast dark theme with emerald accents',
-        icon: <Palette size={14} className="text-emerald-400" />,
-        run: () => { onSelectTheme?.('forge'); onClose(); }
-      },
-      {
         id: 'theme-dark',
         category: 'Themes',
         label: 'Theme: Dark',
-        description: 'Minimal slate dark palette',
-        icon: <Palette size={14} className="text-zinc-400" />,
+        description: 'Zeloryn Interface Dark (default palette)',
+        icon: <Palette size={14} className="text-emerald-400" />,
         run: () => { onSelectTheme?.('dark'); onClose(); }
       },
       {
         id: 'theme-light',
         category: 'Themes',
         label: 'Theme: Light',
-        description: 'Clean crisp light workstation palette',
+        description: 'Zeloryn Interface Light workstation palette',
         icon: <Palette size={14} className="text-amber-400" />,
         run: () => { onSelectTheme?.('light'); onClose(); }
-      },
-      {
-        id: 'theme-terminal',
-        category: 'Themes',
-        label: 'Theme: Terminal',
-        description: 'Classic amber/gold phosphor terminal display',
-        icon: <Palette size={14} className="text-amber-500" />,
-        run: () => { onSelectTheme?.('terminal'); onClose(); }
       }
     ];
 

@@ -44,6 +44,7 @@ describe.runIf(RUN)('Forge Ollama end-to-end (money path)', () => {
     const client = new OllamaClient({ model: MODEL });
     const orchestrator = new AgentOrchestrator(sandbox, client, () => {});
     orchestrator.setLocalModel(true);
+    orchestrator.setResponseMode('minimal_context');
 
     await orchestrator.handleUserQuery(
       'Use the writeFile tool to overwrite "src/greeting.ts" so it contains a single exported ' +

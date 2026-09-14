@@ -1,27 +1,28 @@
 :root {
-  --font-sans: 'General Sans', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Share Tech Mono', monospace;
-  --font-display: 'General Sans', var(--font-sans);
-  --font-data: 'Geist', var(--font-sans);
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-display: 'IBM Plex Mono', monospace;
+  --font-data: 'IBM Plex Mono', monospace;
 
-  /* DEFAULT / DARK THEME — amber accent (forge-light) */
-  --forge-bg: #09090b; /* zinc-950 */
-  --forge-panel-bg: rgba(24, 24, 27, 0.95); /* zinc-900 */
-  --forge-neon: #f59e0b; /* amber-500 — primary identity accent */
-  --forge-neon-rgb: 245, 158, 11;
-  --forge-neon-text: #fbbf24; /* amber-300 — WCAG AA ≥4.5:1 on zinc-950 for small text */
-  --forge-dim: #a1a1aa; /* zinc-400 */
-  --forge-dark: #27272a; /* zinc-800 */
-  --forge-very-dark: #18181b; /* zinc-900 */
-  --forge-text: #f4f4f5; /* zinc-100 */
+  /* DEFAULT / DARK THEME — OKLCH Interface Dark (Design Identity V1.0) */
+  --forge-bg: #080e12; /* oklch(.16 .014 235) */
+  --forge-panel-bg: #131c21; /* oklch(.22 .016 235) */
+  --forge-neon: #56d57a; /* rgb(33.9%, 83.5%, 48.0%) — brand accent green */
+  --forge-neon-rgb: 86, 213, 122;
+  --forge-neon-text: #56d57a;
+  --forge-dim: #7e8b94; /* oklch(.63 .02 235) — text dim */
+  --forge-dark: #29353c; /* oklch(.32 .02 235) — border */
+  --forge-very-dark: #0d1519;
+  --forge-text: #ebeff2; /* oklch(.95 .006 235) — text primary */
   --forge-amber: #f59e0b;
-  --forge-red: #ef4444;
+  --forge-red: #f87171;
 
-  --border-color: #27272a;
-  --border-light: #3f3f46;
-  --accent-primary: #f59e0b; /* amber */
-  --accent-hover: #d97706; /* amber-600 */
-  --text-muted: #71717a; /* zinc-500 */
+  --border-color: #29353c;
+  --border-light: #3a4b55;
+  --accent-primary: #56d57a;
+  --accent-hover: #48b868;
+  --on-accent: #080e12;
+  --text-muted: #7e8b94;
 
   font-family: var(--font-sans);
   background-color: var(--forge-bg);
@@ -32,104 +33,67 @@
   overflow: hidden;
 }
 
-body.theme-dark, body.theme-slate {
-  --forge-bg: #09090b;
-  --forge-panel-bg: rgba(24, 24, 27, 0.95);
-  --forge-neon: #f59e0b;
-  --forge-neon-rgb: 245, 158, 11;
-  --forge-neon-text: #fbbf24; /* amber-300 */
-  --forge-dim: #a1a1aa;
-  --forge-dark: #27272a;
-  --forge-very-dark: #18181b;
-  --forge-text: #f4f4f5;
+/* INTERFACE — DARK (Default, also aliases legacy theme names to maintain compatibility) */
+body.theme-dark,
+body.theme-forge,
+body.theme-slate,
+body.theme-terminal,
+body.theme-forge-legacy {
+  --forge-bg: #080e12;
+  --forge-panel-bg: #131c21;
+  --forge-neon: #56d57a;
+  --forge-neon-rgb: 86, 213, 122;
+  --forge-neon-text: #56d57a;
+  --forge-dim: #7e8b94;
+  --forge-dark: #29353c;
+  --forge-very-dark: #0d1519;
+  --forge-text: #ebeff2;
   --forge-amber: #f59e0b;
-  --forge-red: #ef4444;
+  --forge-red: #f87171;
 
-  --border-color: #27272a;
-  --border-light: #3f3f46;
-  --accent-primary: #f59e0b;
-  --accent-hover: #d97706;
-  --text-muted: #71717a;
+  --border-color: #29353c;
+  --border-light: #3a4b55;
+  --accent-primary: #56d57a;
+  --accent-hover: #48b868;
+  --on-accent: #080e12;
+  --text-muted: #7e8b94;
 }
 
+/* INTERFACE — LIGHT (Design Identity V1.0) */
 body.theme-light {
-  --forge-bg: #fafafa;
-  --forge-panel-bg: rgba(255, 255, 255, 0.95);
-  --forge-neon: #d97706;
-  --forge-neon-rgb: 217, 119, 6;
-  --forge-neon-text: #b45309; /* amber-700 — WCAG AA ≥4.5:1 on zinc-50 for small text */
-  --forge-dim: #71717a;
-  --forge-dark: #d4d4d8;
-  --forge-very-dark: #f4f4f5;
-  --forge-text: #18181b;
-  --forge-amber: #d97706;
+  --forge-bg: #f8f7f3; /* oklch(.975 .005 85) */
+  --forge-panel-bg: #ffffff; /* oklch(1 0 0) */
+  --forge-neon: #007834; /* rgb(0%, 47.1%, 20.3%) — dark green accent for light bg (WCAG AA) */
+  --forge-neon-rgb: 0, 120, 52;
+  --forge-neon-text: #007834;
+  --forge-dim: #505a5f; /* oklch(.46 .015 235) — text dim */
+  --forge-dark: #dddad5; /* oklch(.89 .008 85) — border */
+  --forge-very-dark: #f0eee9;
+  --forge-text: #12171a; /* oklch(.20 .01 235) — text primary */
+  --forge-amber: #b45309;
   --forge-red: #dc2626;
 
-  --border-color: #e4e4e7;
-  --border-light: #d4d4d8;
-  --accent-primary: #d97706;
-  --accent-hover: #b45309;
-  --text-muted: #52525b;
+  --border-color: #dddad5;
+  --border-light: #c8c4be;
+  --accent-primary: #007834;
+  --accent-hover: #006028;
+  --on-accent: #ffffff;
+  --text-muted: #505a5f;
 }
 
-/* theme-forge (shipped default): professional dark background with neutral
-   body text and matrix green used ONLY as an accent for active states,
-   status indicators, and highlights — not as primary text colour. */
-body.theme-forge {
-  --forge-bg: #09090b;
-  --forge-panel-bg: rgba(24, 24, 27, 0.95);
-  --forge-neon: #00ff66;
-  --forge-neon-rgb: 0, 255, 102;
-  /* Secondary/muted text is neutral zinc — green is reserved for accents only
-     (active states, status, highlights), per the theme-forge spec. */
-  --forge-dim: #a1a1aa;
-  --forge-dark: #27272a;
-  --forge-very-dark: #18181b;
-  --forge-text: #f4f4f5;
-  --forge-amber: #f59e0b;
-  --forge-red: #ef4444;
-
-  --border-color: #27272a;
-  --border-light: #3f3f46;
-  --accent-primary: #00ff66;
-  --accent-hover: #00cc44;
-  --text-muted: #cbd5e1;
+/* Micro-label typography convention from Brand Identity */
+.micro-label {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--forge-dim) !important;
 }
 
-/* theme-terminal and theme-forge-legacy: the classic green-glow aesthetic, kept as
-   opt-in user preferences (matrix green as primary text). */
-body.theme-terminal, body.theme-forge-legacy {
-  --forge-bg: #020503;
-  --forge-panel-bg: rgba(2, 6, 3, 0.9);
-  --forge-neon: #00ff66;
-  --forge-neon-rgb: 0, 255, 102;
-  --forge-dim: #00cc44;
-  --forge-dark: #006622;
-  --forge-very-dark: #001105;
-  --forge-text: #99ffbb;
-  --forge-amber: #ffaa00;
-  --forge-red: #ff3333;
-
-  --border-color: #006622;
-  --border-light: #004411;
-  --accent-primary: #00ff66;
-  --accent-hover: #00cc44;
-  --text-muted: #00cc44;
-}
-
-/* Hide CRT flicker/overlay for clean themes */
-body.theme-dark .crt-overlay,
-body.theme-dark .crt-flicker,
-body.theme-dark canvas,
-body.theme-slate .crt-overlay,
-body.theme-slate .crt-flicker,
-body.theme-slate canvas,
-body.theme-forge .crt-overlay,
-body.theme-forge .crt-flicker,
-body.theme-forge canvas,
-body.theme-light .crt-overlay,
-body.theme-light .crt-flicker,
-body.theme-light canvas {
+/* Clean UI: No CRT flicker, scanlines or canvas overlays */
+.crt-overlay,
+.crt-flicker {
   display: none !important;
 }
 
@@ -333,11 +297,6 @@ select:focus-visible,
 ::-webkit-scrollbar-thumb:hover {
   background: var(--forge-neon);
 }
-body.theme-terminal ::-webkit-scrollbar-thumb:hover,
-body.theme-forge ::-webkit-scrollbar-thumb:hover,
-body.theme-forge-legacy ::-webkit-scrollbar-thumb:hover {
-  box-shadow: 0 0 5px var(--forge-neon);
-}
 
 .font-display { font-family: var(--font-display) !important; }
 .font-data { font-family: var(--font-data) !important; }
@@ -350,32 +309,17 @@ pre {
   border-radius: 2px;
   overflow-x: auto;
   font-family: var(--font-mono);
-  color: #aeffc9;
-  margin: 4px 0;
+  font-size: 11px;
 }
 
-/* Form inputs & buttons */
-.forge-btn {
-  background: transparent;
-  border: 1px solid var(--forge-dim);
-  color: var(--forge-neon);
+code {
   font-family: var(--font-mono);
-  cursor: pointer;
-  padding: 4px 10px;
-  border-radius: 2px;
-  transition: all 0.15s ease;
-}
-
-.forge-btn:hover {
-  background: var(--forge-dark);
-  color: #fff;
-  border-color: var(--forge-neon);
 }
 
 .forge-input {
-  background: transparent;
+  background: var(--forge-very-dark);
   border: 1px solid var(--forge-dark);
-  color: var(--forge-neon);
+  color: var(--forge-text);
   font-family: var(--font-mono);
   padding: 4px 8px;
   border-radius: 2px;
@@ -386,9 +330,9 @@ pre {
   border-color: var(--forge-dim);
 }
 
-/* Text glow colors */
+/* Status colors */
 .neon-glow {
-  text-shadow: 0 0 5px var(--forge-neon);
+  color: var(--forge-neon);
 }
 .neon-amber {
   color: var(--forge-amber);
@@ -682,16 +626,20 @@ body.theme-forge-legacy option {
 }
 
 .forge-tab-active {
-  color: #ffffff !important;
+  color: var(--on-accent, #080e12) !important;
   background: var(--accent-primary) !important;
   box-shadow: none !important;
+}
+
+.forge-tab-active * {
+  color: var(--on-accent, #080e12) !important;
 }
 
 body.theme-terminal .forge-tab-active,
 body.theme-forge .forge-tab-active,
 body.theme-forge-legacy .forge-tab-active {
-  color: #000000 !important;
-  background: var(--forge-neon) !important;
+  color: var(--on-accent, #080e12) !important;
+  background: var(--accent-primary) !important;
 }
 
 .forge-stop-button {

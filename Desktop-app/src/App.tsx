@@ -25,6 +25,7 @@ const SpaceLoading = () => (
 );
 import { CommandPalette } from './components/CommandPalette';
 import { DiffSafetyDrawer } from './components/DiffSafetyDrawer';
+import { ZelorynLockup } from './components/ZelorynLogo';
 import { Trash2, Plus, Cpu, FolderOpen, X, Sparkles, GitBranch, ShieldAlert, Search } from 'lucide-react';
 import type { AgentLog, AgentRole, ResponseMode } from './backend/agents';
 import type { ProjectTask } from './backend/db';
@@ -134,13 +135,12 @@ function App() {
   const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
   const [theme, setTheme] = useState<string>(() => {
     const saved = localStorage.getItem('matrix_theme');
-    // theme-forge is the shipped default (professional dark, green accents).
-    // theme-forge-legacy remains available as an opt-in toggle. Map the retired
-    // 'slate' alias onto forge.
-    if (!saved || saved === 'slate') {
-      return 'forge';
+    // Design Identity: strictly Dark (default) and Light themes.
+    // Legacy themes ('forge', 'slate', 'terminal', etc.) map onto 'dark'.
+    if (saved === 'light') {
+      return 'light';
     }
-    return saved;
+    return 'dark';
   });
   const [customInstructions, setCustomInstructions] = useState<string>(() => localStorage.getItem('matrix_custom_instructions') || '');
   const [responseMode, setResponseMode] = useState<ResponseMode>(() => (localStorage.getItem('matrix_response_mode') as ResponseMode) || 'balanced');
@@ -1771,11 +1771,7 @@ function App() {
             >
               {sidebarOpen ? 'Hide' : 'Show'}
             </button>
-            <div className="flex items-center gap-1.5 font-sans font-bold text-xs uppercase tracking-wider text-forge-text select-none">
-              <Cpu size={13} className="text-forge-neon" />
-              <span className="text-forge-neon font-extrabold tracking-widest">Zeloryn</span>
-              <span className="text-[8px] bg-forge-dark text-forge-dim px-1 py-0.5 rounded-sm">v0.1.0</span>
-            </div>
+            <ZelorynLockup size="sm" />
 
             {/* Header Context Breadcrumb & Workspace Switcher */}
             <div className="flex items-center gap-1.5 ml-3 select-none text-[10px] font-mono">

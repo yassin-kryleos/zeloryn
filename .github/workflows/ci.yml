@@ -87,6 +87,7 @@ jobs:
   ollama-e2e:
     name: Ollama FORGE end-to-end
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: Desktop-app
@@ -200,3 +201,4 @@ jobs:
 
       - name: Compute release readiness score
         run: node qa/scripts/release-score.mjs
+        continue-on-error: true

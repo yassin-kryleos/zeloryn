@@ -976,7 +976,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           <span className={`font-bold ${isConnected ? 'text-forge-text' : 'text-red-400'}`}>
             {isConnected ? (zeroEgressMode || privacyMode || model.startsWith('ollama:') || model === 'llama3' || model === 'qwen2.5-coder' ? 'Local' : 'Connected') : 'Offline'}
           </span>
-          <span className="text-[8.5px] bg-forge-dark text-forge-dim px-1 rounded uppercase font-bold">
+          <span className="text-[8.5px] bg-forge-dark text-forge-text px-1 rounded uppercase font-bold">
             {thinkingCapability}
           </span>
           {companionCount > 0 && (
@@ -2368,7 +2368,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 <span>Console Theme Stylesheet</span>
               </label>
               <div className="flex gap-1 bg-forge-very-dark border border-forge-dark rounded p-0.5">
-                {['forge', 'dark', 'light', 'terminal'].map((t) => (
+                {['dark', 'light'].map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -2395,7 +2395,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 ))}
               </div>
               <span className="text-[9px] text-forge-dim">
-                Forge (default) is a professional dark theme with green accents. Terminal is the classic retro amber/green style.
+                Dark (default) and Light workstation palettes based on Zeloryn design identity.
               </span>
             </div>
 

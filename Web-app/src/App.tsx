@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useVoiceInput } from './hooks/useVoiceInput';
 import { redactSensitiveData } from './shared/redact';
+import { ZelorynLockup } from './components/ZelorynLogo';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -310,7 +311,10 @@ export default function App() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('web_api_key') || '');
   const [geminiApiKey, setGeminiApiKey] = useState(() => localStorage.getItem('web_gemini_api_key') || '');
   const [openaiApiKey, setOpenaiApiKey] = useState(() => localStorage.getItem('web_openai_api_key') || '');
-  const [theme, setTheme] = useState(() => localStorage.getItem('web_theme') || 'forge');
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem('web_theme');
+    return saved === 'light' ? 'light' : 'dark';
+  });
   const [customInstructions, setCustomInstructions] = useState(() => localStorage.getItem('web_custom_instructions') || '');
   const [responseMode, setResponseMode] = useState<ResponseMode>(() => (localStorage.getItem('web_response_mode') as ResponseMode) || 'balanced');
   const [thinkingCapability, setThinkingCapability] = useState<'low' | 'medium' | 'high' | 'ultra'>(() => (localStorage.getItem('web_thinking_capability') as 'low' | 'medium' | 'high' | 'ultra') || 'medium');
@@ -776,15 +780,10 @@ export default function App() {
         {/* Top row: logo + hamburger + auth */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Terminal className="text-[var(--accent)] animate-blink" size={20} />
-            <div className="flex flex-col">
-              <span className="text-[12px] font-bold tracking-widest text-[var(--accent)]">
-                KRYLEOS FORGE // companion_hub
-              </span>
-              <span className="text-[10px] text-[var(--accent-dim)] uppercase tracking-wider">
-                Secure Multi-Agent Web Companion
-              </span>
-            </div>
+            <ZelorynLockup size="sm" />
+            <span className="text-[10px] text-[var(--accent-dim)] font-mono uppercase tracking-wider hidden sm:inline-block border-l border-[var(--line)] pl-2.5">
+              companion_hub
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -1988,18 +1987,18 @@ export default function App() {
               <div className="flex flex-col gap-2 pt-2">
                 <span className="text-[10px] uppercase text-[var(--accent-dim)] font-bold">Console Styling Theme</span>
                 <div className="flex gap-2">
-                  {['forge', 'matrix', 'light'].map(t => (
+                  {['dark', 'light'].map(t => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setTheme(t)}
                       className={`flex-1 py-2 text-[10px] uppercase font-bold rounded border cursor-pointer transition-all ${
                         theme === t 
-                          ? 'bg-[var(--surface-active)] border-[var(--accent)] text-[var(--accent)] shadow-[var(--glow-md)]' 
-                          : 'bg-transparent border-[var(--line)] text-[var(--accent-dim)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+                          ? 'bg-[var(--surface-active)] border-[var(--accent)] text-[var(--accent)]' 
+                          : 'bg-transparent border-[var(--line)] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
                       }`}
                     >
-                      {t === 'forge' ? 'Forge Dark' : t === 'matrix' ? 'Terminal Style' : 'Light Mode'}
+                      {t === 'dark' ? 'Dark Mode (Default)' : 'Light Mode'}
                     </button>
                   ))}
                 </div>

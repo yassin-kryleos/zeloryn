@@ -99,7 +99,7 @@ export default function App() {
   const [apiKey, setApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [openaiApiKey, setOpenaiApiKey] = useState('');
-  const [theme, setTheme] = useState('forge');
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   type ToastSeverity = 'success' | 'error' | 'warning' | 'info';
   type AlertButton = { text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' };
@@ -1537,14 +1537,14 @@ export default function App() {
             <RNView style={styles.card}>
               <RNText style={styles.cardHeader}>CONSOLE STYLING THEME</RNText>
               <RNView style={styles.planBtnRow}>
-                {['forge', 'light'].map(t => (
+                {['dark', 'light'].map(t => (
                   <TouchableOpacity
                     key={t}
                     onPress={() => setTheme(t as any)}
                     style={[styles.planBtn, theme === t && styles.planBtnActive]}
                   >
                     <RNText style={[styles.planBtnText, theme === t && styles.planBtnTextActive]}>
-                      {t === 'forge' ? 'FORGE DARK' : 'LIGHT MODE'}
+                      {t === 'dark' ? 'DARK (DEFAULT)' : 'LIGHT'}
                     </RNText>
                   </TouchableOpacity>
                 ))}
@@ -1659,38 +1659,52 @@ export default function App() {
 }
 
 const THEMES = {
+  dark: {
+    bg: '#080e12',
+    panelBg: '#131c21',
+    border: '#29353c',
+    neon: '#56d57a',
+    dim: '#7e8b94',
+    text: '#ebeff2',
+    mutedText: '#7e8b94',
+    tabActiveBg: '#0d1519',
+    label: '#7e8b94',
+    value: '#ebeff2',
+    inputBg: '#080e12',
+    progressBarFg: '#56d57a',
+    progressBarBg: '#131c21',
+  },
+
   forge: {
-    bg: '#09090b',
-    panelBg: 'rgba(24, 24, 27, 0.95)',
-    border: '#27272a',
-    neon: '#00ff66',
-    dim: '#4ade80',
-    text: '#f4f4f5',
-    mutedText: '#a1a1aa',
-    tabActiveBg: '#18181b',
-    label: '#a1a1aa',
-    value: '#f4f4f5',
-    inputBg: '#000000',
-    progressBarFg: '#00ff66',
-    progressBarBg: '#18181b',
+    bg: '#080e12',
+    panelBg: '#131c21',
+    border: '#29353c',
+    neon: '#56d57a',
+    dim: '#7e8b94',
+    text: '#ebeff2',
+    mutedText: '#7e8b94',
+    tabActiveBg: '#0d1519',
+    label: '#7e8b94',
+    value: '#ebeff2',
+    inputBg: '#080e12',
+    progressBarFg: '#56d57a',
+    progressBarBg: '#131c21',
   },
 
   light: {
-    bg: '#f8fafc',
-    panelBg: 'rgba(255, 255, 255, 0.95)',
-    border: '#cbd5e1',
-    // AA-compliant accents: small bold text on light surfaces needs >= 4.5:1.
-    // sky-700 (#0369a1) ~5.5:1 on white; cyan-800 (#155e75) ~6.3:1 for dim text.
-    neon: '#0369a1',
-    dim: '#155e75',
-    text: '#0f172a',
-    mutedText: '#475569',
-    tabActiveBg: '#e2e8f0',
-    label: '#475569',
-    value: '#0f172a',
+    bg: '#f8f7f3',
+    panelBg: '#ffffff',
+    border: '#dddad5',
+    neon: '#007834',
+    dim: '#505a5f',
+    text: '#12171a',
+    mutedText: '#505a5f',
+    tabActiveBg: '#f0eee9',
+    label: '#505a5f',
+    value: '#12171a',
     inputBg: '#ffffff',
-    progressBarFg: '#0284c7',
-    progressBarBg: '#e2e8f0',
+    progressBarFg: '#007834',
+    progressBarBg: '#dddad5',
   }
 };
 

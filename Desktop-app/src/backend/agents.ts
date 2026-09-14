@@ -397,6 +397,10 @@ LOCAL MODEL MODE (strict): You are running on a local model. Follow these rules 
 - Never answer a command/tool request from memory — always call the tool.
 - Use double quotes for all JSON keys and string values. No trailing commas. No comments.
 - If asked to run a command, respond with a single runCommand action exactly like the example above.
+- To write or edit a file, copy this shape exactly:
+<action>
+{"type":"tool","tool":"writeFile","arguments":{"path":"src/greeting.ts","content":"..."},"message":"writing file"}
+</action>
 ` : ''}`;
 
       case 'developer':
@@ -1209,15 +1213,32 @@ ${customSystemPrompt}
     this.inFailsafeCheck = true;
 
     try {
-      let verifyCmd = '';
+      let verifyCmd: string | null = null;
       try {
         await this.sandbox.readFile('tsconfig.json');
         verifyCmd = 'npx tsc --noEmit';
       } catch {
-        verifyCmd = 'npm run build';
+        try {
+          const pkgRaw = await this.sandbox.readFile('package.json');
+          const pkg = JSON.parse(pkgRaw);
+          if (pkg.scripts?.build) {
+            verifyCmd = 'npm run build';
+          } else if (pkg.scripts?.typecheck) {
+            verifyCmd = 'npm run typecheck';
+          } else if (pkg.scripts?.check) {
+            verifyCmd = 'npm run check';
+          }
+        } catch {
+          // No package.json or invalid JSON
+        }
       }
 
       const testCmd = await this.sandbox.detectTestCommand();
+
+      if (!verifyCmd && !testCmd) {
+        // No compile or test scripts detected in this workspace
+        return;
+      }
 
       const MAX_ATTEMPTS = 3;
       let attempt = 1;
@@ -1226,17 +1247,19 @@ ${customSystemPrompt}
       while (attempt <= MAX_ATTEMPTS && !checkPassed) {
         this.addLog('SYSTEM', 'sentinel', `Running Sentinel verification check (attempt ${attempt}/${MAX_ATTEMPTS})...`, 'info');
 
-        let compilePassed = false;
+        let compilePassed = !verifyCmd;
         let compileErrors = '';
-        try {
-          const res = await this.sandbox.runCommand(verifyCmd);
-          if (res.code === 0) {
-            compilePassed = true;
-          } else {
-            compileErrors = (res.stderr || res.stdout).slice(-800);
+        if (verifyCmd) {
+          try {
+            const res = await this.sandbox.runCommand(verifyCmd);
+            if (res.code === 0) {
+              compilePassed = true;
+            } else {
+              compileErrors = (res.stderr || res.stdout).slice(-800);
+            }
+          } catch (err: any) {
+            compileErrors = err.message;
           }
-        } catch (err: any) {
-          compileErrors = err.message;
         }
 
         let testsPassed = true;
@@ -1265,7 +1288,7 @@ ${customSystemPrompt}
           this.lastSentinelResult = {
             passed: true,
             attempts: attempt,
-            compileCommand: verifyCmd,
+            compileCommand: verifyCmd || 'none',
             testCommand: testCmd || undefined,
             testStats
           };
@@ -1299,7 +1322,7 @@ ${customSystemPrompt}
           this.lastSentinelResult = {
             passed: false,
             attempts: MAX_ATTEMPTS,
-            compileCommand: verifyCmd,
+            compileCommand: verifyCmd || 'none',
             testCommand: testCmd || undefined,
             testStats,
             lastError: failureDetails

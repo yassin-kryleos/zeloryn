@@ -1,36 +1,36 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 :root {
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Share Tech Mono', monospace;
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
 
-  /* ============ Forge Dark Theme (default) ============ */
-  --forge-bg: #030712;
-  --forge-panel-bg: rgba(11, 15, 26, 0.85);
-  --forge-neon: #34d399;
-  --forge-dim: #059669;
-  --forge-dark: #1f2937;
-  --forge-very-dark: #0b1329;
-  --forge-text: #f3f4f6;
-  --forge-red: #ef4444;
+  /* ============ Zeloryn Interface Dark (default) ============ */
+  --forge-bg: #080e12;
+  --forge-panel-bg: #131c21;
+  --forge-neon: #56d57a;
+  --forge-dim: #7e8b94;
+  --forge-dark: #29353c;
+  --forge-very-dark: #0d1519;
+  --forge-text: #ebeff2;
+  --forge-red: #f87171;
   --forge-purple: #a78bfa;
-  --forge-purple-glow: rgba(139, 92, 246, 0.2);
-  --border-color: rgba(52, 211, 153, 0.15);
-  --glow-shadow: 0 0 20px rgba(52, 211, 153, 0.25);
-  --accent-glow: rgba(52, 211, 153, 0.1);
+  --forge-purple-glow: transparent;
+  --border-color: #29353c;
+  --glow-shadow: none;
+  --accent-glow: transparent;
 
-  /* Semantic tokens (WCAG AA on their surfaces) */
-  --accent: #34d399;
-  --accent-dim: #5fc89a;
+  /* Semantic tokens */
+  --accent: #56d57a;
+  --accent-dim: #48b868;
   --accent-soft: #a7f3d0;
   --accent-faint: #3d8d68;
-  --on-accent: #022c22;
-  --accent-line: rgba(52, 211, 153, 0.35);
+  --on-accent: #080e12;
+  --accent-line: rgba(86, 213, 122, 0.35);
 
-  --line: rgba(52, 211, 153, 0.18);
-  --line-faint: rgba(52, 211, 153, 0.10);
-  --line-strong: rgba(52, 211, 153, 0.45);
+  --line: #29353c;
+  --line-faint: rgba(41, 53, 60, 0.5);
+  --line-strong: #3a4b55;
   --line-danger: #7f1d1d;
 
   --danger: #f87171;
@@ -41,100 +41,69 @@
   --surface-warn: #1c1203;
   --info: #22d3ee;
 
-  --surface-header: #0a101e;
-  --surface-active: #06281c;
-  --surface-accent: #071a14;
-  --surface-deep: #050a12;
-  --surface-overlay: rgba(2, 6, 16, 0.45);
-  --surface-terminal: #02060c;
-  --backdrop: rgba(1, 4, 10, 0.82);
+  --surface-header: #0d1519;
+  --surface-active: #131c21;
+  --surface-accent: #131c21;
+  --surface-deep: #080e12;
+  --surface-overlay: rgba(8, 14, 18, 0.7);
+  --surface-terminal: #080e12;
+  --backdrop: rgba(8, 14, 18, 0.85);
 
-  --text-strong: #f8fafc;
-  --text-muted: #9ca3af;
-  --text-faint: #8b95a5;
+  --text-strong: #ebeff2;
+  --text-muted: #7e8b94;
+  --text-faint: #505a5f;
 
-  --glow-sm: 0 0 8px rgba(52, 211, 153, 0.25);
-  --glow-md: 0 0 12px rgba(52, 211, 153, 0.4);
+  --glow-sm: none;
+  --glow-md: none;
 }
 
-body.theme-forge-legacy {
-  /* ============ Classic Terminal Green ============ */
-  --forge-bg: #010602;
-  --forge-panel-bg: rgba(2, 12, 4, 0.85);
-  --forge-neon: #39ff14;
-  --forge-dim: #00aa44;
-  --forge-dark: #003311;
-  --forge-very-dark: #001103;
-  --forge-text: #d1ffd6;
-  --forge-red: #ff3333;
-  --forge-purple: #bb66ff;
-  --forge-purple-glow: rgba(187, 102, 255, 0.25);
-  --border-color: rgba(57, 255, 20, 0.2);
-  --glow-shadow: 0 0 25px rgba(57, 255, 20, 0.35);
-  --accent-glow: rgba(57, 255, 20, 0.1);
-
-  --accent: #00ff66;
-  --accent-dim: #00c853;
-  --accent-soft: #aaffbb;
-  --accent-faint: #2f8b51;
-  --on-accent: #001103;
-  --accent-line: rgba(0, 255, 102, 0.35);
-
-  --line: rgba(0, 255, 102, 0.22);
-  --line-faint: rgba(0, 255, 102, 0.12);
-  --line-strong: rgba(0, 255, 102, 0.5);
-  --line-danger: #661111;
-
-  --danger: #ff5555;
-  --surface-danger: #1a0505;
-  --warn: #fbbf24;
-  --warn-soft: #fde68a;
-  --warn-line: #92400e;
-  --surface-warn: #181002;
-  --info: #67e8f9;
-
-  --surface-header: #041107;
-  --surface-active: #002b10;
-  --surface-accent: #01180a;
-  --surface-deep: #020904;
-  --surface-overlay: rgba(0, 5, 2, 0.5);
-  --surface-terminal: #000000;
-  --backdrop: rgba(0, 3, 1, 0.85);
-
-  --text-strong: #eaffef;
-  --text-muted: #00aa44;
-  --text-faint: #4e9b6c;
-
-  --glow-sm: 0 0 8px rgba(0, 255, 102, 0.3);
-  --glow-md: 0 0 12px rgba(0, 255, 102, 0.45);
+body.theme-dark,
+body.theme-forge,
+body.theme-forge-legacy,
+body.theme-matrix {
+  --forge-bg: #080e12;
+  --forge-panel-bg: #131c21;
+  --forge-neon: #56d57a;
+  --forge-dim: #7e8b94;
+  --forge-dark: #29353c;
+  --forge-very-dark: #0d1519;
+  --forge-text: #ebeff2;
+  --forge-red: #f87171;
+  --border-color: #29353c;
+  --accent: #56d57a;
+  --accent-dim: #48b868;
+  --on-accent: #080e12;
+  --text-strong: #ebeff2;
+  --text-muted: #7e8b94;
+  --glow-shadow: none;
 }
 
 body.theme-light {
-  /* ============ Futuristic clean light ============ */
-  --forge-bg: #f8fafc;
-  --forge-panel-bg: rgba(255, 255, 255, 0.85);
-  --forge-neon: #1d4ed8;
-  --forge-dim: #1e40af;
-  --forge-dark: #e2e8f0;
-  --forge-very-dark: #f1f5f9;
-  --forge-text: #0f172a;
+  /* ============ Zeloryn Interface Light ============ */
+  --forge-bg: #f8f7f3;
+  --forge-panel-bg: #ffffff;
+  --forge-neon: #007834;
+  --forge-dim: #505a5f;
+  --forge-dark: #dddad5;
+  --forge-very-dark: #f0eee9;
+  --forge-text: #12171a;
   --forge-red: #dc2626;
   --forge-purple: #6d28d9;
-  --forge-purple-glow: rgba(124, 58, 237, 0.15);
-  --border-color: rgba(37, 99, 235, 0.18);
-  --glow-shadow: 0 0 15px rgba(37, 99, 235, 0.15);
-  --accent-glow: rgba(37, 99, 235, 0.05);
+  --forge-purple-glow: transparent;
+  --border-color: #dddad5;
+  --glow-shadow: none;
+  --accent-glow: transparent;
 
-  --accent: #1d4ed8;
-  --accent-dim: #3653a8;
-  --accent-soft: #1e3a8a;
-  --accent-faint: #5a6f9e;
+  --accent: #007834;
+  --accent-dim: #006028;
+  --accent-soft: #007834;
+  --accent-faint: #505a5f;
   --on-accent: #ffffff;
-  --accent-line: rgba(29, 78, 216, 0.4);
+  --accent-line: rgba(0, 120, 52, 0.4);
 
-  --line: #d6deee;
-  --line-faint: #e5eaf4;
-  --line-strong: #93b4f0;
+  --line: #dddad5;
+  --line-faint: #ebe7e1;
+  --line-strong: #c8c4be;
   --line-danger: #fca5a5;
 
   --danger: #b91c1c;
