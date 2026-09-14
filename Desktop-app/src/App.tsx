@@ -15,6 +15,7 @@ const ProjectBoard = lazy(() => import('./components/ProjectBoard').then(m => ({
 const PlanningScreen = lazy(() => import('./components/PlanningScreen').then(m => ({ default: m.PlanningScreen })));
 const PreviewDeck = lazy(() => import('./components/PreviewDeck').then(m => ({ default: m.PreviewDeck })));
 const OnboardingTutorial = lazy(() => import('./components/OnboardingTutorial').then(m => ({ default: m.OnboardingTutorial })));
+const VibeStudio = lazy(() => import('./components/VibeStudio').then(m => ({ default: m.VibeStudio })));
 const ProjectSetupScreen = lazy(() => import('./components/ProjectSetupScreen').then(m => ({ default: m.ProjectSetupScreen })));
 
 const SpaceLoading = () => (
@@ -280,8 +281,18 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   // Returning users (setup already completed) land on the FLOW Today view;
   // first-run users start in PLAN behind the project-setup screen.
-  const [activeSpace, setActiveSpace] = useState<'code' | 'chat' | 'cowork' | 'project' | 'plan'>(
-    () => (localStorage.getItem('matrix_setup_done') === 'true' ? 'project' : 'plan')
+  const [activeSpace, setActiveSpace] = useState<'vibe' | 'code' | 'chat' | 'cowork' | 'project' | 'plan'>(
+    () => {
+      try {
+        const saved = localStorage.getItem('matrix_active_space') as any;
+        if (saved && ['vibe', 'code', 'chat', 'cowork', 'project', 'plan'].includes(saved)) {
+          return saved;
+        }
+      } catch {
+        // ignore
+      }
+      return 'vibe';
+    }
   );
   const [showSetup, setShowSetup] = useState<boolean>(() => localStorage.getItem('matrix_setup_done') !== 'true');
   const [appGraphPreviewFile, setAppGraphPreviewFile] = useState<{ path: string; content: string } | null>(null);
@@ -763,9 +774,14 @@ function App() {
     }
   }, [activeProject]);
 
-  const handleSpaceChange = useCallback((space: 'code' | 'chat' | 'cowork' | 'project' | 'plan') => {
+  const handleSpaceChange = useCallback((space: 'vibe' | 'code' | 'chat' | 'cowork' | 'project' | 'plan') => {
     if (isStreaming) return;
     setActiveSpace(space);
+    try {
+      localStorage.setItem('matrix_active_space', space);
+    } catch {
+      // ignore
+    }
     if (space === 'plan') {
       // Project chats live under session_plan_<projectId>; loading the global
       // 'planning_session' here made the Scratchbook conversation appear lost
@@ -811,14 +827,17 @@ function App() {
       if (isStreaming) return;
       if (e.key === 'F1') {
         e.preventDefault();
-        handleSpaceChange('plan');
+        handleSpaceChange('vibe');
       } else if (e.key === 'F2') {
         e.preventDefault();
-        handleSpaceChange('cowork');
+        handleSpaceChange('plan');
       } else if (e.key === 'F3') {
         e.preventDefault();
-        handleSpaceChange('project');
+        handleSpaceChange('cowork');
       } else if (e.key === 'F4') {
+        e.preventDefault();
+        handleSpaceChange('project');
+      } else if (e.key === 'F5') {
         e.preventDefault();
         handleSpaceChange('code');
       }
@@ -1666,8 +1685,8 @@ function App() {
             </button>
             <div className="flex items-center gap-1.5 font-sans font-bold text-xs uppercase tracking-wider text-forge-text select-none">
               <Cpu size={13} className="text-forge-neon" />
-              <span>Kryleos Forge</span>
-              <span className="text-[8px] bg-forge-dark text-forge-dim px-1 py-0.5 rounded-sm">v2.5</span>
+              <span className="text-forge-neon font-extrabold tracking-widest">Zeloryn</span>
+              <span className="text-[8px] bg-forge-dark text-forge-dim px-1 py-0.5 rounded-sm">v0.1.0</span>
             </div>
 
             {/* Active Project Switcher / Indicator */}
@@ -1695,12 +1714,20 @@ function App() {
             </div>
 
             {/* Switchable Spaces tab bar */}
-            <div className="forge-tabs ml-4">
+            <div className="forge-tabs ml-3">
+              <button
+                onClick={() => handleSpaceChange('vibe')}
+                disabled={isStreaming}
+                className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${activeSpace === 'vibe' ? 'forge-tab-active text-forge-neon font-bold' : ''}`}
+                title="Vibe Coding Studio (F1)"
+              >
+                <span>⚡ Vibe</span>
+              </button>
               <button
                 onClick={() => handleSpaceChange('plan')}
                 disabled={isStreaming}
                 className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'plan' ? 'forge-tab-active' : ''}`}
-                title="F1"
+                title="F2: Plan"
               >
                 Plan
               </button>
@@ -1898,7 +1925,22 @@ function App() {
 
         {/* Switchable Workspaces Render Tree */}
           <Suspense fallback={<SpaceLoading />}>
-          {activeSpace === 'chat' ? (
+          {activeSpace === 'vibe' ? (
+            <div className="flex-1 overflow-hidden">
+              <VibeStudio
+                activeProject={activeProject}
+                workspaceRoot={workspaceRoot}
+                isStreaming={isStreaming}
+                streamingContent={streamingContent}
+                logs={logs}
+                onSendQuery={(query) => handleSendQuery(query, 'code')}
+                onAbort={handleAbortWorkflow}
+                onNotify={notify}
+                onSwitchToPro={(space) => handleSpaceChange(space)}
+                onOpenProjectModal={() => setIsProjectModalOpen(true)}
+              />
+            </div>
+          ) : activeSpace === 'chat' ? (
             /* Space 1: Focused Standard Chat view */
             <section className="main-terminal p-3 flex flex-col gap-3 flex-1 overflow-hidden bg-forge-panel-bg">
               <div className="flex-1 overflow-hidden max-w-4xl mx-auto w-full">

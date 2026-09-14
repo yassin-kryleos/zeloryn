@@ -246,7 +246,7 @@ function spawnBackendChild() {
   // archive. Resolve against the unpacked tree under resourcesPath, not
   // __dirname (which still points inside app.asar).
   const serverPath = path.join(process.resourcesPath, 'app.asar.unpacked', 'dist-backend', 'server.cjs');
-  const workspaceDir = path.join(app.getPath('documents'), 'Kryleos Forge');
+  const workspaceDir = path.join(app.getPath('documents'), 'Zeloryn');
   try {
     fs.mkdirSync(workspaceDir, { recursive: true });
   } catch (err) {
@@ -337,7 +337,7 @@ function createWindow() {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.cjs')
     },
-    title: 'Kryleos Forge // Agent Workspace',
+    title: 'Zeloryn // AI Studio',
     show: false // Show only after loading to prevent visual flicker
   });
 

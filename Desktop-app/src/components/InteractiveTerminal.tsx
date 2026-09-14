@@ -82,7 +82,7 @@ export const InteractiveTerminal: React.FC<InteractiveTerminalProps> = ({ ws, is
     term.open(terminalRef.current);
     fitAddon.fit();
 
-    term.writeln('\x1b[1;34mKryleos Forge Multi-PTY Terminal\x1b[0m');
+    term.writeln('\x1b[1;34mZeloryn Multi-PTY Terminal\x1b[0m');
     term.writeln('Spawn multiple concurrent terminal sessions with \x1b[32m+\x1b[0m.\r\n');
 
     xtermRef.current = term;

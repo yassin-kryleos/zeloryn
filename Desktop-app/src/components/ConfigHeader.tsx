@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Coffee, Heart, Cpu } from 'lucide-react';
+import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Coffee, Heart, Cpu, ChevronDown } from 'lucide-react';
 import type { ResponseMode } from '../backend/agents';
 import { FeatureBadge } from './FeatureBadge';
 import { APP_VERSION } from '../version';
@@ -248,6 +248,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [inputUseSearch, setInputUseSearch] = useState<boolean>(useSearch);
   const [inputWorkspace, setInputWorkspace] = useState<string>(workspaceRoot);
   const [showConfigDrawer, setShowConfigDrawer] = useState<boolean>(false);
+  const [showEngineStatusPopover, setShowEngineStatusPopover] = useState<boolean>(false);
   const [inputCustomInstructions, setInputCustomInstructions] = useState<string>(customInstructions);
   const [inputResponseMode, setInputResponseMode] = useState<ResponseMode>(responseMode);
   const [inputTheme, setInputTheme] = useState<string>(theme);
@@ -925,63 +926,114 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         </select>
       </div>
 
-      {/* Thinking Capability Dropdown */}
-      <div className="flex items-center border border-forge-dark rounded p-0.5">
-        <select
-          value={thinkingCapability}
-          onChange={(e) => onUpdateConfig({ thinkingCapability: e.target.value as any })}
-          className="bg-transparent border-0 text-[11px] text-forge-text font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
-          title="App Thinking Capability"
-        >
-          <option value="low">Think: Low</option>
-          <option value="medium">Think: Medium</option>
-          <option value="high">Think: High</option>
-          <option value="ultra">Think: Ultra</option>
-        </select>
-      </div>
-
-      {/* Thinking Level Badge */}
-      <div className="flex items-center border border-forge-neon/50 text-forge-neon bg-black/40 px-1.5 py-0.5 rounded text-[10px] font-bold font-mono select-none" title="AI Model Baseline Capability">
-        {getThinkingLevel(model)}
-      </div>
-
-      {/* Local Only Mode Badge */}
-      {(zeroEgressMode || privacyMode || model.startsWith('ollama:') || model === 'llama3' || model === 'qwen2.5-coder') && (
-        <div className="flex items-center border border-emerald-500 text-emerald-300 bg-black/40 px-1.5 py-0.5 rounded text-[10px] font-bold font-mono select-none">
-          [LOCAL ONLY]
-        </div>
-      )}
-
-      {/* Connection Indicator */}
-      <div className="flex items-center gap-1.5 px-1">
-        <span className={`h-2 w-2 rounded-full ${isConnected ? 'bg-forge-neon animate-pulse' : 'bg-forge-red animate-ping'}`} />
-        <span className={`text-[11px] font-mono ${isConnected ? 'text-forge-text font-bold' : 'neon-red font-bold'}`}>
-          {isConnected ? 'Connected' : 'Offline'}
-        </span>
-      </div>
-
-      {/* Companion Pairing Indicator */}
-      <div className="flex items-center gap-1.5 px-1 border-l border-forge-dark pl-2">
+      {/* Consolidated Engine Status Pill with Popover */}
+      <div className="relative">
         <button
-          onClick={() => setIsCompanionModalOpen(true)}
-          className="flex items-center gap-1 text-[11px] font-mono text-forge-neon hover:text-white bg-transparent border-0 cursor-pointer"
-          title="Pair and manage Web/Mobile companion devices"
           type="button"
+          onClick={() => setShowEngineStatusPopover(!showEngineStatusPopover)}
+          className="flex items-center gap-1.5 border border-forge-dark bg-black/40 hover:border-forge-neon/40 px-2 py-1 rounded text-[10.5px] font-mono cursor-pointer transition-all"
+          title="Engine status, reasoning capability & connected devices"
         >
-          <Globe size={11} className={companionCount > 0 ? "animate-pulse text-forge-neon font-bold" : "text-forge-dim"} />
-          <span>Companion: {companionCount} connected</span>
+          <span className={`h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-forge-red'}`} />
+          <span className={`font-bold ${isConnected ? 'text-forge-text' : 'text-red-400'}`}>
+            {isConnected ? (zeroEgressMode || privacyMode || model.startsWith('ollama:') || model === 'llama3' || model === 'qwen2.5-coder' ? 'Local' : 'Connected') : 'Offline'}
+          </span>
+          <span className="text-[8.5px] bg-forge-dark text-forge-dim px-1 rounded uppercase font-bold">
+            {thinkingCapability}
+          </span>
+          {companionCount > 0 && (
+            <span className="text-[8.5px] text-cyan-400 font-bold">+{companionCount}</span>
+          )}
+          <ChevronDown size={10} className="text-forge-dim" />
         </button>
-      </div>
 
-      {/* Help Guide walkthrough toggle */}
-      <button
-        onClick={onOpenGuide}
-        className="forge-secondary-button flex items-center gap-1 hover:text-white"
-        type="button"
-      >
-        <HelpCircle size={10} />
-        <span>GUIDE</span>
-      </button>
+        {showEngineStatusPopover && (
+          <div className="absolute right-0 top-full mt-1.5 w-64 bg-forge-panel-bg border border-forge-neon shadow-2xl rounded-md p-3 z-50 flex flex-col gap-2.5 font-mono text-[10px] backdrop-blur-md">
+            <div className="flex items-center justify-between border-b border-forge-dark pb-1.5">
+              <span className="font-bold text-forge-neon uppercase text-[10px]">Engine Status</span>
+              <button
+                type="button"
+                onClick={() => setShowEngineStatusPopover(false)}
+                className="text-forge-dim hover:text-white text-[10px] bg-transparent border-0 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Connection Info */}
+            <div className="flex items-center justify-between">
+              <span className="text-forge-dim">Backend:</span>
+              <span className={`font-bold ${isConnected ? 'text-emerald-400' : 'text-red-400'}`}>
+                {isConnected ? '127.0.0.1:3001 (Online)' : 'Disconnected'}
+              </span>
+            </div>
+
+            {/* Environment / Egress */}
+            <div className="flex items-center justify-between">
+              <span className="text-forge-dim">Environment:</span>
+              <span className="font-bold text-forge-text">
+                {zeroEgressMode ? 'Zero-Egress (Local)' : privacyMode ? 'Privacy Mode' : 'Cloud / Hybrid'}
+              </span>
+            </div>
+
+            {/* Baseline Heuristic */}
+            <div className="flex items-center justify-between">
+              <span className="text-forge-dim">Model Baseline:</span>
+              <span className="text-forge-neon font-bold">{getThinkingLevel(model)}</span>
+            </div>
+
+            {/* Thinking Capability Selector */}
+            <div className="flex flex-col gap-1 pt-1 border-t border-forge-dark">
+              <span className="text-forge-dim">Thinking Capability:</span>
+              <div className="flex gap-1 bg-black/40 border border-forge-dark rounded p-0.5">
+                {(['low', 'medium', 'high', 'ultra'] as const).map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => onUpdateConfig({ thinkingCapability: level })}
+                    className={`flex-1 py-0.5 text-[9px] uppercase font-bold rounded cursor-pointer ${
+                      thinkingCapability === level
+                        ? 'bg-forge-neon text-forge-very-dark'
+                        : 'text-forge-dim hover:text-white bg-transparent'
+                    }`}
+                  >
+                    {level}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Companion Devices */}
+            <div className="pt-1 border-t border-forge-dark flex items-center justify-between">
+              <span className="text-forge-dim">Companion:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEngineStatusPopover(false);
+                  setIsCompanionModalOpen(true);
+                }}
+                className="text-forge-neon hover:underline text-[9.5px] cursor-pointer bg-transparent border-0"
+              >
+                {companionCount} connected · Manage
+              </button>
+            </div>
+
+            {/* Guide link */}
+            <div className="pt-1 border-t border-forge-dark">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEngineStatusPopover(false);
+                  onOpenGuide();
+                }}
+                className="w-full text-center py-1 rounded bg-black/40 border border-forge-dark hover:border-forge-neon text-forge-text hover:text-forge-neon text-[9.5px] cursor-pointer"
+              >
+                Open Walkthrough Guide
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Support creator button */}
       <button
@@ -2284,7 +2336,18 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                   <button
                     key={t}
                     type="button"
-                    onClick={() => setInputTheme(t)}
+                    onClick={() => {
+                      setInputTheme(t);
+                      document.body.className = `theme-${t}`;
+                      try {
+                        localStorage.setItem('matrix_theme', t);
+                      } catch {
+                        // ignore
+                      }
+                      if (onUpdateConfig) {
+                        onUpdateConfig({ theme: t });
+                      }
+                    }}
                     className={`flex-1 py-1 text-[9px] uppercase font-mono rounded transition-all duration-150 cursor-pointer ${
                       inputTheme === t
                         ? 'bg-forge-neon text-forge-very-dark font-bold'

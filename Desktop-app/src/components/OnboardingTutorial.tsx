@@ -8,8 +8,8 @@ interface TutorialStep {
 
 const tutorialSteps: TutorialStep[] = [
   {
-    title: "Welcome to Kryleos Forge",
-    description: "Forge runs your project through the Build Loop: PLAN → CREW → FLOW → FORGE. You define what you're building, and the app tracks it from idea to executed code. Here's the 5-step tour."
+    title: "Welcome to Zeloryn",
+    description: "Zeloryn runs your project through the Build Loop: VIBE → PLAN → CREW → FLOW → FORGE. You define what you're building, and the app tracks it from idea to executed code. Here's the tour."
   },
   {
     title: "1. PLAN — scope your ideas",

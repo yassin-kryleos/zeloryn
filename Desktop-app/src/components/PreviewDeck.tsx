@@ -299,7 +299,7 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
                       ? 'w-[768px] max-w-full shadow-lg'
                       : 'w-[375px] max-w-full shadow-lg'
                 }`}
-                title="Kryleos Forge Live Preview"
+                title="Zeloryn Live Preview"
                 sandbox="allow-scripts allow-same-origin allow-forms"
               />
             </div>

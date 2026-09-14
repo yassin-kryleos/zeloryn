@@ -227,7 +227,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
     {
       id: 'initiate',
       title: 'WORKSPACE READY',
-      description: 'Kryleos Forge workspace initialized successfully.',
+      description: 'Zeloryn workspace initialized successfully.',
       unlocked: true,
       icon: 'READY'
     },
