@@ -7,6 +7,10 @@ export interface AppNotification {
   id: number;
   kind: NotificationKind;
   message: string;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 }
 
 interface NotificationCenterProps {
@@ -44,7 +48,19 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ notifica
             <div className="flex items-start gap-2">
               <Icon size={14} className="mt-0.5 shrink-0" />
               <div className="flex-1 text-[11px] leading-relaxed break-words">
-                {notification.message}
+                <div>{notification.message}</div>
+                {notification.action && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      notification.action?.onClick();
+                    }}
+                    className="mt-1.5 px-2 py-0.5 rounded text-[10px] font-bold border border-current opacity-90 hover:opacity-100 cursor-pointer inline-block"
+                  >
+                    {notification.action.label}
+                  </button>
+                )}
               </div>
               <button
                 onClick={() => onDismiss(notification.id)}

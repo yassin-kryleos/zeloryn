@@ -5,6 +5,7 @@ import { AgentDashboard } from './components/AgentDashboard';
 import { NotificationCenter, type AppNotification, type NotificationKind } from './components/NotificationCenter';
 import { hostedProviderForModel } from './shared/providerDisclosure';
 import { redactSensitiveData } from './shared/redact';
+import { checkForAppUpdates } from './shared/updateChecker';
 
 // Heavy / conditional components: lazy-load to keep the initial chunk below 500 kB.
 const CoworkSpace = lazy(() => import('./components/CoworkSpace').then(m => ({ default: m.CoworkSpace })));
@@ -120,13 +121,77 @@ function App() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const notificationIdRef = useRef<number>(1);
 
-  const notify = useCallback((message: string, kind: NotificationKind = 'info') => {
+  const notify = useCallback((message: string, kind: NotificationKind = 'info', action?: { label: string; onClick: () => void }) => {
     const id = notificationIdRef.current++;
-    setNotifications(prev => [...prev.slice(-3), { id, kind, message }]);
+    setNotifications(prev => [...prev.slice(-3), { id, kind, message, action }]);
     window.setTimeout(() => {
       setNotifications(prev => prev.filter(notification => notification.id !== id));
-    }, kind === 'error' ? 7000 : 4500);
+    }, action ? 12000 : kind === 'error' ? 7000 : 4500);
   }, []);
+
+  // Background non-intrusive update notification
+  useEffect(() => {
+    let unsubscribeElectron: (() => void) | undefined;
+    if ((window as any).electronAPI?.onUpdateAvailable) {
+      unsubscribeElectron = (window as any).electronAPI.onUpdateAvailable((info: any) => {
+        const version = info?.version || 'new version';
+        const releaseUrl = info?.releaseUrl || 'https://github.com/yassin-kryleos/zeloryn/releases/latest';
+        const dismissed = localStorage.getItem('zeloryn_dismissed_update');
+        if (dismissed !== version) {
+          notify(
+            `🚀 Update available: Zeloryn ${version} is now available!`,
+            'info',
+            {
+              label: 'View Release',
+              onClick: () => {
+                if ((window as any).electronAPI?.openExternal) {
+                  (window as any).electronAPI.openExternal(releaseUrl);
+                } else {
+                  window.open(releaseUrl, '_blank');
+                }
+              }
+            }
+          );
+        }
+      });
+    }
+
+    let cancelled = false;
+    const checkUpdates = async () => {
+      try {
+        const result = await checkForAppUpdates({ force: false });
+        if (cancelled) return;
+        if (result.hasUpdate) {
+          const dismissed = localStorage.getItem('zeloryn_dismissed_update');
+          if (dismissed !== result.latestVersion) {
+            notify(
+              `🚀 Update available: Zeloryn v${result.latestVersion} is now available!`,
+              'info',
+              {
+                label: 'View Release',
+                onClick: () => {
+                  if ((window as any).electronAPI?.openExternal) {
+                    (window as any).electronAPI.openExternal(result.releaseUrl);
+                  } else {
+                    window.open(result.releaseUrl, '_blank');
+                  }
+                }
+              }
+            );
+          }
+        }
+      } catch {
+        // Fail silently in background
+      }
+    };
+
+    const timer = window.setTimeout(checkUpdates, 2500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      unsubscribeElectron?.();
+    };
+  }, [notify]);
 
   useEffect(() => {
     let cancelled = false;

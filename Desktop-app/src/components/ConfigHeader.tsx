@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Coffee, Heart } from 'lucide-react';
 import type { ResponseMode } from '../backend/agents';
 import { FeatureBadge } from './FeatureBadge';
+import { APP_VERSION } from '../version';
+import { checkForAppUpdates } from '../shared/updateChecker';
 
 interface PairedDeviceSummary {
   deviceId: string;
@@ -197,6 +199,36 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [inputResponseMode, setInputResponseMode] = useState<ResponseMode>(responseMode);
   const [inputTheme, setInputTheme] = useState<string>(theme);
   const [activeTab, setActiveTab] = useState<'api_keys' | 'workspace' | 'github_sync' | 'account_theme' | 'permissions' | 'agents' | 'artifacts'>('api_keys');
+
+  // Update checking state
+  const [isCheckingUpdates, setIsCheckingUpdates] = useState<boolean>(false);
+  const [updateAvailableVersion, setUpdateAvailableVersion] = useState<string | null>(null);
+  const [updateStatusText, setUpdateStatusText] = useState<string | null>(null);
+
+  const handleManualCheckUpdates = async () => {
+    setIsCheckingUpdates(true);
+    setUpdateStatusText('Checking GitHub releases...');
+    try {
+      const res = await checkForAppUpdates({ force: true });
+      if (res.hasUpdate) {
+        setUpdateAvailableVersion(res.latestVersion);
+        setUpdateStatusText(`Update available: v${res.latestVersion}`);
+        onNotify?.(`🚀 Update available: Zeloryn v${res.latestVersion} is available!`, 'info');
+      } else if (res.success) {
+        setUpdateAvailableVersion(null);
+        setUpdateStatusText(`Zeloryn is up to date (v${APP_VERSION}).`);
+        onNotify?.(`Zeloryn is up to date (v${APP_VERSION}).`, 'success');
+      } else {
+        setUpdateStatusText(res.error || 'Could not reach GitHub releases');
+        onNotify?.(`Could not check updates: ${res.error || 'Network error'}`, 'warning');
+      }
+    } catch (err: any) {
+      setUpdateStatusText(`Failed: ${err.message}`);
+      onNotify?.(`Update check failed: ${err.message}`, 'error');
+    } finally {
+      setIsCheckingUpdates(false);
+    }
+  };
 
   React.useEffect(() => {
     setInputTheme(theme);
@@ -1534,6 +1566,53 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               <span className="text-[9px] text-forge-dim">
                 Forge (default) is a professional dark theme with green accents. Matrix and Terminal are the classic green-glow retro styles.
               </span>
+            </div>
+
+            {/* App Version & Update Checker */}
+            <div className="flex flex-col gap-1.5 border border-forge-dark bg-black/40 p-2.5 rounded font-mono text-[9px] mt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-forge-neon font-bold uppercase text-[9.5px] flex items-center gap-1.5">
+                  <RefreshCw size={11} className={isCheckingUpdates ? 'animate-spin text-forge-neon' : 'text-forge-dim'} />
+                  <span>Zeloryn Version: v{APP_VERSION}</span>
+                </span>
+                <span className={`text-[8px] border px-1.5 py-0.5 rounded font-bold ${
+                  updateAvailableVersion
+                    ? 'bg-amber-950 text-amber-300 border-amber-500/50 animate-pulse'
+                    : 'bg-forge-very-dark text-forge-dim border-forge-dark'
+                }`}>
+                  {updateAvailableVersion ? `v${updateAvailableVersion} AVAILABLE` : 'STABLE RELEASE'}
+                </span>
+              </div>
+              <span className="text-forge-dim text-[8.5px]">
+                {updateStatusText || 'Check GitHub for the latest updates, enhancements, and security fixes.'}
+              </span>
+              <div className="flex gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={handleManualCheckUpdates}
+                  disabled={isCheckingUpdates}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-forge-very-dark hover:bg-forge-dark text-forge-neon border border-forge-neon/40 rounded text-[9px] font-bold cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw size={10} className={isCheckingUpdates ? 'animate-spin' : ''} />
+                  <span>{isCheckingUpdates ? 'Checking Releases...' : 'Check for Updates'}</span>
+                </button>
+                {updateAvailableVersion && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = 'https://github.com/yassin-kryleos/zeloryn/releases/latest';
+                      if ((window as any).electronAPI?.openExternal) {
+                        (window as any).electronAPI.openExternal(url);
+                      } else {
+                        window.open(url, '_blank');
+                      }
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                  >
+                    <span>Download v{updateAvailableVersion}</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Support / Sponsor Section */}

@@ -239,16 +239,9 @@ function setupAutoUpdater() {
 
   autoUpdater.on('update-available', (info) => {
     if (!mainWindow) return;
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'Update available',
-      message: `Kryleos Forge ${info.version} is available (you have ${app.getVersion()}).`,
-      detail: 'Open the GitHub release page to download and install the latest version.',
-      buttons: ['Open Releases Page', 'Later']
-    }).then((result) => {
-      if (result.response === 0) {
-        shell.openExternal('https://github.com/thetimelord69/Kryleos-forge/releases/latest');
-      }
+    mainWindow.webContents.send('update-available', {
+      version: info.version,
+      releaseUrl: 'https://github.com/yassin-kryleos/zeloryn/releases/latest'
     });
   });
 
@@ -273,7 +266,13 @@ function setupAutoUpdater() {
   ipcMain.handle('check-for-updates', async () => {
     try {
       const res = await autoUpdater.checkForUpdates();
-      return { success: true, version: res?.updateInfo?.version || app.getVersion() };
+      const latestVersion = res?.updateInfo?.version || app.getVersion();
+      return {
+        success: true,
+        version: latestVersion,
+        hasUpdate: Boolean(res?.updateInfo?.version && res.updateInfo.version !== app.getVersion()),
+        releaseUrl: 'https://github.com/yassin-kryleos/zeloryn/releases/latest'
+      };
     } catch (err) {
       return { success: false, error: err?.message || 'Update check failed' };
     }
