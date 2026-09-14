@@ -33,12 +33,12 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
 mac:
+  # pkg target dropped: it needs a Developer ID Installer signing identity
+  # that electron-builder doesn't handle gracefully when unsigned (fails
+  # with a misleading "not a file" error). Re-add once real Apple signing
+  # credentials are configured (see internal-docs branch for context).
   target:
     - target: dmg
-      arch:
-        - x64
-        - arm64
-    - target: pkg
       arch:
         - x64
         - arm64

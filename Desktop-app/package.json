@@ -3,7 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "description": "Free, open-source, local-first AI software engineering cockpit.",
-  "author": "Zeloryn Contributors",
+  "author": {
+    "name": "Zeloryn Contributors",
+    "email": "yassin@kryleos.com"
+  },
+  "homepage": "https://github.com/yassin-kryleos/zeloryn",
   "license": "Apache-2.0",
   "type": "module",
   "main": "src/backend/electron.cjs",
