@@ -78,10 +78,10 @@ jobs:
         run: |
           if [ -n "$WIN_CSC_LINK" ]; then
             echo "Signing certificate detected. Building signed Windows package..."
-            npx electron-builder --win
+            npx electron-builder --win --publish never
           else
             echo "No Windows signing credentials configured. Building unsigned package..."
-            npx electron-builder --win --config.win.signAndEditExecutable=false
+            npx electron-builder --win --config.win.signAndEditExecutable=false --publish never
           fi
 
       - name: Package macOS artifacts
@@ -90,17 +90,17 @@ jobs:
         run: |
           if [ -n "$CSC_LINK" ] && [ -n "$APPLE_ID" ]; then
             echo "Apple developer credentials detected. Building signed & notarized macOS package..."
-            npx electron-builder --mac
+            npx electron-builder --mac --publish never
           else
             echo "No Apple Developer signing credentials configured. Building unsigned macOS package..."
-            npx electron-builder --mac --config.mac.identity=null
+            npx electron-builder --mac --config.mac.identity=null --publish never
           fi
 
       - name: Package Linux artifacts
         if: matrix.platform == 'linux'
         shell: bash
         run: |
-          npx electron-builder --linux AppImage deb tar.gz
+          npx electron-builder --linux AppImage deb tar.gz --publish never
 
       - name: Generate platform checksums
         shell: bash
