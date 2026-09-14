@@ -5,6 +5,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import helmet from 'helmet';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import dotenv from 'dotenv';
 import { exec, execSync, execFile, execFileSync } from 'child_process';
 import { WorkspaceSandbox, type ReviewStatus, classifyCommand } from './tools';
@@ -48,11 +49,46 @@ import { loadDecisions, recordDecision } from './decisionMemory';
 
 dotenv.config();
 
-const LOCAL_SESSION_SECRET = process.env.KRYLEOS_LOCAL_SESSION_SECRET?.trim() || '';
-const LOCAL_AUTH_REQUIRED = process.env.NODE_ENV !== 'test' || process.env.KRYLEOS_ENFORCE_LOCAL_AUTH === 'true';
-if (LOCAL_AUTH_REQUIRED && LOCAL_SESSION_SECRET.length < 32) {
-  throw new Error('FATAL: KRYLEOS_LOCAL_SESSION_SECRET must be set to at least 32 characters.');
+function resolveLocalSessionSecret(): string {
+  let secret = process.env.KRYLEOS_LOCAL_SESSION_SECRET?.trim() || '';
+  if (secret.length >= 32) {
+    return secret;
+  }
+
+  // Check persistent session secret file in ~/.config/zeloryn or ~/.config/Kryleos Forge
+  const home = os.homedir();
+  const candidateDirs = [
+    path.join(home, '.config', 'zeloryn'),
+    path.join(home, '.config', 'Kryleos Forge')
+  ];
+
+  for (const dir of candidateDirs) {
+    const filePath = path.join(dir, '.session_secret');
+    try {
+      if (fs.existsSync(filePath)) {
+        const fileSecret = fs.readFileSync(filePath, 'utf-8').trim();
+        if (fileSecret.length >= 32) {
+          process.env.KRYLEOS_LOCAL_SESSION_SECRET = fileSecret;
+          return fileSecret;
+        }
+      }
+    } catch {}
+  }
+
+  // Generate a cryptographically secure random session secret
+  const newSecret = crypto.randomBytes(32).toString('hex');
+  process.env.KRYLEOS_LOCAL_SESSION_SECRET = newSecret;
+  try {
+    const configDir = path.join(home, '.config', 'zeloryn');
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(path.join(configDir, '.session_secret'), newSecret, { mode: 0o600, encoding: 'utf-8' });
+  } catch {}
+
+  return newSecret;
 }
+
+const LOCAL_SESSION_SECRET = resolveLocalSessionSecret();
+const LOCAL_AUTH_REQUIRED = process.env.NODE_ENV !== 'test' || process.env.KRYLEOS_ENFORCE_LOCAL_AUTH === 'true';
 
 const COMPANION_AUTH_TOKEN = process.env.KRYLEOS_COMPANION_AUTH_TOKEN?.trim() || '';
 

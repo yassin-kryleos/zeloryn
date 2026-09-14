@@ -200,6 +200,23 @@ if [ ! -x "\$EXTRACTED_APP/zeloryn" ] || [ "\$TARGET_APPIMAGE" -nt "\$EXTRACTED_
   fi
 fi
 
+# Ensure local session secret is configured and exported
+CONFIG_DIR="\$HOME/.config/zeloryn"
+SECRET_FILE="\$CONFIG_DIR/.session_secret"
+if [ -z "\$KRYLEOS_LOCAL_SESSION_SECRET" ] || [ "\${#KRYLEOS_LOCAL_SESSION_SECRET}" -lt 32 ]; then
+  if [ -s "\$SECRET_FILE" ]; then
+    export KRYLEOS_LOCAL_SESSION_SECRET="\$(head -n 1 "\$SECRET_FILE" | tr -d '\r\n ')"
+  fi
+  if [ -z "\$KRYLEOS_LOCAL_SESSION_SECRET" ] || [ "\${#KRYLEOS_LOCAL_SESSION_SECRET}" -lt 32 ]; then
+    mkdir -p "\$CONFIG_DIR" 2>/dev/null
+    NEW_SECRET="\$(od -vN 32 -An -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || head -c 32 /dev/urandom 2>/dev/null | xxd -p -c 32 || date +%s%N | sha256sum | cut -d' ' -f1)"
+    if [ -n "\$NEW_SECRET" ] && [ "\${#NEW_SECRET}" -ge 32 ]; then
+      export KRYLEOS_LOCAL_SESSION_SECRET="\$NEW_SECRET"
+      printf "%s" "\$NEW_SECRET" > "\$SECRET_FILE" 2>/dev/null && chmod 600 "\$SECRET_FILE" 2>/dev/null || true
+    fi
+  fi
+fi
+
 if [ -x "\$EXTRACTED_APP/zeloryn" ]; then
   exec "\$EXTRACTED_APP/zeloryn" "\$@"
 else

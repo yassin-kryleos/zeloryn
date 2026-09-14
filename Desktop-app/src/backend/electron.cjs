@@ -4,6 +4,7 @@ const path = require('path');
 const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 
 let mainWindow;
@@ -33,10 +34,34 @@ if (process.platform === 'win32') {
 // Ensure a valid local session secret is available for backend and IPC
 let localSessionSecret = process.env.KRYLEOS_LOCAL_SESSION_SECRET || '';
 function getLocalSessionSecret() {
-  if (!localSessionSecret || localSessionSecret.length < 32) {
-    localSessionSecret = crypto.randomBytes(32).toString('hex');
-    process.env.KRYLEOS_LOCAL_SESSION_SECRET = localSessionSecret;
+  if (localSessionSecret && localSessionSecret.length >= 32) {
+    return localSessionSecret;
   }
+  const home = os.homedir();
+  const candidateDirs = [
+    path.join(home, '.config', 'zeloryn'),
+    path.join(home, '.config', 'Kryleos Forge')
+  ];
+  for (const dir of candidateDirs) {
+    const filePath = path.join(dir, '.session_secret');
+    try {
+      if (fs.existsSync(filePath)) {
+        const fileSecret = fs.readFileSync(filePath, 'utf-8').trim();
+        if (fileSecret.length >= 32) {
+          localSessionSecret = fileSecret;
+          process.env.KRYLEOS_LOCAL_SESSION_SECRET = localSessionSecret;
+          return localSessionSecret;
+        }
+      }
+    } catch {}
+  }
+  localSessionSecret = crypto.randomBytes(32).toString('hex');
+  process.env.KRYLEOS_LOCAL_SESSION_SECRET = localSessionSecret;
+  try {
+    const configDir = path.join(home, '.config', 'zeloryn');
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(path.join(configDir, '.session_secret'), localSessionSecret, { mode: 0o600, encoding: 'utf-8' });
+  } catch {}
   return localSessionSecret;
 }
 
