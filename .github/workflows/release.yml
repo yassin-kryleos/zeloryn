@@ -125,7 +125,7 @@ jobs:
           path: |
             Desktop-app/dist-desktop/*
             !Desktop-app/dist-desktop/win-unpacked/
-            !Desktop-app/dist-desktop/mac/
+            !Desktop-app/dist-desktop/mac*/
             !Desktop-app/dist-desktop/linux-unpacked/
 
   publish-release:
