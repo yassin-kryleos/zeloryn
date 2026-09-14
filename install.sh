@@ -40,7 +40,14 @@ log_error() {
 
 # Banner
 printf "\n"
-printf "${BLUE}${BOLD}  ZELORYN${RESET}\n"
+printf "${BLUE}  ______    _                        ${RESET}\n"
+printf "${BLUE} |___  /   | |                       ${RESET}\n"
+printf "${BLUE}    / / ___| | ___  _ __ _   _ _ __  ${RESET}\n"
+printf "${BLUE}   / / / _ \\ |/ _ \\| '__| | | | '_ \\ ${RESET}\n"
+printf "${BLUE}  / /_|  __/ | (_) | |  | |_| | | | |${RESET}\n"
+printf "${BLUE} /_____\\___|_|\\___/|_|   \\__, |_| |_|${RESET}\n"
+printf "${BLUE}                          __/ |      ${RESET}\n"
+printf "${BLUE}                         |___/       ${RESET}\n"
 printf "${DIM}  Free, Open-Source, Local-First AI Software Engineering Cockpit${RESET}\n\n"
 
 # 1. Detect operating system
