@@ -595,7 +595,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     setIsLoadingOllamaModels(true);
     try {
       const url = new URL('http://localhost:3001/api/ollama/models');
-      if (baseUrl.trim()) url.searchParams.set('baseUrl', baseUrl.trim());
+      if (baseUrl && baseUrl.trim()) url.searchParams.set('baseUrl', baseUrl.trim());
       const res = await fetch(url.toString());
       const data = await res.json() as { success?: boolean; models?: OllamaModelOption[]; error?: string };
       if (!res.ok || !data.success) throw new Error(data.error || 'Ollama is not reachable');
@@ -611,7 +611,9 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   }, []);
 
   React.useEffect(() => {
-    refreshOllamaModels(ollamaUrl);
+    if (ollamaUrl) {
+      refreshOllamaModels(ollamaUrl);
+    }
   }, [ollamaUrl, refreshOllamaModels]);
 
   const ollamaOptions = ollamaModels.length > 0
@@ -624,7 +626,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       { value: 'qwen2.5-coder', label: 'Ollama Qwen 2.5 Coder (fallback)' }
     ];
 
-  const selectedDynamicOllamaMissing = model.startsWith('ollama:')
+  const selectedDynamicOllamaMissing = (model || '').startsWith('ollama:')
     && !ollamaOptions.some(option => option.value === model);
 
   const effectiveCustomModels = React.useMemo(() => {
@@ -704,7 +706,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   };
 
   const handleAddCustomModel = () => {
-    if (!newCustomModelId.trim()) return;
+    if (!newCustomModelId || !newCustomModelId.trim()) return;
     const cleanId = newCustomModelId.trim();
     const updatedCustomModels = Array.from(new Set([...effectiveCustomModels, cleanId]));
     const updatedPricing = {
@@ -739,7 +741,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const customModelsList = inputCustomModels
+    const customModelsList = (inputCustomModels || '')
       .split(',')
       .map(s => s.trim())
       .filter(Boolean);
@@ -1695,7 +1697,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                         <button
                           type="button"
                           onClick={handleAddCustomModel}
-                          disabled={!newCustomModelId.trim()}
+                          disabled={!newCustomModelId || !newCustomModelId.trim()}
                           className="px-3 py-1 bg-forge-neon text-black font-mono font-bold text-[10px] rounded hover:bg-forge-neon/80 disabled:opacity-50 cursor-pointer"
                         >
                           Save & Register

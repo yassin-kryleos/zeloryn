@@ -12,7 +12,7 @@ interface WorkspaceFingerprint {
 }
 
 interface ProjectSetupScreenProps {
-  defaultWorkspace: string;
+  defaultWorkspace?: string;
   hasProvider: boolean;
   onStart: (payload: { projectName: string; workspaceFolder: string; description: string }) => void;
   onUpdateWorkspaceRoot?: (path: string) => void;
@@ -21,7 +21,7 @@ interface ProjectSetupScreenProps {
 }
 
 export function ProjectSetupScreen({
-  defaultWorkspace,
+  defaultWorkspace = '',
   hasProvider,
   onStart,
   onUpdateWorkspaceRoot,
@@ -29,7 +29,7 @@ export function ProjectSetupScreen({
   onRunDemo
 }: ProjectSetupScreenProps) {
   const [projectName, setProjectName] = useState('');
-  const [workspaceFolder, setWorkspaceFolder] = useState(defaultWorkspace);
+  const [workspaceFolder, setWorkspaceFolder] = useState(defaultWorkspace || '');
   const [description, setDescription] = useState('');
   const [fingerprint, setFingerprint] = useState<WorkspaceFingerprint | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -39,7 +39,7 @@ export function ProjectSetupScreen({
   const [demoComplete, setDemoComplete] = useState(() => localStorage.getItem('matrix_activation_demo') === 'true');
   const repoConnected = localStorage.getItem('matrix_activation_repo') === 'true';
 
-  useEffect(() => { setWorkspaceFolder(defaultWorkspace); }, [defaultWorkspace]);
+  useEffect(() => { setWorkspaceFolder(defaultWorkspace || ''); }, [defaultWorkspace]);
 
   const scanWorkspace = async () => {
     setScanning(true);
@@ -63,7 +63,7 @@ export function ProjectSetupScreen({
 
   useEffect(() => { scanWorkspace(); }, []);
 
-  const canStart = workspaceFolder.trim().length > 0 && termsAccepted;
+  const canStart = (workspaceFolder || '').trim().length > 0 && termsAccepted;
 
   const handleAcceptToggle = (checked: boolean) => {
     setTermsAccepted(checked);
@@ -135,7 +135,7 @@ export function ProjectSetupScreen({
             />
             <button
               type="button"
-              onClick={() => { onUpdateWorkspaceRoot?.(workspaceFolder.trim()); scanWorkspace(); }}
+              onClick={() => { onUpdateWorkspaceRoot?.((workspaceFolder || '').trim()); scanWorkspace(); }}
               className="forge-btn text-[10px] px-2.5"
             >
               SCAN
@@ -209,7 +209,7 @@ export function ProjectSetupScreen({
         <button
           type="button"
           disabled={!canStart}
-          onClick={() => onStart({ projectName: projectName.trim(), workspaceFolder: workspaceFolder.trim(), description: description.trim() })}
+          onClick={() => onStart({ projectName: (projectName || '').trim(), workspaceFolder: (workspaceFolder || '').trim(), description: (description || '').trim() })}
           className="w-full forge-btn text-[12px] py-2 font-bold flex items-center justify-center gap-2 disabled:opacity-40"
         >
           <Rocket size={13} /> START BUILDING

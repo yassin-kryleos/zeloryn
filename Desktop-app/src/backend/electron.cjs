@@ -9,6 +9,22 @@ const { spawn } = require('child_process');
 let mainWindow;
 let backendProcess = null;
 
+// Single-instance lock: ensure only one instance of the app runs at a time.
+// If a second instance is launched, focus the existing window and exit the new one immediately.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  console.log('[electron] Another instance is already running. Focusing existing window and exiting.');
+  app.quit();
+  process.exit(0);
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 // Set Application User Model ID for Windows taskbar grouping & shortcut binding
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.zeloryn.app');
@@ -213,6 +229,17 @@ ipcMain.handle('select-directory', async () => {
 function startBackend() {
   if (!app.isPackaged) return;
 
+  // Check if port 3001 is already active before spawning a new child process
+  const req = http.get('http://127.0.0.1:3001/', () => {
+    console.log('[backend] An active backend is already responding on port 3001. Skipping child process spawn.');
+  });
+  req.on('error', () => {
+    // Port is free, spawn backend child process
+    spawnBackendChild();
+  });
+}
+
+function spawnBackendChild() {
   // dist-backend/** and node_modules/** are unpacked from app.asar (see
   // electron-builder.yml asarUnpack) because a plain-node child process
   // (ELECTRON_RUN_AS_NODE) cannot resolve require() targets inside an asar

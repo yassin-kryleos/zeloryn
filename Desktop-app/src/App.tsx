@@ -391,8 +391,10 @@ function App() {
   const fetchWorkspace = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:3001/api/workspace');
-      const data = await response.json();
-      setWorkspaceRoot(data.workspaceRoot || data.defaultWorkspace);
+      if (response.ok) {
+        const data = await response.json();
+        setWorkspaceRoot(data.workspaceRoot || data.defaultWorkspace || '');
+      }
     } catch (err) {
       console.error('Failed to query workspace route', err);
     }
@@ -1857,33 +1859,35 @@ function App() {
                   {checklist.length === 0 ? (
                     <span className="text-forge-dim italic">No active checklist</span>
                   ) : (
-                    checklist.map((item, idx) => {
-                      const isChecked = item.startsWith('[x]') || item.includes('[x]');
-                      const isProgress = item.startsWith('[/]') || item.includes('[/]');
-                      
-                      let textClass = 'text-forge-dim';
-                      let symbol = '[~]';
-                      
-                      if (isChecked) {
-                        textClass = 'line-through text-forge-dim opacity-40';
-                        symbol = '[x]';
-                      } else if (isProgress) {
-                        textClass = 'text-forge-neon font-bold animate-pulse';
-                        symbol = '[~]';
-                      } else if (item.startsWith('[ ]')) {
-                        textClass = 'text-forge-text';
-                        symbol = '[ ]';
-                      }
+                    checklist
+                      .filter((item): item is string => typeof item === 'string')
+                      .map((item, idx) => {
+                        const isChecked = item.startsWith('[x]') || item.includes('[x]');
+                        const isProgress = item.startsWith('[/]') || item.includes('[/]');
+                        
+                        let textClass = 'text-forge-dim';
+                        let symbol = '[~]';
+                        
+                        if (isChecked) {
+                          textClass = 'line-through text-forge-dim opacity-40';
+                          symbol = '[x]';
+                        } else if (isProgress) {
+                          textClass = 'text-forge-neon font-bold animate-pulse';
+                          symbol = '[~]';
+                        } else if (item.startsWith('[ ]')) {
+                          textClass = 'text-forge-text';
+                          symbol = '[ ]';
+                        }
 
-                      const cleanItem = item.replace(/^\[[x\s/]*\]\s*/, '').trim();
+                        const cleanItem = (item.replace(/^\[[x\s/]*\]\s*/, '') || '').trim();
 
-                      return (
-                        <div key={idx} className={`flex items-start gap-1.5 ${textClass}`}>
-                          <span>{symbol}</span>
-                          <span className="truncate">{cleanItem}</span>
-                        </div>
-                      );
-                    })
+                        return (
+                          <div key={idx} className={`flex items-start gap-1.5 ${textClass}`}>
+                            <span>{symbol}</span>
+                            <span className="truncate">{cleanItem}</span>
+                          </div>
+                        );
+                      })
                   )}
                 </div>
               </div>
