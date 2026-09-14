@@ -273,24 +273,7 @@ Done when:
 - Mobile approves/rejects command with signatures.
 - Offline notes sync to desktop.
 
-## Phase 9 - Billing, Sync, and Tier Gates
-
-Deliverables:
-
-- Entitlement model.
-- Stripe checkout/webhooks.
-- Razorpay checkout/webhooks.
-- License key flow.
-- Server-side feature gates.
-- Sync preview.
-- Upgrade UX.
-
-Done when:
-
-- Tier gates cannot be bypassed client-side.
-- Billing webhooks are verified in non-mock environments.
-
-## Phase 10 - Founder/Agency Workflows
+## Phase 9 - Founder/Agency Workflows
 
 Deliverables:
 
@@ -304,23 +287,43 @@ Done when:
 
 - Workflows are gated and secret-scanned.
 
-## Phase 11 - QA Hardening and Beta Packaging
+## Phase 10 - QA Hardening, Multi-Platform Packaging, and Distribution
 
 Deliverables:
 
-- E2E tests.
+- E2E tests across Desktop and Web companions.
 - Accessibility tests.
 - Security regression suite.
-- Packaged app QA.
-- Release notes.
-- Install guide.
-- Rollback guide.
+- Packaged app QA for Linux (AppImage), macOS, and Windows.
+- Release notes and automated GitHub Releases.
+- Install guides (`install.sh`, `install.ps1`, Homebrew, Winget).
+- Comprehensive uninstallation automation (`uninstall.sh`, `zeloryn uninstall --purge`).
+- In-place desktop update mechanism.
 
 Done when:
 
 - Release gate checklist passes.
-- Windows beta package is installable.
+- Linux AppImage, macOS, and Windows packages are installable and cleanly uninstallable.
 - Known simulator/mock features are labeled.
+
+## Phase 11 - Zeloryn UI/UX Evolution, Vibe Studio, and Role-Based Architecture
+
+Deliverables:
+
+- Unified Zeloryn rebranding across desktop cockpit, electron window titles, workspace defaults, and system telemetry.
+- Decluttered cockpit header with consolidated Engine Status Pill (`● Connected · Local [MEDIUM] +0 v`) and rich popover telemetry.
+- Interactive onboarding activation checklist directly accessible from cockpit topbar.
+- Instant live CSS theme preview on click without requiring settings save.
+- Vibe Coding Studio (`⚡ Vibe`) with starter project inspiration chips (Portfolio, Habit Tracker, SaaS Landing, Retro Arcade Game), natural language app generation, and an embedded responsive preview canvas (`<iframe>`) with Desktop, Tablet, and Mobile viewports.
+- Role-Based Model Slot Architecture (Coordinator, Planner, Coder, Reviewer) with automated slot assignment based on detected API keys and local Ollama models.
+
+Done when:
+
+- Non-technical users can prompt and preview functional web apps directly in Vibe Studio.
+- Topbar navigation remains on a single sleek row without badge wrapping.
+- Themes switch immediately on click.
+- Model slots auto-populate from active provider credentials.
+- Linux AppImage updates in-place at `~/.local/share/zeloryn/Zeloryn.AppImage`.
 
 ## Later Phases
 

@@ -39,19 +39,20 @@ Closed AI IDEs (Cursor, Windsurf) lock you into metered cloud subscriptions and 
 
 ---
 
-## Core Lifecycle: PLAN → CREW → FLOW → FORGE
+## Core Lifecycle: VIBE (Prototyping) & PLAN → CREW → FLOW → FORGE
 
-Forge guides features from raw idea to merged pull request through four coordinated spaces:
+Zeloryn guides features from raw idea to merged pull request through coordinated spaces:
 
 ```
-  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-  │   1. PLAN    │ ──> │   2. CREW    │ ──> │   3. FLOW    │ ──> │   4. FORGE   │
-  │ Specification│     │ Persona      │     │ Dependency-  │     │ Real PTY     │
-  │  & Ideation  │     │ Architecture │     │ Aware Kanban │     │ Execution &  │
-  │              │     │    Review    │     │    Board     │     │ Human Safety │
-  └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
+  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+  │   0. VIBE    │ ──> │   1. PLAN    │ ──> │   2. CREW    │ ──> │   3. FLOW    │ ──> │   4. FORGE   │
+  │ Natural Lang │     │ Specification│     │ Persona      │     │ Dependency-  │     │ Real PTY     │
+  │  Prototyping │     │  & Ideation  │     │ Architecture │     │ Aware Kanban │     │ Execution &  │
+  │  & Live View │     │              │     │    Review    │     │    Board     │     │ Human Safety │
+  └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
 ```
 
+0. **VIBE**: For non-coders and fast visual ideation. Describe what you want in plain English, click starter templates, and watch your interactive web app render live in an embedded preview canvas with Desktop, Tablet, and Mobile viewport toggles. Switch seamlessly into Pro mode when ready.
 1. **PLAN**: Draft features, user stories, and acceptance criteria. Supports voice/audio input, structured spec generation, and offline ideation on mobile.
 2. **CREW**: Run spec reviews through specialized persona lenses (Architect, Security Auditor, UX Designer, QA Lead) to identify risks, edge cases, and missing requirements before touching code.
 3. **FLOW**: Coordinate execution on an interactive Kanban board. Tasks track prerequisite card dependencies, worktree branches, and live build status.
@@ -282,14 +283,21 @@ Forge provides transparent, explicit safety controls with a clearly defined trus
 
 ## Roadmap
 
-- [x] **Phase 1: Strip Payment & Login Gating**: Complete removal of Stripe, Razorpay, fake cloud sync, and license tiers. All features unlocked under BYOK.
-- [x] **Phase 2: Open-Source Packaging**: Public documentation, LICENSE recommendation, sanitized repository, and community templates.
-- [x] **Phase 3: Cross-Platform Installers**: Terminal one-liners (`curl | sh`, `winget`), GitHub Releases packaging, and Homebrew tap.
-- [x] **Phase 4: Generalized Agent Execution**: Pluggable `CliAgentRunner` interface (support for Claude Code, Codex CLI, Gemini CLI, Aider) + full MCP client and Tool API Gateway integration.
-- [x] **Phase 5: Workflow Polish**: Enhanced Preview Deck (tabbed multi-PTY sessions, live responsive preview pane), dependency-aware automatic task scheduling, git worktree isolation per card, compliance audit export, and zero-cost remote mobile companion with offline-first ideation.
-- [x] **Phase 6: Multi-Engine Execution & External Handoff**: Pluggable in-app execution for BYOK CLI agents (Claude Code, Codex CLI) with live PTY streaming + structured external handoff (Cursor, Antigravity, VS Code, Windsurf, Clipboard).
-- [x] **Phase 7: Retrieval, Verification Loops & Merge Safety**: Post-execution CREW reviewer, 3-attempt Sentinel check retry loop with test runner integration, Tree-sitter + PageRank semantic index, worktree staging-branch merge with secret scanning, durable card rollback, and spend enforcement.
-- [x] **Phase 8: Close the Raw-CLI Approval-Gate Gap (Research & Boundary Specification)**: Comprehensive evaluation of MCP routing, PTY interactive mode, and OS-level syscall interception. Documented the explicit architectural trust boundary (full research writeup preserved on the `internal-docs` branch).
+- [x] **Phase 1: Open-Source Packaging & Community Foundation**: Public documentation, Apache 2.0 license, sanitized repository, community issue templates, and local-first BYOK architecture.
+- [x] **Phase 2: Cross-Platform Installers & Linux Packaging**: Terminal one-liners (`curl | sh`, `winget`, `install.ps1`), GitHub Releases packaging, Homebrew tap, Linux AppImage packaging (`Zeloryn.AppImage`), desktop launcher integration (`.desktop`), in-place updater, and complete uninstallation automation (`zeloryn uninstall --purge`, `uninstall.sh`).
+- [x] **Phase 3: Generalized Agent Execution & Model Slot Architecture**: Pluggable `CliAgentRunner` interface (support for Claude Code, Codex CLI, Gemini CLI, Aider) + full MCP client and Tool API Gateway integration. Role-Based Slot Architecture (Coordinator, Planner, Coder, Reviewer) with intelligent auto-configuration based on configured API keys and local Ollama models.
+- [x] **Phase 4: Workflow Polish & Worktree Isolation**: Enhanced Preview Deck (tabbed multi-PTY sessions, live responsive preview pane), dependency-aware automatic task scheduling, git worktree isolation per card, compliance audit export, and zero-cost remote mobile companion with offline-first ideation.
+- [x] **Phase 5: Multi-Engine Execution & External Handoff**: Pluggable in-app execution for BYOK CLI agents (Claude Code, Codex CLI) with live PTY streaming + structured external handoff (Cursor, Antigravity, VS Code, Windsurf, Clipboard).
+- [x] **Phase 6: Retrieval, Verification Loops & Merge Safety**: Post-execution CREW reviewer, 3-attempt Sentinel check retry loop with test runner integration, Tree-sitter + PageRank semantic index, worktree staging-branch merge with secret scanning, durable card rollback, and spend enforcement.
+- [x] **Phase 7: Raw-CLI Approval-Gate Gap & Boundary Specification**: Comprehensive evaluation of MCP routing, PTY interactive mode, and OS-level syscall interception. Documented the explicit architectural trust boundary.
+- [x] **Phase 8: Zeloryn UI/UX Evolution, Instant Theme Switching & Vibe Studio**:
+  - **Zeloryn Unified Branding**: Complete rebranding of desktop cockpit, window titles, workspace configurations, and internal signals to Zeloryn v0.1.0.
+  - **Cockpit Declutter & Engine Status Pill**: Consolidated fragmented technical badges into a single compact **Engine Status Pill** (`● Connected · Local [MEDIUM] +0 v`) with interactive popover telemetry, eliminating topbar wrapping.
+  - **Interactive Activation Checklist**: Clickable and toggleable quick-start onboarding checklist directly in the cockpit header.
+  - **Instant Live Theme Switching**: Real-time CSS theme application on click (Midnight, Cyberpunk, Forest, Crimson, Paper, Obsidian, High Contrast) without settings save delays.
+  - **Vibe Coding Studio (`⚡ Vibe`)**: Dedicated beginner-friendly space for non-coders and rapid prototyping with starter idea chips (Portfolio, Habit Tracker, SaaS Landing, Retro Arcade Game), natural language app generation, and a live responsive canvas (`<iframe>`) supporting Desktop, Tablet, and Mobile viewports with instant Pro mode switching.
+  - **Role-Based Slot Auto-Configuration**: Automated matching and slot assignment for multi-agent roles based on user-provided API keys and detected local models.
+  - **Linux In-Place Update & Packaging**: Verified Linux AppImage distribution (`Zeloryn-0.1.0-x86_64.AppImage`), desktop launcher entry, and clean uninstall paths.
 
 ---
 

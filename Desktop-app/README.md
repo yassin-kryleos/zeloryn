@@ -10,11 +10,18 @@ The desktop application is the central execution cockpit for Zeloryn. It combine
   - Main process lifecycle, native window management, secure preload bridges (`contextBridge`).
 - **Renderer UI (`src/`)**:
   - Built with React 19, TypeScript, Vite, Tailwind CSS, Lucide icons, and Monaco Editor.
-  - Houses the 4 core lifecycle spaces: **PLAN** (`PlanningScreen.tsx`), **CREW** (`CoworkSpace.tsx`), **FLOW** (`ProjectBoard.tsx`), and **FORGE** (`App.tsx` chat/execution workspace).
+  - Houses the 5 core spaces:
+    - **VIBE** (`VibeStudio.tsx`): Natural language visual prototyping with starter inspiration chips and an interactive live web app canvas (`<iframe>`) with Desktop, Tablet, and Mobile viewport toggles.
+    - **PLAN** (`PlanningScreen.tsx`): Architectural scoping, acceptance criteria drafting, and voice input ideation.
+    - **CREW** (`CoworkSpace.tsx`): Persona-based architecture and security reviews before writing code.
+    - **FLOW** (`ProjectBoard.tsx`): Dependency-aware Kanban task board with worktree isolation.
+    - **FORGE** (`App.tsx`): Multi-agent execution workspace with live streaming, diff reviews, and human-in-the-loop safety approvals.
+  - Features the **Engine Status Pill** (`● Connected · Local [MEDIUM] +0 v`) with interactive popover telemetry, eliminating topbar clutter, and instant CSS theme switching.
   - Includes the interactive terminal (`InteractiveTerminal.tsx`) rendering live PTY streams via xterm.js.
 - **Local Backend Server (`src/backend/`)**:
   - Express.js HTTP and WebSocket server running locally on port `3001` (by default).
   - Handles project management, workspace file operations, git diffing, model API proxies (Anthropic, OpenAI, Gemini, DeepSeek, Ollama), and pseudoterminal spawning.
+  - **Role-Based Slot Architecture**: Automatically populates multi-agent roles (Coordinator, Planner, Coder, Reviewer) based on active provider API keys and local Ollama models.
   - `claudeCodeRunner.ts` / `cliAgentRunner.ts`: Discovers and invokes local CLI agent binaries with environment sanitization and structured output negotiation.
   - `terminalManager.ts`: Manages persistent `node-pty` shell sessions with command safety interception for interactive terminal keystrokes.
   - Security boundaries: Secured with `LOCAL_SESSION_SECRET`, encrypted secret store (`OS_FINGERPRINT`), and pairing token verification for companion devices. Approval gate intercepts Forge orchestrator tool calls and interactive keystrokes; wrapped external CLIs enforce their own native sandboxes.

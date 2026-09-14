@@ -1,67 +1,57 @@
-# Kryleos Forge - Current Status For New Codex Chats
+# Zeloryn - Current Status For New Chats
 
-Last updated: 2026-06-11 14:57:12 +05:30
+Last updated: 2026-09-14 15:25:00 +05:30
 
-Use this file as the first read in a new chat to save tokens. It is the compact continuation brief for `Desktop-app/` and supersedes older pending-task language in `HANDOFF.md`.
+Use this file as the quick continuation brief for `Desktop-app/`.
 
 ## 1. Start Here
 
 Working directory:
 
-```powershell
-cd "C:\Users\yassi\Documents\Claude\Projects\Kryleos-Forge\Desktop-app"
+```bash
+cd "/home/yassin/Kryleos-Projects/Kryleos-Forge/Desktop-app"
 ```
 
 Owner/project rules:
 
-- `Project-Documents/` moved off `main` to the `internal-docs` branch (repo cleanup). Considered complete/locked there; do not edit it unless explicitly unlocked.
-- Code changes are allowed inside `Desktop-app/`.
-- Preserve local-first positioning, BYOK support, Ollama/local model workflows, command approval, abort/stop behavior, and honest preview/simulator labels.
-- PLAN is a Scratchbook/scoping space, not an implementation chatbot. CREW/FLOW/FORGE are the later review, board, and execution spaces.
-- Matrix/neon styling can remain as identity, but default product UX should stay professional and founder-workspace oriented.
+- App is 100% free, open-source, and local-first under Apache-2.0.
+- Rebranded to **Zeloryn** v0.1.0 across desktop cockpit, electron window, and telemetry.
+- Preserve local-first positioning, BYOK support, Ollama/local model workflows, command approval, and zero-egress guarantees.
+- Core spaces: **VIBE** (visual/no-code prototyping with responsive live canvas), **PLAN** (scoping & criteria), **CREW** (persona review), **FLOW** (Kanban & worktrees), and **FORGE** (agent execution & safety gates).
 
-## 2. Current Git Status
+## 2. Current Status & Latest Architecture (2026-09-14)
 
 Parent repo:
 
 ```text
-C:\Users\yassi\Documents\Claude\Projects\Kryleos-Forge
-branch: qa/full-test-audit
-status: Desktop-app modified
-latest commit: 90e50b5 chore: commit uncommitted workspace configurations, documentation, and web app assets
+/home/yassin/Kryleos-Projects/Kryleos-Forge
+branch: main
 ```
 
-Desktop app repo:
+Recent Major Implementations (Phase 8):
 
-```text
-C:\Users\yassi\Documents\Claude\Projects\Kryleos-Forge\Desktop-app
-branch: qa/full-test-audit
-latest commit: 6060259 fix: P0 UI/UX audit fixes - board persistence, criteria save, setup flow
-```
-
-Current uncommitted changes in `Desktop-app/`:
-
-```text
- M projects.json
- M src/App.tsx
- M src/backend/planningV2.ts
- M src/backend/server.ts
- M src/components/OnboardingTutorial.tsx
- M src/components/PlanningScreen.tsx
- M src/components/PreviewDeck.tsx
- M src/components/ProjectBoard.tsx
- M src/index.css
-?? src/shared/crewPersonas.ts
-```
-
-Diff size at handoff:
-
-```text
-9 tracked files changed, 207 insertions(+), 44 deletions(-)
-1 new untracked source file: src/shared/crewPersonas.ts
-```
-
-Important: `projects.json` currently contains a local test project named `Diff Test` with description `P2 verification`. Decide whether to keep or remove before final commit.
+1. **Zeloryn Rebranding**:
+   - Header, Electron main window title, default workspace name, interactive terminal, onboarding tour, and project signals updated to Zeloryn.
+2. **Cockpit UI/UX Declutter**:
+   - Consolidated loose status badges (`[LOCAL ONLY]`, `Connected`, `Companion`, `Thinking Level`) into a unified **Engine Status Pill** (`● Connected · Local [MEDIUM] +0 v`) with interactive popover telemetry.
+   - Prevents topbar double-row wrapping on standard laptop screens.
+3. **Instant Live Theme Switching**:
+   - Theme selection in Settings applies immediately to `document.body` and saves to `localStorage` without needing "Save Settings".
+4. **Vibe Coding Studio (`⚡ Vibe`)**:
+   - Dedicated space for non-coders and fast visual ideation (`VibeStudio.tsx`).
+   - Starter template inspiration cards (Portfolio, Habit Tracker, SaaS Landing, Retro Arcade Game).
+   - Side-by-side prompt chat with live interactive preview (`<iframe>`) and responsive viewport toggles (Desktop, Tablet, Mobile).
+   - Seamless Pro mode transition button.
+5. **Role-Based Model Slot Architecture & Auto-Configuration**:
+   - Auto-assigns Coordinator, Planner, Coder, and Reviewer slots according to detected provider API keys (Anthropic, OpenAI, Gemini, DeepSeek) and local Ollama models.
+6. **Activation Checklist Interactive Fix**:
+   - Users can directly click and complete quick-start checklist items at the top of the app.
+7. **Packaging & Clean Uninstallation**:
+   - Built and verified Linux AppImage (`dist-desktop/Zeloryn-0.1.0-x86_64.AppImage`).
+   - In-place update to `~/.local/share/zeloryn/Zeloryn.AppImage` and `.desktop` launcher.
+   - Uninstallation scripts (`uninstall.sh`) and CLI flags (`zeloryn uninstall --purge`) for complete removal.
+8. **Test Suite Health**:
+   - 72 test suites passing (600 tests, 0 failures, 1 skipped). Clean TypeScript build and ESLint.
 
 ## 3. Active Implementation Slice
 
