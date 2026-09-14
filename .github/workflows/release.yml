@@ -124,9 +124,14 @@ jobs:
           name: release-${{ matrix.platform }}
           path: |
             Desktop-app/dist-desktop/*
+            !Desktop-app/dist-desktop/*-unpacked/
+            !Desktop-app/dist-desktop/*-unpacked/**
             !Desktop-app/dist-desktop/win-unpacked/
+            !Desktop-app/dist-desktop/win-unpacked/**
             !Desktop-app/dist-desktop/mac*/
+            !Desktop-app/dist-desktop/mac*/**
             !Desktop-app/dist-desktop/linux-unpacked/
+            !Desktop-app/dist-desktop/linux-unpacked/**
 
   publish-release:
     name: Publish GitHub Release
@@ -156,6 +161,14 @@ jobs:
           done
           echo "=== Consolidated SHA256SUMS ==="
           cat SHA256SUMS.txt
+
+          asset_count=$(ls -1 | wc -l)
+          echo "Total release assets prepared: $asset_count"
+          if [ "$asset_count" -gt 30 ]; then
+            echo "ERROR: Too many release assets ($asset_count). Unpacked directories may have leaked!"
+            ls -la
+            exit 1
+          fi
 
       - name: Determine tag name
         id: release_tag
