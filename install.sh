@@ -20,6 +20,7 @@ BLUE="\033[0;34m"
 YELLOW="\033[0;33m"
 RED="\033[0;31m"
 DIM="\033[2m"
+MATRIX_GREEN="\033[1;32m"
 RESET="\033[0m"
 
 log_info() {
@@ -40,14 +41,14 @@ log_error() {
 
 # Banner
 printf "\n"
-printf "${BLUE}  ______    _                        ${RESET}\n"
-printf "${BLUE} |___  /   | |                       ${RESET}\n"
-printf "${BLUE}    / / ___| | ___  _ __ _   _ _ __  ${RESET}\n"
-printf "${BLUE}   / / / _ \\ |/ _ \\| '__| | | | '_ \\ ${RESET}\n"
-printf "${BLUE}  / /_|  __/ | (_) | |  | |_| | | | |${RESET}\n"
-printf "${BLUE} /_____\\___|_|\\___/|_|   \\__, |_| |_|${RESET}\n"
-printf "${BLUE}                          __/ |      ${RESET}\n"
-printf "${BLUE}                         |___/       ${RESET}\n"
+printf "${MATRIX_GREEN}  ______    _                        ${RESET}\n"
+printf "${MATRIX_GREEN} |___  /   | |                       ${RESET}\n"
+printf "${MATRIX_GREEN}    / / ___| | ___  _ __ _   _ _ __  ${RESET}\n"
+printf "${MATRIX_GREEN}   / / / _ \\ |/ _ \\| '__| | | | '_ \\ ${RESET}\n"
+printf "${MATRIX_GREEN}  / /_|  __/ | (_) | |  | |_| | | | |${RESET}\n"
+printf "${MATRIX_GREEN} /_____\\___|_|\\___/|_|   \\__, |_| |_|${RESET}\n"
+printf "${MATRIX_GREEN}                          __/ |      ${RESET}\n"
+printf "${MATRIX_GREEN}                         |___/       ${RESET}\n"
 printf "${DIM}  Free, Open-Source, Local-First AI Software Engineering Cockpit${RESET}\n\n"
 
 # 1. Detect operating system
