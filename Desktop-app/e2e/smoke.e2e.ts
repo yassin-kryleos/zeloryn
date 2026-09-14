@@ -60,7 +60,7 @@ test.describe('Desktop renderer — smoke', () => {
 
   test('CONFIG header area is visible', async ({ page }) => {
     // The Desktop app has a CONFIG bar at the top or sidebar
-    const configEl = page.locator('text=/config/i').first();
+    const configEl = page.locator('button, [role="button"]').filter({ hasText: /config/i }).first();
     await expect(configEl).toBeVisible();
   });
 

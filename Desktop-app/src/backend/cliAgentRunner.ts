@@ -588,7 +588,7 @@ export class CodexCliRunner implements CliAgentRunner {
           toolUses: [],
         };
       } catch (fallbackErr: any) {
-        throw new Error(`Codex CLI execution failed: ${err.message || fallbackErr.message}`);
+        throw new Error(`Codex CLI execution failed: ${err.message || fallbackErr.message}`, { cause: fallbackErr });
       }
     }
   }

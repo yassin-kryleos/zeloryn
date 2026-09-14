@@ -855,7 +855,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
             </optgroup>
           )}
           <optgroup label="Configuration">
-            <option value="__open_config__">⚙ Configure Models & Endpoints...</option>
+            <option value="__open_config__">⚙ Manage Models & Endpoints...</option>
           </optgroup>
         </select>
       </div>

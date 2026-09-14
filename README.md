@@ -105,6 +105,53 @@ irm https://raw.githubusercontent.com/yassin-kryleos/zeloryn/main/install.ps1 | 
 
 Direct binary downloads (`.dmg`, `.AppImage`, `.deb`, `.exe`) are always available on our [GitHub Releases](https://github.com/yassin-kryleos/zeloryn/releases) page.
 
+### Uninstallation
+
+Zeloryn is local-first and leaves no background daemons or background clutter. To remove it from your system:
+
+#### Built-in CLI Uninstaller
+If you installed via the terminal installer on Linux or macOS:
+```bash
+zeloryn uninstall
+```
+*To also wipe configurations, cache, and encrypted local credentials, pass `--purge`:*
+```bash
+zeloryn uninstall --purge
+```
+
+#### One-Line Terminal Uninstaller (Linux & macOS)
+```bash
+curl -fsSL https://raw.githubusercontent.com/yassin-kryleos/zeloryn/main/uninstall.sh | bash
+```
+
+#### macOS via Homebrew
+```bash
+brew uninstall --cask zeloryn
+```
+
+#### Windows via Winget or Settings
+```powershell
+winget uninstall Zeloryn
+```
+*Or uninstall via Windows Settings > Installed Apps.*
+
+#### Manual Removal
+- **Linux**:
+  ```bash
+  rm -f ~/.local/bin/zeloryn
+  rm -rf ~/.local/share/zeloryn
+  rm -f ~/.local/share/applications/zeloryn.desktop
+  # Optional: purge local config and keys
+  rm -rf ~/.config/zeloryn
+  ```
+- **macOS**:
+  ```bash
+  rm -rf /Applications/Zeloryn.app
+  rm -f ~/.local/bin/zeloryn
+  # Optional: purge local config and keys
+  rm -rf ~/Library/Application\ Support/zeloryn
+  ```
+
 ---
 
 ## Update-Check Policy
