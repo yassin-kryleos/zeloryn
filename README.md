@@ -55,7 +55,7 @@ Forge guides features from raw idea to merged pull request through four coordina
 1. **PLAN**: Draft features, user stories, and acceptance criteria. Supports voice/audio input, structured spec generation, and offline ideation on mobile.
 2. **CREW**: Run spec reviews through specialized persona lenses (Architect, Security Auditor, UX Designer, QA Lead) to identify risks, edge cases, and missing requirements before touching code.
 3. **FLOW**: Coordinate execution on an interactive Kanban board. Tasks track prerequisite card dependencies, worktree branches, and live build status.
-4. **FORGE**: Autonomous execution via the real `claude` CLI binary in an embedded PTY. Commands pass through a safety classifier, diffs are reviewed per card, and full audit logs are preserved in `.kryleos/command_approvals.json`.
+4. **FORGE**: Autonomous execution via Zeloryn's native BYOK multi-agent engine (supporting Anthropic, OpenAI, Gemini, DeepSeek, and local Ollama) or pluggable CLI runners (such as the real `claude` CLI binary in an embedded PTY). Commands pass through a safety classifier, diffs are reviewed per card, and full audit logs are preserved in `.kryleos/command_approvals.json`.
 
 ---
 
