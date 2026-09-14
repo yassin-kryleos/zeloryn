@@ -1,6 +1,6 @@
 name: CI
 
-# Cross-platform continuous integration for Kryleos Forge.
+# Cross-platform continuous integration for Zeloryn.
 # Runs the full unit/integration test suite, TypeScript type-checking, linting,
 # and a production-dependency security audit for all three apps (Desktop, Web,
 # Mobile) on Linux, Windows, and macOS. This closes the "no cross-platform CI"

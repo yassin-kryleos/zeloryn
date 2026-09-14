@@ -41,6 +41,15 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      # tree-sitter's native binding doesn't declare C++20 for newer V8/Node
+      # headers (open upstream issue: tree-sitter/node-tree-sitter#268).
+      # Force it via the compiler's own env-var mechanisms rather than
+      # patching node_modules. CXXFLAGS covers GCC/Clang (Linux/macOS); CL
+      # is MSVC's equivalent (Windows) -- cl.exe prepends these to every
+      # invocation, though project-level flags can still win depending on
+      # ordering, so this may need a follow-up if Windows still fails.
+      CXXFLAGS: "-std=c++20"
+      CL: "/std:c++20"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -162,7 +171,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_tag.outputs.tag }}
-          name: Kryleos Forge ${{ steps.release_tag.outputs.tag }}
+          name: Zeloryn ${{ steps.release_tag.outputs.tag }}
           draft: false
           prerelease: false
           generate_release_notes: true
