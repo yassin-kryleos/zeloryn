@@ -792,6 +792,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
             )}
             {task.status !== 'done' && (
               <select
+                data-testid="runner-select"
                 value={taskRunners[task.id] || 'claude-code'}
                 onChange={(e) => setTaskRunners(prev => ({ ...prev, [task.id]: e.target.value }))}
                 title="Select Execution Runner"
@@ -804,7 +805,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
             {task.status !== 'done' && (
               <button
                 onClick={() => runTaskQuery(task)}
-                title={isBlocked ? 'Blocked by unfinished dependency' : `Run Task in Forge with ${taskRunners[task.id] || 'claude-code'}`}
+                title={isBlocked ? 'Blocked by unfinished dependency' : `Run Task Agent with ${taskRunners[task.id] || 'claude-code'}`}
                 disabled={isBlocked || isStreaming}
                 className="px-1.5 py-0.5 rounded border border-forge-neon/40 bg-forge-neon/15 hover:bg-forge-neon/30 text-forge-neon text-[9px] font-mono font-bold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-40 disabled:cursor-not-allowed"
               >

@@ -577,7 +577,7 @@ export const VibeStudio: React.FC<VibeStudioProps> = ({
               onClick={() => setViewportMode('desktop')}
               className={`px-2 py-1 rounded flex items-center gap-1 cursor-pointer transition-all ${
                 viewportMode === 'desktop'
-                  ? 'bg-forge-neon text-forge-very-dark font-bold'
+                  ? 'bg-forge-neon text-black font-bold'
                   : 'text-forge-dim hover:text-forge-text'
               }`}
               title="Desktop View (100%)"
@@ -590,7 +590,7 @@ export const VibeStudio: React.FC<VibeStudioProps> = ({
               onClick={() => setViewportMode('tablet')}
               className={`px-2 py-1 rounded flex items-center gap-1 cursor-pointer transition-all ${
                 viewportMode === 'tablet'
-                  ? 'bg-forge-neon text-forge-very-dark font-bold'
+                  ? 'bg-forge-neon text-black font-bold'
                   : 'text-forge-dim hover:text-forge-text'
               }`}
               title="Tablet View (768px)"
@@ -603,7 +603,7 @@ export const VibeStudio: React.FC<VibeStudioProps> = ({
               onClick={() => setViewportMode('mobile')}
               className={`px-2 py-1 rounded flex items-center gap-1 cursor-pointer transition-all ${
                 viewportMode === 'mobile'
-                  ? 'bg-forge-neon text-forge-very-dark font-bold'
+                  ? 'bg-forge-neon text-black font-bold'
                   : 'text-forge-dim hover:text-forge-text'
               }`}
               title="Mobile View (375px)"

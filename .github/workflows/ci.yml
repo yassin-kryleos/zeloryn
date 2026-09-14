@@ -118,14 +118,14 @@ jobs:
           exit 1
 
       - name: Pull model
-        run: ollama pull qwen2.5-coder:1.5b
+        run: ollama pull qwen2.5-coder:0.5b
 
       - name: Run Ollama FORGE e2e test
         run: npx vitest run src/backend/forge_ollama_e2e.test.ts
         env:
           NODE_ENV: test
           OLLAMA_E2E: '1'
-          OLLAMA_E2E_MODEL: qwen2.5-coder:1.5b
+          OLLAMA_E2E_MODEL: qwen2.5-coder:0.5b
 
   browser-e2e:
     name: ${{ matrix.app }} browser e2e

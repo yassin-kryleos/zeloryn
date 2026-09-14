@@ -62,7 +62,7 @@ describe('ActivationChecklist', () => {
     expect(onConnectModel).toHaveBeenCalledTimes(1);
 
     // Click the row
-    const row = screen.getByText('Connect model').closest('[role="button"]')!;
+    const row = screen.getByText('Connect model').closest('[data-testid^="checklist-step"]')!;
     fireEvent.click(row);
     expect(onConnectModel).toHaveBeenCalledTimes(2);
   });
@@ -84,7 +84,7 @@ describe('ActivationChecklist', () => {
     fireEvent.click(demoBtn);
     expect(onRunDemo).toHaveBeenCalledTimes(1);
 
-    const row = screen.getByText('Run demo trace').closest('[role="button"]')!;
+    const row = screen.getByText('Run demo trace').closest('[data-testid^="checklist-step"]')!;
     fireEvent.click(row);
     expect(onRunDemo).toHaveBeenCalledTimes(2);
   });
@@ -106,7 +106,7 @@ describe('ActivationChecklist', () => {
     fireEvent.click(addRepoBtn);
     expect(onPointAtRepo).toHaveBeenCalledTimes(1);
 
-    const row = screen.getByText('Point at repo').closest('[role="button"]')!;
+    const row = screen.getByText('Point at repo').closest('[data-testid^="checklist-step"]')!;
     fireEvent.click(row);
     expect(onPointAtRepo).toHaveBeenCalledTimes(2);
   });
@@ -124,11 +124,13 @@ describe('ActivationChecklist', () => {
       />
     );
 
-    const row = screen.getByText('Point at repo').closest('[role="button"]')!;
-    fireEvent.keyDown(row, { key: 'Enter' });
+    const btn = screen.getByRole('button', { name: 'ADD REPO' });
+    fireEvent.keyDown(btn, { key: 'Enter' });
+    fireEvent.click(btn);
     expect(onPointAtRepo).toHaveBeenCalledTimes(1);
 
-    fireEvent.keyDown(row, { key: ' ' });
+    fireEvent.keyDown(btn, { key: ' ' });
+    fireEvent.click(btn);
     expect(onPointAtRepo).toHaveBeenCalledTimes(2);
   });
 

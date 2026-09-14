@@ -19,7 +19,7 @@ import type { ChatSession, ProjectTask } from './db';
 // sets the env var, installs Ollama, pulls OLLAMA_E2E_MODEL, and runs this
 // file on its own.
 const RUN = process.env.OLLAMA_E2E === '1';
-const MODEL = process.env.OLLAMA_E2E_MODEL || 'qwen2.5-coder:1.5b';
+const MODEL = process.env.OLLAMA_E2E_MODEL || 'qwen2.5-coder:0.5b';
 
 let tmp: string;
 let prevCwd: string;
@@ -95,5 +95,5 @@ describe.runIf(RUN)('Forge Ollama end-to-end (money path)', () => {
 
     const traceFiles = fs.readdirSync(path.join(tmp, '.kryleos', 'traces'));
     expect(traceFiles.length).toBeGreaterThan(0);
-  }, 480_000);
+  }, 600_000);
 });

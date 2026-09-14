@@ -1781,6 +1781,8 @@ function App() {
             <div className="flex items-center gap-1.5 ml-3 select-none text-[10px] font-mono">
               <button
                 type="button"
+                data-testid="add-project-button"
+                aria-label={activeProject ? `Project: ${activeProject.name}` : "Add project"}
                 onClick={() => setIsProjectModalOpen(true)}
                 title="Switch active project or open workspace folder"
                 className="flex items-center gap-1 px-2 py-0.5 rounded border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-200 hover:text-white transition-colors cursor-pointer"

@@ -56,7 +56,7 @@ test.describe('Desktop renderer — UX interactions', () => {
   });
 
   test('project creation button is reachable and clickable', async ({ page }) => {
-    const newPlanBtn = page.getByRole('button', { name: '+ Add project', exact: true });
+    const newPlanBtn = page.locator('[data-testid="add-project-button"], button:has-text("+ Add project")').first();
     await newPlanBtn.click();
     await page.waitForTimeout(300);
     const error = page.locator('[data-testid="error-boundary-fallback"]');

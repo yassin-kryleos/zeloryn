@@ -792,14 +792,14 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     setShowConfigDrawer(false);
   };
 
-  const hasConfiguredKeys = !!geminiApiKey || !!anthropicApiKey || !!openaiApiKey || !!apiKey || !!openrouterApiKey || !!customApiKey || !!customBaseUrl || ollamaOptions.length > 0;
-  const showGemini = !hasConfiguredKeys || !!geminiApiKey;
-  const showAnthropic = !hasConfiguredKeys || !!anthropicApiKey;
-  const showOpenai = !hasConfiguredKeys || !!openaiApiKey;
-  const showDeepseek = !hasConfiguredKeys || !!apiKey;
-  const showCustom = !hasConfiguredKeys || !!customApiKey || !!customBaseUrl;
-  const showOpenrouter = !hasConfiguredKeys || !!openrouterApiKey;
-  const showOllama = !hasConfiguredKeys || ollamaOptions.length > 0 || !!ollamaUrl;
+  const hasCommercialKeys = !!geminiApiKey || !!anthropicApiKey || !!openaiApiKey || !!apiKey || !!openrouterApiKey || !!customApiKey || !!customBaseUrl;
+  const showGemini = !hasCommercialKeys || !!geminiApiKey;
+  const showAnthropic = !hasCommercialKeys || !!anthropicApiKey;
+  const showOpenai = !hasCommercialKeys || !!openaiApiKey;
+  const showDeepseek = !hasCommercialKeys || !!apiKey;
+  const showCustom = !hasCommercialKeys || !!customApiKey || !!customBaseUrl;
+  const showOpenrouter = !hasCommercialKeys || !!openrouterApiKey;
+  const showOllama = !hasCommercialKeys || ollamaOptions.length > 0 || !!ollamaUrl;
 
   return (
     <div className="flex items-center gap-3 font-mono text-xs select-none flex-wrap justify-end">
@@ -957,6 +957,9 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 <option key={`fast-${option.value}`} value={option.value}>Fast: {option.label}</option>
               ))}
             </optgroup>
+          )}
+          {fastModel && !['gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-2.5-flash', 'claude-4.5-haiku', 'claude-3-5-haiku-latest', 'gpt-5.5-mini', 'gpt-4o-mini', 'o3-mini', 'glm-4-flash', 'deepseek-chat'].includes(fastModel) && (
+            <option value={fastModel}>Fast: {fastModel}</option>
           )}
         </select>
       </div>

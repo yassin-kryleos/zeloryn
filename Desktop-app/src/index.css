@@ -530,6 +530,8 @@ pre {
 .bg-forge-bg { background-color: var(--forge-bg) !important; }
 .bg-forge-panel-bg { background-color: var(--forge-panel-bg) !important; }
 .bg-forge-very-dark { background-color: var(--forge-very-dark) !important; }
+.text-forge-very-dark { color: var(--forge-very-dark) !important; }
+.text-black { color: #000000 !important; }
 .bg-forge-dark { background-color: var(--forge-dark) !important; }
 .bg-transparent { background-color: transparent !important; }
 

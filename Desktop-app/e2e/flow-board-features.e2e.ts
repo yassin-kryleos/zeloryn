@@ -44,7 +44,7 @@ test.describe('Desktop renderer — Flow Kanban features', () => {
 
     // Card contains the runner select dropdown
     const cardContainer = page.locator('div').filter({ hasText: /Test Multi-Engine Runner Card/ }).first();
-    const runnerSelect = cardContainer.locator('select[title="Select Tier 1 Execution Runner"]').first();
+    const runnerSelect = cardContainer.locator('select[title="Select Execution Runner"], select[data-testid="runner-select"]').first();
     await expect(runnerSelect).toBeVisible();
 
     // Default runner is claude-code
@@ -83,10 +83,10 @@ test.describe('Desktop renderer — Flow Kanban features', () => {
     const modalTitle = page.getByText(/Push \/ Handoff:/i);
     await expect(modalTitle).toBeVisible();
 
-    // Verifies Tier 1 vs Tier 2 distinction in the UI
-    await expect(page.getByText('⚡ TIER 1: IN-APP RUNNERS')).toBeVisible();
+    // Verifies in-app runner vs external editor distinction in the UI
+    await expect(page.getByText(/IN-APP CLI RUNNERS/i)).toBeVisible();
     await expect(page.getByText('Runs inside Forge')).toBeVisible();
-    await expect(page.getByText('🚀 TIER 2: EXTERNAL HANDOFF')).toBeVisible();
+    await expect(page.getByText(/EXTERNAL AI EDITORS/i)).toBeVisible();
     await expect(page.getByText('Opens externally')).toBeVisible();
 
     // Intercept/route the handoff export endpoint to ensure it targets our test directory

@@ -113,15 +113,8 @@ export const ActivationChecklist: React.FC<ActivationChecklistProps> = ({
         {steps.map(step => (
           <div
             key={step.id}
+            data-testid={`checklist-step-${step.id}`}
             onClick={step.action}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                step.action();
-              }
-            }}
             className={`flex items-center justify-between p-1.5 rounded border transition-all cursor-pointer ${
               step.done
                 ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10'
