@@ -7,6 +7,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-brightgreen.svg)]()
 [![BYOK](https://img.shields.io/badge/Model-100%25%20BYOK-orange.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)]()
+[![Support](https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-ffdd00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/yassinkryleos)
 
 ---
 
@@ -247,6 +248,15 @@ Forge provides transparent, explicit safety controls with a clearly defined trus
 ## Contributing
 
 We welcome contributions of all kinds! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on code standards, local development, and the PR submission process.
+
+---
+
+## Supporting Zeloryn
+
+Zeloryn is 100% free, open-source, and local-first with no subscriptions. If Zeloryn saves you engineering hours, consider supporting ongoing development:
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/yassinkryleos)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/yassin-kryleos)
 
 ---
 

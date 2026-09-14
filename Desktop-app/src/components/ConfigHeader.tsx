@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2 } from 'lucide-react';
+import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Coffee, Heart } from 'lucide-react';
 import type { ResponseMode } from '../backend/agents';
 import { FeatureBadge } from './FeatureBadge';
 
@@ -642,6 +642,24 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         <span>GUIDE</span>
       </button>
 
+      {/* Support creator button */}
+      <button
+        onClick={() => {
+          const url = 'https://buymeacoffee.com/yassinkryleos';
+          if ((window as any).electronAPI?.openExternal) {
+            (window as any).electronAPI.openExternal(url);
+          } else {
+            window.open(url, '_blank');
+          }
+        }}
+        className="forge-secondary-button flex items-center gap-1 text-amber-400 hover:text-amber-300 border-amber-500/40"
+        title="Support Zeloryn on Buy Me a Coffee"
+        type="button"
+      >
+        <Coffee size={10} />
+        <span>SUPPORT</span>
+      </button>
+
       {/* Configurations Drawer Toggle Button */}
       <button
         onClick={() => setShowConfigDrawer(!showConfigDrawer)}
@@ -660,7 +678,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           >
             <div className="flex items-center justify-between border-b border-forge-dim pb-1.5 mb-1 shrink-0">
               <span className="text-xs font-bold font-header text-forge-neon uppercase tracking-wider">
-                Kryleos Forge Configuration
+                Zeloryn Configuration
               </span>
               <button
                 type="button"
@@ -1516,6 +1534,52 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               <span className="text-[9px] text-forge-dim">
                 Forge (default) is a professional dark theme with green accents. Matrix and Terminal are the classic green-glow retro styles.
               </span>
+            </div>
+
+            {/* Support / Sponsor Section */}
+            <div className="flex flex-col gap-1.5 border border-amber-500/30 bg-amber-950/20 p-2.5 rounded font-mono text-[9px] mt-1">
+              <div className="flex items-center justify-between">
+                <span className="text-amber-400 font-bold uppercase text-[9.5px] flex items-center gap-1">
+                  <Coffee size={11} className="text-amber-400" />
+                  <span>Support Zeloryn</span>
+                </span>
+                <span className="text-[8px] bg-black text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-bold">100% FREE & OPEN SOURCE</span>
+              </div>
+              <span className="text-forge-dim text-[8.5px]">
+                Zeloryn is completely free with no subscriptions. If it saves you engineering hours, consider buying a coffee to support development!
+              </span>
+              <div className="flex gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = 'https://buymeacoffee.com/yassinkryleos';
+                    if ((window as any).electronAPI?.openExternal) {
+                      (window as any).electronAPI.openExternal(url);
+                    } else {
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                >
+                  <Coffee size={10} />
+                  <span>Buy Me a Coffee</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = 'https://github.com/sponsors/yassin-kryleos';
+                    if ((window as any).electronAPI?.openExternal) {
+                      (window as any).electronAPI.openExternal(url);
+                    } else {
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 border border-pink-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                >
+                  <Heart size={10} />
+                  <span>GitHub Sponsor</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
