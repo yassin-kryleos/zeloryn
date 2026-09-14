@@ -14,7 +14,7 @@ cd "C:\Users\yassi\Documents\Claude\Projects\Kryleos-Forge\Desktop-app"
 
 Owner/project rules:
 
-- `../Project-Documents/` is locked and considered complete. Do not edit it unless explicitly unlocked.
+- `Project-Documents/` moved off `main` to the `internal-docs` branch (repo cleanup). Considered complete/locked there; do not edit it unless explicitly unlocked.
 - Code changes are allowed inside `Desktop-app/`.
 - Preserve local-first positioning, BYOK support, Ollama/local model workflows, command approval, abort/stop behavior, and honest preview/simulator labels.
 - PLAN is a Scratchbook/scoping space, not an implementation chatbot. CREW/FLOW/FORGE are the later review, board, and execution spaces.

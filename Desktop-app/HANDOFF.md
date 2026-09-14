@@ -12,7 +12,7 @@ This is the current continuation brief for taking the remaining UI fixes into An
 - Preserve the core Build Loop identity: PLAN -> CREW -> FLOW -> FORGE.
 - Do not turn PLAN into a pure chatbot. Keep the split model where chat edits a durable plan artifact.
 - Keep Matrix Rain / neon terminal styling as opt-in only, not the default product feel.
-- Do not edit `../Project-Documents/`; it is locked.
+- `Project-Documents/` moved off `main` to the `internal-docs` branch (repo cleanup). Do not edit it there; it is locked.
 - Preserve local-first, BYOK, Ollama, command approval, stop workflow, and PLAN Ask -> Build behavior.
 
 ### Working Directory
@@ -161,7 +161,7 @@ Warm-start brief for continuing this exact desktop app session in Claude Code.
 
 ## 0. Current Instruction From Owner
 
-- The project documentation in `../Project-Documents/` is locked and considered complete.
+- The project documentation, formerly `../Project-Documents/`, moved off `main` to the `internal-docs` branch (repo cleanup); it is locked and considered complete there.
 - Do not edit project docs unless the owner explicitly unlocks them.
 - Code changes are allowed inside `Desktop-app/`.
 - This handoff file was explicitly requested for moving the session to Claude Code.

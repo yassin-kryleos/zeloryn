@@ -240,7 +240,7 @@ Forge provides transparent, explicit safety controls with a clearly defined trus
 - [x] **Phase 5: Workflow Polish**: Enhanced Preview Deck (tabbed multi-PTY sessions, live responsive preview pane), dependency-aware automatic task scheduling, git worktree isolation per card, compliance audit export, and zero-cost remote mobile companion with offline-first ideation.
 - [x] **Phase 6: Multi-Engine Execution & External Handoff**: Pluggable in-app execution for BYOK CLI agents (Claude Code, Codex CLI) with live PTY streaming + structured external handoff (Cursor, Antigravity, VS Code, Windsurf, Clipboard).
 - [x] **Phase 7: Retrieval, Verification Loops & Merge Safety**: Post-execution CREW reviewer, 3-attempt Sentinel check retry loop with test runner integration, Tree-sitter + PageRank semantic index, worktree staging-branch merge with secret scanning, durable card rollback, and spend enforcement.
-- [x] **Phase 8: Close the Raw-CLI Approval-Gate Gap (Research & Boundary Specification)**: Comprehensive evaluation of MCP routing, PTY interactive mode, and OS-level syscall interception. Documented the explicit architectural trust boundary in `docs/phase8-approval-gate-recommendation.md`.
+- [x] **Phase 8: Close the Raw-CLI Approval-Gate Gap (Research & Boundary Specification)**: Comprehensive evaluation of MCP routing, PTY interactive mode, and OS-level syscall interception. Documented the explicit architectural trust boundary (full research writeup preserved on the `internal-docs` branch).
 
 ---
 

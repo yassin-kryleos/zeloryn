@@ -4,7 +4,7 @@
 architecture map, run/build/test commands, conventions, current status, and the full
 remaining-task list.
 
-Product spec + roadmap live in `../Project-Documents/` (sibling, outside this repo).
+Product spec + roadmap history lives on the `internal-docs` branch under `Project-Documents/` (moved off `main` to keep the public repo focused on current architecture docs).
 
 Before committing: `npm test`, `npm run lint`, and `npm run build` must all pass.
 
