@@ -1480,49 +1480,6 @@ function App() {
     }
   };
 
-  const handleAddPlanTasksToFlow = async (items: any[]) => {
-    const now = new Date().toISOString();
-    let flowTasks = tasks;
-    const flowSessionId = activeProject ? `flow_board_${activeProject.id}` : 'flow_board';
-    try {
-      const res = await fetch(`http://localhost:3001/api/sessions/${flowSessionId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.tasks)) {
-          flowTasks = data.tasks;
-        }
-      }
-    } catch {
-      // Keep current in-memory tasks when the saved FLOW board has not been created yet.
-    }
-    const existingTitles = new Set(flowTasks.map(task => task.title.toLowerCase()));
-    const importedTasks: ProjectTask[] = items
-      .filter(item => item && item.title && item.title.trim())
-      .filter(item => !existingTitles.has(item.title.trim().toLowerCase()))
-      .map((item, index) => ({
-        id: `plan_task_${Date.now()}_${index}`,
-        title: item.title.trim(),
-        status: 'todo',
-        assignee: 'Builder',
-        category: item.category || 'planning',
-        source: item.githubIssueNumber ? `GitHub Issue #${item.githubIssueNumber}` : 'PLAN import',
-        lastModified: now,
-        workspace: item.workspace,
-        blockedBy: item.blockedBy || [],
-        acceptanceCriteria: item.acceptanceCriteria && item.acceptanceCriteria.length > 0 ? item.acceptanceCriteria : undefined,
-        githubIssueNumber: item.githubIssueNumber,
-        githubRepo: item.githubRepo,
-        htmlUrl: item.htmlUrl
-      }));
-
-    const updatedTasks = [...flowTasks, ...importedTasks];
-    setTasks(updatedTasks);
-    setSelectedSessionId(flowSessionId);
-    setActiveSpace('project');
-    await persistFlowTasks(flowSessionId, updatedTasks);
-    notify(`Added ${importedTasks.length} PLAN task(s) to FLOW.`, importedTasks.length > 0 ? 'success' : 'info');
-  };
-
   const handleStartBuilding = async (payload: { projectName: string; workspaceFolder: string; description: string }) => {
     if (payload.workspaceFolder) handleUpdateConfig({ workspaceRoot: payload.workspaceFolder });
     if (payload.projectName) localStorage.setItem('matrix_project_name', payload.projectName);
@@ -2143,13 +2100,6 @@ function App() {
                 onNotify={notify}
                 onAbort={handleAbortWorkflow}
                 onCreateProject={handleCreateProject}
-                onOpenVibeTask={(taskId) => {
-                  setSelectedVibeTaskId(taskId);
-                  handleSpaceChange('vibe');
-                }}
-                onSendToForge={(taskTitle) => {
-                  handleSendQuery(taskTitle, 'code');
-                }}
               />
             </div>
           ) : activeSpace === 'project' ? (
@@ -2194,7 +2144,6 @@ function App() {
                   setWorkspacePaths(paths);
                   localStorage.setItem('matrix_workspace_paths', JSON.stringify(paths));
                 }}
-                onAddTasksToFlow={handleAddPlanTasksToFlow}
                 onSendPlanItemToForge={handleSendPlanItemToForge}
                 tasks={tasks}
                 onConfirmComplete={handleConfirmTraceComplete}

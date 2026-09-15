@@ -29,7 +29,6 @@ interface PlanningScreenProps {
   onClearInitialInput?: () => void;
   workspacePaths?: string[];
   onUpdateWorkspacePaths?: (paths: string[]) => void;
-  onAddTasksToFlow?: (items: any[]) => void;
   onSendPlanItemToForge?: (title: string) => void;
   tasks?: ProjectTask[];
   onConfirmComplete?: (taskId: string) => Promise<void> | void;
@@ -118,7 +117,6 @@ export function PlanningScreen({
   onClearInitialInput,
   workspacePaths = [],
   onUpdateWorkspacePaths,
-  onAddTasksToFlow,
   onSendPlanItemToForge,
   tasks = [],
   onConfirmComplete,
@@ -873,41 +871,6 @@ export function PlanningScreen({
     }
   };
 
-  // Push to FLOW shows a before/after diff for confirmation — board state is
-  // never mutated without the user seeing exactly what will be added/skipped.
-  const [flowDiff, setFlowDiff] = useState<{ newItems: any[]; duplicates: any[] } | null>(null);
-
-  const handlePushToFlowTrigger = async () => {
-    if (selectedItemIds.size === 0) {
-      onNotify?.('Please select at least one item to push to FLOW.', 'warning');
-      return;
-    }
-    const selectedItemsList = workspaceItems.filter(it => selectedItemIds.has(it.id));
-    let existingTitles = new Set<string>();
-    try {
-      const flowSessionId = activeProject ? `flow_board_${activeProject.id}` : 'flow_board';
-      const res = await fetch(`http://localhost:3001/api/sessions/${flowSessionId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.tasks)) {
-          existingTitles = new Set(data.tasks.map((t: any) => (t.title || '').trim().toLowerCase()));
-        }
-      }
-    } catch {
-      // Backend unreachable — diff against an empty board; the push itself re-checks.
-    }
-    const newItems = selectedItemsList.filter(it => !existingTitles.has(it.title.trim().toLowerCase()));
-    const duplicates = selectedItemsList.filter(it => existingTitles.has(it.title.trim().toLowerCase()));
-    setFlowDiff({ newItems, duplicates });
-  };
-
-  const confirmPushToFlow = () => {
-    if (!flowDiff) return;
-    onAddTasksToFlow?.(flowDiff.newItems);
-    setFlowDiff(null);
-    setSelectedItemIds(new Set());
-  };
-
   const getExportMarkdown = () => {
     const selectedItemsList = workspaceItems.filter(it => selectedItemIds.has(it.id));
     let md = `=== PLAN WORKSPACE ITEMS STAGED FOR REVIEW ===\n`;
@@ -1409,15 +1372,6 @@ export function PlanningScreen({
                 >
                   <Globe size={10} />
                   <span>GitHub Issues</span>
-                </button>
-                <button
-                  onClick={handlePushToFlowTrigger}
-                  disabled={selectedItemIds.size === 0}
-                  className="forge-btn flex items-center gap-1 cursor-pointer disabled:opacity-50 bg-forge-dark border border-forge-neon text-forge-neon"
-                  type="button"
-                >
-                  <GitBranch size={10} />
-                  <span>Push to FLOW ({selectedItemIds.size})</span>
                 </button>
                 <button
                   onClick={handlePushToCrewTrigger}
@@ -2390,66 +2344,6 @@ export function PlanningScreen({
           </div>
         )}
       </div>
-
-      {/* --- MODAL: PUSH TO FLOW CONFIRMATION DIFF --- */}
-      {flowDiff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 font-mono select-none">
-          <div className="w-full max-w-lg border border-forge-neon rounded bg-forge-panel-bg p-5 flex flex-col max-h-[80vh]">
-            <div className="flex justify-between items-center border-b border-forge-dark pb-2">
-              <span className="text-xs font-bold text-forge-neon uppercase tracking-wider">
-                Confirm push to FLOW
-              </span>
-              <button type="button" onClick={() => setFlowDiff(null)} className="text-forge-dim hover:text-white">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto my-3 space-y-3">
-              <div className="text-[10px] text-forge-dim">
-                Review what will change on the board. Nothing is added until you confirm.
-              </div>
-              {flowDiff.newItems.length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-[10px] font-bold text-forge-neon uppercase">Will be added ({flowDiff.newItems.length})</div>
-                  {flowDiff.newItems.map(it => (
-                    <div key={it.id} className="border border-forge-dark rounded px-2 py-1 text-[10px] text-forge-text flex justify-between gap-2">
-                      <span className="truncate">+ {it.title}</span>
-                      <span className="text-forge-dim uppercase shrink-0">{it.category}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {flowDiff.duplicates.length > 0 && (
-                <div className="space-y-1">
-                  <div className="text-[10px] font-bold text-amber-400 uppercase">Already on the board — skipped ({flowDiff.duplicates.length})</div>
-                  {flowDiff.duplicates.map(it => (
-                    <div key={it.id} className="border border-forge-dark rounded px-2 py-1 text-[10px] text-forge-dim truncate">
-                      = {it.title}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {flowDiff.newItems.length === 0 && (
-                <div className="text-[10px] text-amber-400">
-                  Every selected item already exists on the FLOW board — nothing to add.
-                </div>
-              )}
-            </div>
-            <div className="flex justify-end gap-2 border-t border-forge-dark pt-3">
-              <button type="button" onClick={() => setFlowDiff(null)} className="forge-btn text-[10px] px-3 py-1">
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmPushToFlow}
-                disabled={flowDiff.newItems.length === 0}
-                className="forge-btn text-[10px] px-3 py-1 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Add {flowDiff.newItems.length} task(s) to FLOW
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* --- MODAL 1: EXTRACTION MODAL --- */}
       {isExtractModalOpen && (

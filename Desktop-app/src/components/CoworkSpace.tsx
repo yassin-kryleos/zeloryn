@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Play, Clock, Trash2, ArrowRight, ArrowLeft, Terminal, ClipboardList, Code, FolderOpen, UserPlus, ShieldAlert, X, GitBranch, Download, Sparkles, ExternalLink } from 'lucide-react';
+import { Plus, Clock, Trash2, ArrowRight, ArrowLeft, Terminal, ClipboardList, Code, FolderOpen, UserPlus, ShieldAlert, X, GitBranch, Download, ExternalLink } from 'lucide-react';
 import type { AgentLog, AgentRole } from '../backend/agents';
 import type { ProjectTask } from '../backend/db';
 import { FileBrowser } from './FileBrowser';
@@ -118,8 +118,6 @@ interface CoworkSpaceProps {
   onNotify?: (message: string, kind?: 'success' | 'error' | 'warning' | 'info') => void;
   onAbort?: () => void;
   onCreateProject?: (name: string, folderPath: string, gitUrl: string, description: string) => void;
-  onOpenVibeTask?: (taskId: string) => void;
-  onSendToForge?: (taskTitle: string) => void;
 }
 
 export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
@@ -141,9 +139,7 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
   onApproveCommand,
   onNotify,
   onAbort,
-  onCreateProject,
-  onOpenVibeTask,
-  onSendToForge
+  onCreateProject
 }) => {
   const [taskTitle, setTaskTitle] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('Keymaker');
@@ -607,28 +603,6 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
                         >
                           + Chat
                         </button>
-                        {t.status !== 'done' && onSendToForge && (
-                          <button
-                            onClick={() => onSendToForge(`Implement task: ${t.title}`)}
-                            disabled={isStreaming}
-                            className="px-1 py-0.2 rounded border border-forge-neon/40 bg-forge-neon/15 hover:bg-forge-neon/30 text-forge-neon text-[8px] font-mono font-bold flex items-center gap-0.5 cursor-pointer disabled:opacity-40"
-                            title="Run task in Forge CLI"
-                          >
-                            <Play size={7} />
-                            <span>Run</span>
-                          </button>
-                        )}
-                        {t.status !== 'done' && onOpenVibeTask && (
-                          <button
-                            onClick={() => onOpenVibeTask(t.id)}
-                            disabled={isStreaming}
-                            className="px-1 py-0.2 rounded border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/30 text-emerald-400 text-[8px] font-mono font-bold flex items-center gap-0.5 cursor-pointer disabled:opacity-40"
-                            title="Build task visually in Vibe Studio"
-                          >
-                            <Sparkles size={7} />
-                            <span>Vibe</span>
-                          </button>
-                        )}
                         <button
                           onClick={() => handleDeleteTask(t.id)}
                           className="text-red-400 hover:text-white p-0.5"
