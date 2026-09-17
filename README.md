@@ -3,12 +3,11 @@
 > **The Free, Open-Source, Local-First AI Software Engineering Cockpit.**  
 > Kanban-style task execution wrapped around terminal-capable AI coding agents.
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-brightgreen.svg)]()
 [![BYOK](https://img.shields.io/badge/Model-100%25%20BYOK-orange.svg)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)]()
-[![Buy Me A Coffee](https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-ffdd00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/yassinkryleos)
-[![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/yassinkryleos)
+[![Contributing](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ---
 
@@ -310,17 +309,15 @@ We welcome contributions of all kinds! Please read [CONTRIBUTING.md](CONTRIBUTIN
 
 ---
 
-## Supporting Zeloryn
+## Community & Sponsorship
 
-Zeloryn is 100% free, open-source, and local-first with no subscriptions. If Zeloryn saves you engineering hours, consider supporting ongoing development:
+Zeloryn is 100% free and open-source software licensed under the **GNU General Public License v3.0**.
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/yassinkryleos)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-ff5e5b?style=for-the-badge&logo=kofi&logoColor=white)](https://ko-fi.com/yassinkryleos)
-[![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-ea4aaa?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://github.com/sponsors/yassin-kryleos)
-[![PayPal](https://img.shields.io/badge/PayPal.Me-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/yassinkryleos)
+- **Contribute**: Read [CONTRIBUTING.md](CONTRIBUTING.md) to report bugs, suggest features, or submit pull requests.
+- **GitHub Sponsors**: If you or your organization wish to support ongoing development, maintenance, and community infrastructure, you can sponsor the project on [GitHub Sponsors](https://github.com/sponsors/yassin-kryleos).
 
 ---
 
 ## License
 
-Zeloryn is distributed under the **Apache License 2.0**. See [LICENSE](LICENSE) for details.
+Zeloryn is distributed under the **GNU General Public License v3.0 (GPL-3.0-only)**. See [LICENSE](LICENSE) for details.

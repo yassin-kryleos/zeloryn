@@ -8,7 +8,7 @@
     "email": "yassin@kryleos.com"
   },
   "homepage": "https://github.com/yassin-kryleos/zeloryn",
-  "license": "Apache-2.0",
+  "license": "GPL-3.0-only",
   "type": "module",
   "main": "src/backend/electron.cjs",
   "scripts": {

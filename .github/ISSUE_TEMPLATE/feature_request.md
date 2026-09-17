@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea or architectural improvement for Kryleos Forge
+about: Suggest an idea or architectural improvement for Zeloryn
 title: '[FEAT] '
 labels: ['enhancement', 'triage']
 assignees: ''
@@ -15,7 +15,7 @@ Describe the solution you would like to see implemented.
 *Detail the user flow, UI changes, or architecture.*
 
 ## Alignment with Local-First & BYOK Philosophy
-How does this feature align with Kryleos Forge's open-source, local-first, and zero-telemetry principles?
+How does this feature align with Zeloryn's open-source, local-first, and zero-telemetry principles?
 
 ## Alternatives Considered
 Describe any alternative solutions or workarounds you have considered.

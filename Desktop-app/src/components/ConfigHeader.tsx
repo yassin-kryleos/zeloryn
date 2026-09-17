@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Coffee, Heart, Cpu, ChevronDown } from 'lucide-react';
+import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Heart, Cpu, ChevronDown } from 'lucide-react';
 import type { ResponseMode } from '../backend/agents';
 import { FeatureBadge } from './FeatureBadge';
 import { APP_VERSION } from '../version';
@@ -1072,24 +1072,6 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
           </div>
         )}
       </div>
-
-      {/* Support creator button */}
-      <button
-        onClick={() => {
-          const url = 'https://buymeacoffee.com/yassinkryleos';
-          if ((window as any).electronAPI?.openExternal) {
-            (window as any).electronAPI.openExternal(url);
-          } else {
-            window.open(url, '_blank');
-          }
-        }}
-        className="forge-secondary-button flex items-center gap-1 text-amber-400 hover:text-amber-300 border-amber-500/40"
-        title="Support Zeloryn on Buy Me a Coffee"
-        type="button"
-      >
-        <Coffee size={10} />
-        <span>SUPPORT</span>
-      </button>
 
       {/* Configurations Drawer Toggle Button */}
       <button
@@ -2446,77 +2428,63 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               </div>
             </div>
 
-            {/* Support / Sponsor Section */}
-            <div className="flex flex-col gap-1.5 border border-amber-500/30 bg-amber-950/20 p-2.5 rounded font-mono text-[9px] mt-1">
+            {/* Open Source & Community Section */}
+            <div className="flex flex-col gap-1.5 border border-forge-dark bg-black/40 p-2.5 rounded font-mono text-[9px] mt-1">
               <div className="flex items-center justify-between">
-                <span className="text-amber-400 font-bold uppercase text-[9.5px] flex items-center gap-1">
-                  <Coffee size={11} className="text-amber-400" />
-                  <span>Support Zeloryn</span>
+                <span className="text-forge-neon font-bold uppercase text-[9.5px] flex items-center gap-1.5">
+                  <Globe size={11} className="text-forge-neon" />
+                  <span>Free & Open Source</span>
                 </span>
-                <span className="text-[8px] bg-black text-amber-300 border border-amber-500/40 px-1.5 py-0.5 rounded font-bold">100% FREE & OPEN SOURCE</span>
+                <span className="text-[8px] bg-forge-very-dark text-forge-neon border border-forge-neon/40 px-1.5 py-0.5 rounded font-bold">GPL-3.0</span>
               </div>
               <span className="text-forge-dim text-[8.5px]">
-                Zeloryn is completely free with no subscriptions. If it saves you engineering hours, consider buying a coffee to support development!
+                Zeloryn is copyleft open source. Contribute code, report issues, or star the project on GitHub!
               </span>
               <div className="flex flex-wrap gap-2 mt-1">
                 <button
                   type="button"
                   onClick={() => {
-                    const url = 'https://buymeacoffee.com/yassinkryleos';
+                    const url = 'https://github.com/yassin-kryleos/zeloryn';
                     if ((window as any).electronAPI?.openExternal) {
                       (window as any).electronAPI.openExternal(url);
                     } else {
                       window.open(url, '_blank');
                     }
                   }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-forge-very-dark hover:bg-forge-dark text-forge-text border border-forge-dark hover:border-forge-neon rounded text-[9px] font-bold cursor-pointer transition-colors"
                 >
-                  <Coffee size={10} />
-                  <span>Buy Me a Coffee</span>
+                  <Globe size={10} />
+                  <span>GitHub Repository</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    const url = 'https://ko-fi.com/yassinkryleos';
+                    const url = 'https://github.com/yassin-kryleos/zeloryn/issues';
                     if ((window as any).electronAPI?.openExternal) {
                       (window as any).electronAPI.openExternal(url);
                     } else {
                       window.open(url, '_blank');
                     }
                   }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-forge-very-dark hover:bg-forge-dark text-forge-text border border-forge-dark hover:border-forge-neon rounded text-[9px] font-bold cursor-pointer transition-colors"
                 >
-                  <Coffee size={10} />
-                  <span>Ko-fi</span>
+                  <BookOpen size={10} />
+                  <span>Issues & Bugs</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    const url = 'https://github.com/sponsors/yassin-kryleos';
+                    const url = 'https://github.com/yassin-kryleos/zeloryn/blob/main/CONTRIBUTING.md';
                     if ((window as any).electronAPI?.openExternal) {
                       (window as any).electronAPI.openExternal(url);
                     } else {
                       window.open(url, '_blank');
                     }
                   }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 border border-pink-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-forge-very-dark hover:bg-forge-dark text-forge-text border border-forge-dark hover:border-forge-neon rounded text-[9px] font-bold cursor-pointer transition-colors"
                 >
                   <Heart size={10} />
-                  <span>GitHub Sponsor</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const url = 'https://paypal.me/yassinkryleos';
-                    if ((window as any).electronAPI?.openExternal) {
-                      (window as any).electronAPI.openExternal(url);
-                    } else {
-                      window.open(url, '_blank');
-                    }
-                  }}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
-                >
-                  <span>PayPal.me</span>
+                  <span>Contributing Guide</span>
                 </button>
               </div>
             </div>

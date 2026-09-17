@@ -1,6 +1,7 @@
 {
   "name": "mobile-app",
   "version": "1.0.0",
+  "license": "GPL-3.0-only",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~56.0.15",

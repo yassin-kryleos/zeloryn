@@ -23,7 +23,7 @@ If applicable, add screenshots or recordings to help explain your problem.
 
 ## Environment
 - **Operating System**: [e.g. Windows 11, macOS Sequoia, Ubuntu 24.04]
-- **Kryleos Forge Version / Commit**: [e.g. 0.1.0 or commit hash]
+- **Zeloryn Version / Commit**: [e.g. 0.1.0 or commit hash]
 - **Node.js Version**: [e.g. v20.12.0]
 - **Agent CLI** (if applicable): [e.g. Claude Code CLI v0.2.x]
 - **Model Provider**: [e.g. Anthropic, OpenAI, Ollama, Gemini]
