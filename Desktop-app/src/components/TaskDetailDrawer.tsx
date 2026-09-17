@@ -161,6 +161,8 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close Drawer"
+            data-testid="close-task-drawer"
             className="p-1 rounded hover:bg-white/10 text-forge-dim hover:text-white cursor-pointer"
             title="Close Drawer (Esc)"
           >

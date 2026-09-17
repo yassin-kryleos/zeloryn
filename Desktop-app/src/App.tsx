@@ -409,6 +409,7 @@ function App() {
   const [commandPendingApproval, setCommandPendingApproval] = useState<{ tool: string; command: string; commandId?: string } | null>(null);
 
   const selectedSessionIdRef = useRef<string | null>(null);
+  const topbarRef = useRef<HTMLDivElement>(null);
   const wsConfigRef = useRef({
     apiKey,
     geminiApiKey,
@@ -865,6 +866,9 @@ function App() {
   const handleSpaceChange = useCallback((space: 'vibe' | 'code' | 'chat' | 'cowork' | 'project' | 'plan') => {
     if (isStreaming) return;
     setActiveSpace(space);
+    if (topbarRef.current) {
+      topbarRef.current.scrollLeft = 0;
+    }
     try {
       localStorage.setItem('matrix_active_space', space);
     } catch {
@@ -1724,17 +1728,23 @@ function App() {
       <div className="app-container">
         
         {/* Sleek Top Config Bar - Non-Wrapping 3-Zone Layout */}
-        <div className="forge-topbar flex items-center justify-between px-3 py-1 font-mono text-xs flex-nowrap select-none gap-2 overflow-x-auto">
+        <div
+          ref={topbarRef}
+          onScroll={(e) => { e.currentTarget.scrollLeft = 0; }}
+          className="forge-topbar flex items-center justify-between px-3 py-1 font-mono text-xs flex-nowrap select-none gap-2 overflow-hidden w-full max-w-full"
+        >
           {/* Zone 1: Left - Workspace Brand & Context */}
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="forge-secondary-button text-[10px] px-1.5 py-0.5"
+              className="forge-secondary-button text-[10px] px-1.5 py-0.5 shrink-0"
               title="Toggle Sidebar"
             >
               {sidebarOpen ? 'Hide' : 'Show'}
             </button>
-            <ZelorynLockup size="sm" />
+            <div className="shrink-0 flex items-center">
+              <ZelorynLockup size="sm" />
+            </div>
 
             <div className="flex items-center gap-1.5 ml-1 select-none text-[10px] font-mono">
               <button

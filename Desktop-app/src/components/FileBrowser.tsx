@@ -510,7 +510,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
 
       {/* Git Integration Panel */}
       {gitActive && (
-        <div className="mt-3 pt-3 border-t border-forge-dark flex flex-col gap-2 bg-forge-very-dark bg-opacity-70 p-2 rounded">
+        <div className="mt-3 pt-3 border-t border-forge-dark flex flex-col gap-2 bg-forge-very-dark/80 border border-forge-dark/50 p-2 rounded">
           <div className="flex items-center justify-between text-[9px] text-forge-neon tracking-widest font-bold font-mono">
             <span>Git branch // {gitBranch}</span>
             <div className="flex gap-2">
@@ -528,7 +528,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
                 <div key={gf.file} className="flex items-center justify-between gap-2 hover:bg-forge-very-dark p-0.5 rounded">
                   <span className="truncate text-forge-text" title={gf.file}>{gf.file}</span>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className={`text-[8px] uppercase font-bold px-1 border rounded ${gf.state === 'staged' ? 'text-emerald-400 border-emerald-800 bg-forge-very-dark bg-opacity-40' : gf.state === 'modified' ? 'text-amber-400 border-amber-800 bg-forge-very-dark bg-opacity-40' : 'text-gray-400 border-gray-800'}`}>
+                    <span className={`text-[8px] uppercase font-bold px-1 border rounded ${gf.state === 'staged' ? 'text-emerald-400 border-emerald-800 bg-emerald-950/40' : gf.state === 'modified' ? 'text-amber-400 border-amber-800 bg-amber-950/40' : 'text-gray-400 border-gray-800'}`}>
                       {gf.state}
                     </span>
                     {gf.state !== 'staged' && (
@@ -546,14 +546,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
             </div>
           )}
 
-          <form onSubmit={handleCommit} className="flex gap-1 pt-1 border-t border-forge-very-dark">
+          <form onSubmit={handleCommit} className="flex gap-1 pt-1 border-t border-forge-dark">
             <input
               type="text"
               placeholder="Commit message..."
               value={commitMessage}
               onChange={(e) => setCommitMessage(e.target.value)}
               disabled={gitLoading}
-              className="flex-1 bg-forge-very-dark border border-forge-dark text-[9px] text-forge-neon font-mono px-1 rounded outline-none"
+              className="flex-1 bg-forge-bg border border-forge-dark text-[9px] text-forge-text placeholder:text-forge-dim font-mono px-1.5 py-0.5 rounded outline-none"
             />
             <button
               type="submit"

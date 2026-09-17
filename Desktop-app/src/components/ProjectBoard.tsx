@@ -741,17 +741,22 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           )}
         </div>
         {isBlocked && (
-          <div className="text-[8px] text-red-300 mb-1.5">
+          <div className="text-[8px] text-red-400 mb-1">
             Waiting on: {blockers.map(id => taskMap.get(id)?.title || id).join(', ')}
           </div>
         )}
-        {routing.matchType === 'fallback' && task.status !== 'done' && (
-          <div className="text-[8px] text-amber-300 mb-1.5" title="Install a matching specialist agent in CREW to route this category.">
-            No {routing.category} specialist — using general agent.
-          </div>
-        )}
         <div className="flex items-center justify-between text-[9px]">
-          <span className={getAssigneeColor(task.assignee)}>[{task.assignee}]</span>
+          <div className="flex items-center gap-1.5">
+            <span className={getAssigneeColor(task.assignee)}>[{task.assignee}]</span>
+            {routing.matchType === 'fallback' && task.status !== 'done' && (
+              <span
+                className="text-[8px] text-amber-500/80 dark:text-amber-400/80 border border-amber-500/30 px-1 py-0.2 rounded font-mono"
+                title={`No dedicated ${routing.category} specialist in Crew — using general agent.`}
+              >
+                general
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 opacity-70 group-hover:opacity-100 transition-opacity">
             {task.status !== 'todo' && (
               <button onClick={() => moveTask(task.id, 'backward')} title="Move backward" className="text-forge-neon hover:text-white">
@@ -1024,7 +1029,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleAddTask} className="grid grid-cols-[1fr_130px_110px_auto] gap-2 mb-3 forge-surface p-2">
+        <form onSubmit={handleAddTask} className="flex items-center gap-2 mb-3 forge-surface p-2">
           <input
             type="text"
             placeholder="Add new task..."
@@ -1033,13 +1038,13 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
               setTaskTitle(e.target.value);
               setTaskCategory(inferCategory(e.target.value));
             }}
-            className="forge-input text-xs text-forge-text px-2 py-1 placeholder:text-forge-dark font-mono rounded"
+            className="forge-input flex-1 min-w-0 text-xs text-forge-text px-2.5 py-1.5 placeholder:text-forge-dark font-mono rounded"
           />
           <select
             aria-label="Task assignee"
             value={taskAssignee}
             onChange={(e) => setTaskAssignee(e.target.value)}
-            className="bg-forge-very-dark border border-forge-dark text-[10px] text-forge-neon px-1 rounded font-mono"
+            className="w-36 bg-forge-very-dark border border-forge-dark text-[10px] text-forge-neon px-2 py-1.5 rounded font-mono shrink-0 cursor-pointer"
           >
             <optgroup label="Core Roles">
               {coreAssignees.map(a => (
@@ -1060,11 +1065,11 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
             aria-label="Task category"
             value={taskCategory}
             onChange={(e) => setTaskCategory(e.target.value)}
-            className="bg-forge-very-dark border border-forge-dark text-xs text-forge-neon px-1 rounded font-mono"
+            className="w-28 bg-forge-very-dark border border-forge-dark text-xs text-forge-neon px-2 py-1.5 rounded font-mono shrink-0 cursor-pointer"
           >
             {categories.map(category => <option key={category} value={category}>{category}</option>)}
           </select>
-          <button type="submit" className="forge-btn text-[10px] flex items-center gap-1">
+          <button type="submit" className="forge-btn text-[10px] px-3 py-1.5 flex items-center gap-1 shrink-0 cursor-pointer">
             <Plus size={10} />
             <span>Add task</span>
           </button>

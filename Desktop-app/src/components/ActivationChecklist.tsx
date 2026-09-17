@@ -68,12 +68,12 @@ export const ActivationChecklist: React.FC<ActivationChecklistProps> = ({
             // ignore
           }
         }}
-        className="fixed bottom-3 right-3 z-40 border border-forge-neon/50 bg-forge-panel-bg hover:bg-forge-neon/15 text-forge-neon shadow-lg rounded-md px-2.5 py-1.5 font-mono text-[10px] font-bold flex items-center gap-1.5 cursor-pointer pointer-events-auto transition-all select-none"
-        style={{ bottom: '0.75rem', right: '0.75rem' }}
+        className="fixed bottom-2 right-2 z-40 border border-forge-neon/50 bg-forge-panel-bg hover:bg-forge-neon/15 text-forge-neon shadow-lg rounded px-2 py-1 font-mono text-[9px] font-bold flex items-center gap-1 cursor-pointer pointer-events-auto transition-all select-none backdrop-blur-md"
+        data-testid="activation-checklist-pill"
         title="Expand activation checklist"
         aria-label="Expand activation checklist"
       >
-        <CheckCircle size={12} className="text-forge-neon" />
+        <CheckCircle size={11} className="text-forge-neon" />
         <span>ACTIVATION ({completedCount}/3)</span>
       </button>
     );
@@ -82,7 +82,6 @@ export const ActivationChecklist: React.FC<ActivationChecklistProps> = ({
   return (
     <div
       className="fixed bottom-3 right-3 z-40 w-72 border border-forge-neon/40 bg-forge-panel-bg shadow-xl rounded-md p-3 font-mono text-[10px] space-y-2 pointer-events-auto backdrop-blur-sm select-none"
-      style={{ bottom: '0.75rem', right: '0.75rem' }}
       role="region"
       aria-label="Activation checklist"
     >
@@ -93,6 +92,7 @@ export const ActivationChecklist: React.FC<ActivationChecklistProps> = ({
         </div>
         <button
           type="button"
+          data-testid="dismiss-activation-checklist"
           onClick={() => {
             setDismissed(true);
             try {

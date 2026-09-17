@@ -107,14 +107,14 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
 
   return (
     <div className="fixed inset-0 z-[80] flex justify-end bg-black/60 backdrop-blur-xs font-mono select-none">
-      <div className="w-full max-w-2xl bg-zinc-950 border-l border-zinc-800 shadow-2xl h-full flex flex-col animate-in slide-in-from-right duration-200">
+      <div className="w-full max-w-2xl bg-forge-very-dark border-l border-forge-dark shadow-2xl h-full flex flex-col animate-in slide-in-from-right duration-200">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
+        <div className="px-4 py-3 border-b border-forge-dark flex items-center justify-between bg-forge-panel-bg">
           <div className="flex items-center gap-2">
             <ShieldAlert size={16} className="text-amber-400" />
             <div>
-              <span className="text-sm font-bold text-zinc-100 block">Diff &amp; Undo Safety Drawer</span>
-              <span className="text-[10px] text-zinc-400">
+              <span className="text-sm font-bold text-forge-text block">Diff &amp; Undo Safety Drawer</span>
+              <span className="text-[10px] text-forge-dim">
                 Branch: <code className="text-emerald-400 font-semibold">{currentBranch}</code> • {totalModified} modified file(s)
               </span>
             </div>
@@ -125,7 +125,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
               onClick={fetchDiffStatus}
               disabled={loading}
               title="Refresh working changes"
-              className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors"
+              className="text-forge-dim hover:text-white p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
             >
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             </button>
@@ -133,7 +133,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
               type="button"
               data-testid="close-diff-drawer"
               onClick={onClose}
-              className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors"
+              className="text-forge-dim hover:text-white p-1 rounded hover:bg-white/10 transition-colors cursor-pointer"
             >
               <X size={16} />
             </button>
@@ -165,18 +165,18 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
               return (
                 <div
                   key={f.filePath}
-                  className="border border-zinc-800 rounded-lg overflow-hidden bg-zinc-900/30"
+                  className="border border-forge-dark rounded-lg overflow-hidden bg-forge-panel-bg/40"
                 >
                   {/* File Bar */}
-                  <div className="px-3 py-2.5 flex items-center justify-between gap-2 bg-zinc-900/70 border-b border-zinc-800">
+                  <div className="px-3 py-2.5 flex items-center justify-between gap-2 bg-forge-panel-bg border-b border-forge-dark">
                     <button
                       type="button"
                       onClick={() => toggleExpand(f.filePath)}
                       className="flex items-center gap-2 text-left min-w-0 flex-1 hover:text-white transition-colors cursor-pointer"
                     >
-                      {isExpanded ? <ChevronDown size={14} className="text-zinc-400 shrink-0" /> : <ChevronRight size={14} className="text-zinc-400 shrink-0" />}
-                      <FileCode size={14} className="text-zinc-400 shrink-0" />
-                      <span className="text-xs font-semibold text-zinc-200 truncate">{f.filePath}</span>
+                      {isExpanded ? <ChevronDown size={14} className="text-forge-dim shrink-0" /> : <ChevronRight size={14} className="text-forge-dim shrink-0" />}
+                      <FileCode size={14} className="text-forge-dim shrink-0" />
+                      <span className="text-xs font-semibold text-forge-text truncate">{f.filePath}</span>
                       <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded border ${stateColor} font-bold`}>
                         {f.state}
                       </span>
@@ -196,7 +196,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
                           <button
                             type="button"
                             onClick={() => setConfirmRevertFile(null)}
-                            className="text-[9px] text-zinc-400 hover:text-white px-1"
+                            className="text-[9px] text-forge-dim hover:text-white px-1 cursor-pointer"
                           >
                             Cancel
                           </button>
@@ -232,7 +232,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
                       {diffText ? (
                         <pre className="leading-tight m-0">
                           {diffText.split('\n').map((line, idx) => {
-                            let lineClass = 'text-zinc-400';
+                            let lineClass = 'text-forge-dim';
                             if (line.startsWith('+') && !line.startsWith('+++')) lineClass = 'text-emerald-400 bg-emerald-950/20';
                             else if (line.startsWith('-') && !line.startsWith('---')) lineClass = 'text-red-400 bg-red-950/20';
                             else if (line.startsWith('@@')) lineClass = 'text-cyan-400 font-bold';
@@ -244,7 +244,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
                           })}
                         </pre>
                       ) : (
-                        <div className="text-zinc-500 italic p-2">No textual diff available for this file.</div>
+                        <div className="text-forge-dim italic p-2">No textual diff available for this file.</div>
                       )}
                     </div>
                   )}
@@ -255,12 +255,12 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-zinc-800 bg-zinc-900/40 flex items-center justify-between text-[11px] text-zinc-400">
+        <div className="px-4 py-3 border-t border-forge-dark bg-forge-panel-bg flex items-center justify-between text-[11px] text-forge-dim">
           <span>Safe Undo Protection: All changes can be reverted anytime</span>
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs transition-colors cursor-pointer"
+            className="forge-secondary-button text-xs px-3 py-1"
           >
             Close
           </button>

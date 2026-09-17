@@ -805,7 +805,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     <div className="flex items-center gap-2 font-mono text-xs select-none flex-nowrap justify-end shrink-0">
       
       {/* Model Selector Dropdown */}
-      <div className="flex items-center gap-1 border border-forge-dark rounded px-1 py-0.5 bg-black/40 hover:border-forge-neon/40 transition-colors">
+      <div className="flex items-center gap-1 border border-forge-dark rounded px-1 py-0.5 bg-black/40 hover:border-forge-neon/40 transition-colors max-w-[150px] sm:max-w-[190px]">
         <Cpu size={10} className="text-forge-neon shrink-0" />
         <select
           aria-label="AI model"
@@ -818,7 +818,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
               onUpdateConfig({ model: e.target.value });
             }
           }}
-          className="bg-transparent border-0 text-[11px] text-forge-text font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
+          className="bg-transparent border-0 text-[11px] text-forge-text font-mono font-bold outline-none px-1 py-0.5 cursor-pointer max-w-[125px] sm:max-w-[165px] truncate"
         >
           {showGemini && (
             <optgroup label="Google Gemini">
@@ -911,13 +911,13 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       )}
 
       {/* Fast Model Selector Dropdown (Phase 9b: Cost-aware routing) */}
-      <div className="flex items-center gap-1 border border-forge-dark rounded px-1 py-0.5 bg-black/40 hover:border-forge-cyan/40 transition-colors" title="Fast Model override for triage, Scope Guard review, and diff checks">
+      <div className="flex items-center gap-1 border border-forge-dark rounded px-1 py-0.5 bg-black/40 hover:border-forge-cyan/40 transition-colors max-w-[150px] sm:max-w-[190px]" title="Fast Model override for triage, Scope Guard review, and diff checks">
         <Zap size={10} className="text-forge-cyan shrink-0" />
         <select
           aria-label="Fast AI model"
           value={fastModel}
           onChange={(e) => onUpdateConfig({ fastModel: e.target.value })}
-          className="bg-transparent border-0 text-[11px] text-forge-cyan font-mono font-bold outline-none px-1 py-0.5 cursor-pointer"
+          className="bg-transparent border-0 text-[11px] text-forge-cyan font-mono font-bold outline-none px-1 py-0.5 cursor-pointer max-w-[125px] sm:max-w-[165px] truncate"
         >
           <option value="">Fast Model: (Default / Same)</option>
           {showGemini && (

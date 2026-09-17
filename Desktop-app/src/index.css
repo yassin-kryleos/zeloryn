@@ -348,6 +348,9 @@ code {
   height: 100vh;
   position: relative;
   z-index: 10;
+  overflow-x: clip;
+  width: 100%;
+  max-width: 100vw;
 }
 
 /* Main layouts */
@@ -589,6 +592,10 @@ body.theme-forge-legacy option {
   border-bottom: 1px solid var(--border-color);
   background: var(--forge-panel-bg);
   color: var(--forge-text);
+  overflow-x: clip;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
 }
 
 .forge-brand {
@@ -800,6 +807,7 @@ body.theme-forge-legacy .forge-tab-active {
 /* Arbitrary-value position/z-index utilities */
 .top-\[48px\] { top: 48px !important; }
 .z-\[70\] { z-index: 70 !important; }
+.z-\[80\] { z-index: 80 !important; }
 .z-\[9999\] { z-index: 9999 !important; }
 .top-2 { top: 0.5rem !important; }
 .top-3 { top: 0.75rem !important; }

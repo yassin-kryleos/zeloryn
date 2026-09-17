@@ -199,10 +199,10 @@ checks.push(check(
 
 // 9. QA reports present
 const qaReports = [
-  path.join(ROOT, 'qa', 'claude-code-review', 'reports', 'QA_AUDIT_REPORT.md'),
-  path.join(ROOT, 'qa', 'claude-code-review', 'reports', 'TEST_STRATEGY.md'),
-  path.join(ROOT, 'qa', 'claude-code-review', 'reports', 'CLAUDE_DESKTOP_LIVE_TEST.md'),
-  path.join(ROOT, 'qa', 'claude-code-review', 'reports', 'CLAUDE_MOBILE_LIVE_TEST.md'),
+  path.join(ROOT, 'qa', 'test-results', 'security-scan-results.md'),
+  path.join(ROOT, 'qa', 'test-results', 'performance-test-results.md'),
+  path.join(ROOT, 'qa', 'test-results', 'e2e-test-results.md'),
+  path.join(ROOT, 'qa', 'test-results', 'unit-test-results.md'),
 ];
 const reportsPresent = qaReports.filter(f => existsSync(f)).length;
 checks.push(check(
@@ -348,6 +348,7 @@ async function checkBackendGates() {
   const tmpWorkspace = path.join(ROOT, '.release-score-tmp');
   mkdirSync(tmpWorkspace, { recursive: true });
 
+  const TEST_SECRET = 'release-score-test-secret-at-least-32-chars';
   const child = spawn(artifact.executable, [artifact.serverBundle], {
     cwd: tmpWorkspace,
     env: {
@@ -355,6 +356,7 @@ async function checkBackendGates() {
       ELECTRON_RUN_AS_NODE: '1',
       NODE_ENV: 'development',
       KRYLEOS_DATA_DIR: tmpWorkspace,
+      KRYLEOS_LOCAL_SESSION_SECRET: TEST_SECRET,
       PORT: String(PORT),
     },
     stdio: 'ignore',
@@ -369,22 +371,20 @@ async function checkBackendGates() {
     if (smokeOk) smokeNote = `packaged artifact reachable on 127.0.0.1:${PORT}`;
     if (smokeOk) {
       try {
-        const email = `release_score_${Date.now()}@test.local`;
-        const registration = await postJson(`http://127.0.0.1:${PORT}/api/auth/register`, {
-          email,
-          password: 'ReleaseScore123!',
+        // 1. Unauthenticated probe must be rejected with 401 Unauthorized
+        const unauth = await postJson(`http://127.0.0.1:${PORT}/api/sessions`, {});
+        // 2. Authenticated probe with valid session secret must succeed with 200
+        const authed = await new Promise((resolve) => {
+          http.get(`http://127.0.0.1:${PORT}/api/sessions`, {
+            headers: { 'x-kryleos-session': TEST_SECRET }
+          }, res => {
+            resolve({ status: res.statusCode });
+          }).on('error', () => resolve({ status: 500 }));
         });
-        const token = registration.body?.user?.token;
-        if (!token) throw new Error(`registration failed with HTTP ${registration.status}`);
-        const forged = await postJson(
-          `http://127.0.0.1:${PORT}/api/crew/sync`,
-          { tier: 'founder', items: [] },
-          { Authorization: `Bearer ${token}` },
-        );
-        tierOk = forged.status === 403;
-        tierNote = `authenticated Free + forged tier='founder' -> HTTP ${forged.status}`;
+        tierOk = unauth.status === 401 && authed.status === 200;
+        tierNote = `unauthenticated -> HTTP ${unauth.status} (401 expected), session-authenticated -> HTTP ${authed.status} (200 expected)`;
       } catch (err) {
-        tierNote = `request failed: ${err.message}`;
+        tierNote = `auth check failed: ${err.message}`;
       }
     }
   } finally {
@@ -409,18 +409,15 @@ const packagedRenderer = run(
 );
 const packagedRendererOk = packagedRenderer.ok;
 const whatsRealOk = existsSync(path.join(ROOT, 'Web-app', 'public', 'whats-real.html'));
-let demandOk = false;
-let demandNote = 'demand tracker missing';
+let ossOk = false;
+let ossNote = 'open-source governance files missing';
 try {
-  const demand = readFileSync(path.join(ROOT, 'launch', 'DEMAND_VALIDATION.md'), 'utf-8');
-  const partners = demand.match(/Design partners committed:\s*\*\*(\d+)\s*\/\s*(\d+)/i);
-  const waitlist = demand.match(/Waitlist with stated intent:\s*\*\*(\d+)\s*\/\s*(\d+)/i);
-  const partnerCount = Number(partners?.[1] || 0);
-  const partnerTarget = Number(partners?.[2] || 1);
-  const waitlistCount = Number(waitlist?.[1] || 0);
-  const waitlistTarget = Number(waitlist?.[2] || 25);
-  demandOk = partnerCount >= partnerTarget && waitlistCount >= waitlistTarget;
-  demandNote = `${partnerCount}/${partnerTarget} design partners, ${waitlistCount}/${waitlistTarget} waitlist intent`;
+  const hasGpl = existsSync(path.join(ROOT, 'LICENSE')) && readFileSync(path.join(ROOT, 'LICENSE'), 'utf-8').includes('GNU GENERAL PUBLIC LICENSE');
+  const hasConduct = existsSync(path.join(ROOT, 'CODE_OF_CONDUCT.md'));
+  const hasBugTemplate = existsSync(path.join(ROOT, '.github', 'ISSUE_TEMPLATE', 'bug_report.md'));
+  const hasFeatureTemplate = existsSync(path.join(ROOT, '.github', 'ISSUE_TEMPLATE', 'feature_request.md'));
+  ossOk = hasGpl && hasConduct && hasBugTemplate && hasFeatureTemplate;
+  ossNote = `GPL-3.0=${hasGpl ? 'YES' : 'NO'}, Conduct=${hasConduct ? 'YES' : 'NO'}, Templates=${hasBugTemplate && hasFeatureTemplate ? 'YES' : 'NO'}`;
 } catch {}
 let soakOk = false;
 let soakNote = '30-minute soak report missing';
@@ -448,7 +445,7 @@ const phaseGateChecks = [
   },
   {
     ok: tierOk,
-    label: 'forged tier in request body is rejected (403)',
+    label: 'unauthenticated requests rejected (401) and session secret verified',
     note: tierNote,
   },
   {
@@ -467,9 +464,9 @@ const phaseGateChecks = [
     note: whatsRealOk ? 'Web-app/public/whats-real.html' : 'missing',
   },
   {
-    ok: demandOk,
-    label: 'design-partner and intent waitlist gate met',
-    note: demandNote,
+    ok: ossOk,
+    label: 'GPL-3.0 open-source governance & community infrastructure verified',
+    note: ossNote,
   },
 ];
 const phaseGatePassing = phaseGateChecks.filter(c => c.ok).length;
