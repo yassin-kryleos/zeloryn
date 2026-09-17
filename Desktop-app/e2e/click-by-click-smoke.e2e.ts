@@ -208,6 +208,7 @@ test.describe('Desktop renderer — Full Click-by-Click Smoke Suite', () => {
       await themeTab.click();
       recordClick('Switch to Theme tab', 'Config Modal / Tab: Theme');
       await page.waitForTimeout(150);
+      await expect(errorBoundary).not.toBeVisible();
 
       // Click 19: Switch to Light Theme
       const lightThemeBtn = page.getByRole('button', { name: 'light', exact: true });
@@ -228,6 +229,15 @@ test.describe('Desktop renderer — Full Click-by-Click Smoke Suite', () => {
         const storedTheme = await page.evaluate(() => localStorage.getItem('matrix_theme'));
         expect(storedTheme).toBe('dark');
       }
+    }
+
+    // Click: Tab "About" (Phase 5 split layout preferences)
+    const aboutTab = page.getByRole('button', { name: 'About', exact: true });
+    if (await aboutTab.isVisible()) {
+      await aboutTab.click();
+      recordClick('Switch to About tab', 'Config Modal / Tab: About');
+      await page.waitForTimeout(150);
+      await expect(errorBoundary).not.toBeVisible();
     }
 
     // Click 21, 22, 23: Verify Free & Open Source (GPL-3.0) Section & Community Action Buttons
@@ -329,6 +339,19 @@ test.describe('Desktop renderer — Full Click-by-Click Smoke Suite', () => {
     await page.waitForTimeout(300);
     await expect(errorBoundary).not.toBeVisible();
 
+    // Toggle Flow View Modes (Kanban vs Today) - Phase 2 UX feature
+    const todayToggle = page.locator('[data-testid="flow-view-today"]');
+    if (await todayToggle.isVisible()) {
+      await todayToggle.click();
+      recordClick('Switch to Flow "Today" View', 'Flow Board / View: Today');
+      await page.waitForTimeout(200);
+
+      const kanbanToggle = page.locator('[data-testid="flow-view-kanban"]');
+      await kanbanToggle.click();
+      recordClick('Switch back to Flow "Kanban" View', 'Flow Board / View: Kanban');
+      await page.waitForTimeout(200);
+    }
+
     // Click 32: Create a task on the Flow board
     const taskInput = page.getByPlaceholder('Add new task...');
     await expect(taskInput).toBeVisible();
@@ -359,6 +382,14 @@ test.describe('Desktop renderer — Full Click-by-Click Smoke Suite', () => {
     recordClick('Open Task Details Drawer', 'Task Card / Card Title Click');
     await page.waitForTimeout(300);
 
+    // Interactive Specialist Agent Assignee select (Phase 3 UX feature)
+    const drawerAssigneeSelect = page.locator('select[aria-label="Edit task assignee"]');
+    if (await drawerAssigneeSelect.isVisible()) {
+      await drawerAssigneeSelect.selectOption('Security Auditor');
+      recordClick('Assign task to specialist "Security Auditor"', 'Task Drawer / Assignee Select');
+      await expect(drawerAssigneeSelect).toHaveValue('Security Auditor');
+    }
+
     // Click 35: Close Task Details Drawer
     const drawerCloseBtn = page.locator('button').filter({ hasText: /close|\[x\]/i }).first();
     if (await drawerCloseBtn.isVisible()) {
@@ -366,6 +397,17 @@ test.describe('Desktop renderer — Full Click-by-Click Smoke Suite', () => {
       recordClick('Close Task Details Drawer', 'Task Drawer / Close Button');
       await page.waitForTimeout(200);
     }
+
+    // Test Alt+1..5 cross-platform keyboard space navigation (Phase 1 UX feature)
+    await page.keyboard.press('Alt+1');
+    await page.waitForTimeout(200);
+    recordClick('Keyboard shortcut Alt+1 (Plan Space)', 'Keyboard Navigation');
+    await expect(errorBoundary).not.toBeVisible();
+
+    await page.keyboard.press('Alt+3');
+    await page.waitForTimeout(200);
+    recordClick('Keyboard shortcut Alt+3 (Flow Space)', 'Keyboard Navigation');
+    await expect(errorBoundary).not.toBeVisible();
 
     // Take final full-page screenshot
     const screenshotPath = testInfo.outputPath('full-click-smoke-final.png');

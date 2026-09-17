@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Heart, Cpu, ChevronDown } from 'lucide-react';
+import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Heart, Cpu, Zap, ChevronDown } from 'lucide-react';
 import type { ResponseMode } from '../backend/agents';
 import { FeatureBadge } from './FeatureBadge';
 import { APP_VERSION } from '../version';
@@ -252,7 +252,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const [inputCustomInstructions, setInputCustomInstructions] = useState<string>(customInstructions);
   const [inputResponseMode, setInputResponseMode] = useState<ResponseMode>(responseMode);
   const [inputTheme, setInputTheme] = useState<string>(theme);
-  const [activeTab, setActiveTab] = useState<'api_keys' | 'models' | 'workspace' | 'github_sync' | 'account_theme' | 'permissions' | 'agents' | 'artifacts'>('api_keys');
+  const [activeTab, setActiveTab] = useState<'api_keys' | 'models' | 'workspace' | 'github_sync' | 'account_theme' | 'permissions' | 'agents' | 'artifacts' | 'about'>('api_keys');
 
   useEffect(() => {
     const handleOpen = (e?: any) => {
@@ -802,10 +802,11 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const showOllama = !hasCommercialKeys || ollamaOptions.length > 0 || !!ollamaUrl;
 
   return (
-    <div className="flex items-center gap-3 font-mono text-xs select-none flex-wrap justify-end">
+    <div className="flex items-center gap-2 font-mono text-xs select-none flex-nowrap justify-end shrink-0">
       
       {/* Model Selector Dropdown */}
-      <div className="flex items-center border border-forge-dark rounded p-0.5">
+      <div className="flex items-center gap-1 border border-forge-dark rounded px-1 py-0.5 bg-black/40 hover:border-forge-neon/40 transition-colors">
+        <Cpu size={10} className="text-forge-neon shrink-0" />
         <select
           aria-label="AI model"
           value={model}
@@ -910,7 +911,8 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       )}
 
       {/* Fast Model Selector Dropdown (Phase 9b: Cost-aware routing) */}
-      <div className="flex items-center border border-forge-dark rounded p-0.5" title="Fast Model override for triage, Scope Guard review, and diff checks">
+      <div className="flex items-center gap-1 border border-forge-dark rounded px-1 py-0.5 bg-black/40 hover:border-forge-cyan/40 transition-colors" title="Fast Model override for triage, Scope Guard review, and diff checks">
+        <Zap size={10} className="text-forge-cyan shrink-0" />
         <select
           aria-label="Fast AI model"
           value={fastModel}
@@ -1084,89 +1086,158 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
 
       {/* Configuration Settings Modal overlay */}
       {showConfigDrawer && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-sm font-mono select-none">
           <form
             onSubmit={handleSave}
-            className="forge-panel w-full max-w-md p-4 bg-forge-very-dark border border-forge-neon flex flex-col gap-2.5 max-h-[80vh]"
+            className="forge-panel w-full max-w-3xl h-[650px] max-h-[90vh] bg-forge-very-dark border border-forge-neon flex flex-col overflow-hidden shadow-2xl"
           >
-            <div className="flex items-center justify-between border-b border-forge-dim pb-1.5 mb-1 shrink-0">
-              <span className="text-xs font-bold font-header text-forge-neon uppercase tracking-wider">
-                Zeloryn Configuration
+            <div className="flex items-center justify-between border-b border-forge-dark px-4 py-2.5 shrink-0 bg-forge-very-dark">
+              <span className="text-xs font-bold font-header text-forge-neon uppercase tracking-wider flex items-center gap-2">
+                <Settings size={13} className="text-forge-neon" />
+                <span>Zeloryn Configuration</span>
               </span>
               <button
                 type="button"
                 onClick={() => setShowConfigDrawer(false)}
-                className="text-forge-neon hover:text-white"
+                className="text-forge-neon hover:text-white font-mono text-xs px-1.5 py-0.5 rounded hover:bg-forge-dark/50"
               >
                 [X]
               </button>
             </div>
 
-            {/* Interactive Tab Selectors (Sidebar menu grid layout) */}
-            <div className="grid grid-cols-4 gap-1.5 border-b border-forge-dark pb-2 mb-1.5 shrink-0 select-none text-[9px] font-bold">
-              <button
-                type="button"
-                onClick={() => setActiveTab('api_keys')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'api_keys' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                API Keys
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('models')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer flex items-center justify-center gap-1 ${activeTab === 'models' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                <span>Models & Roles</span>
-                {hasRoleOverrides && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-forge-neon" title="Roles active" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('workspace')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'workspace' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                Directory
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('github_sync')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'github_sync' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                Syncs
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('account_theme')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'account_theme' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                Theme
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('permissions')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'permissions' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                Security
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('agents')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'agents' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                Specialists
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('artifacts')}
-                className={`py-1 rounded border text-center transition-all cursor-pointer ${activeTab === 'artifacts' ? 'bg-forge-very-dark text-forge-neon border-forge-neon' : 'bg-transparent text-forge-dim border-forge-dark'}`}
-              >
-                Artifacts
-              </button>
-            </div>
+            {/* Split layout: Sidebar navigation + Content panel */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Left Navigation Sidebar */}
+              <div className="w-44 shrink-0 border-r border-forge-dark bg-black/25 p-2 flex flex-col gap-1 overflow-y-auto select-none text-[10px] font-mono">
+                <div className="text-[8.5px] font-bold uppercase tracking-wider text-forge-dim px-2 py-1">
+                  Preferences
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('api_keys')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    activeTab === 'api_keys'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <Key size={12} aria-hidden="true" className="shrink-0 text-amber-400" />
+                  <span className="truncate">API Keys</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('models')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center justify-between gap-1 ${
+                    activeTab === 'models'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Cpu size={12} aria-hidden="true" className="shrink-0 text-cyan-400" />
+                    <span className="truncate">Models & Roles</span>
+                  </div>
+                  {hasRoleOverrides && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-forge-neon shrink-0" title="Roles active" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('workspace')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    activeTab === 'workspace'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <FolderOpen size={12} aria-hidden="true" className="shrink-0 text-blue-400" />
+                  <span className="truncate">Directory</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('github_sync')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    activeTab === 'github_sync'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <RefreshCw size={12} aria-hidden="true" className="shrink-0 text-purple-400" />
+                  <span className="truncate">Syncs</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('permissions')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    activeTab === 'permissions'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <Shield size={12} aria-hidden="true" className="shrink-0 text-emerald-400" />
+                  <span className="truncate">Security</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('agents')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    activeTab === 'agents'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <Globe size={12} aria-hidden="true" className="shrink-0 text-pink-400" />
+                  <span className="truncate">Specialists</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('artifacts')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    activeTab === 'artifacts'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <BookOpen size={12} aria-hidden="true" className="shrink-0 text-orange-400" />
+                  <span className="truncate">Artifacts</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('account_theme')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    activeTab === 'account_theme'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <Zap size={12} aria-hidden="true" className="shrink-0 text-forge-neon" />
+                  <span className="truncate">Theme</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('about')}
+                  className={`w-full px-2.5 py-1.5 rounded text-left transition-all cursor-pointer flex items-center gap-2 ${
+                    activeTab === 'about'
+                      ? 'bg-forge-very-dark text-forge-neon border border-forge-neon/60 font-bold shadow-sm'
+                      : 'text-forge-dim hover:text-forge-text hover:bg-forge-dark/30 border border-transparent'
+                  }`}
+                >
+                  <HelpCircle size={12} aria-hidden="true" className="shrink-0 text-teal-400" />
+                  <span className="truncate">About</span>
+                </button>
 
-            <div className="flex-1 overflow-y-auto pr-1.5 flex flex-col gap-3 py-1">
-              
+                <div className="mt-auto pt-2 border-t border-forge-dark/60">
+                  <div className="text-[8px] font-bold text-forge-dim px-2 py-0.5">
+                    Zeloryn v{APP_VERSION}
+                  </div>
+                  <div className="text-[7.5px] text-forge-neon px-2">
+                    Copyleft GPL-3.0
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Content Panel */}
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 font-mono">
               {activeTab === 'api_keys' && (
                 <div className="flex flex-col gap-3">
                   <div className="text-[9px] text-forge-dim uppercase font-bold flex items-center justify-between border-b border-forge-dark pb-1 mb-1 font-mono">
@@ -2490,32 +2561,167 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
             </div>
           </div>
         )}
-        </div>
 
-            {/* Save Buttons */}
-            <div className="flex justify-between gap-3.5 mt-2 border-t border-forge-dark pt-3 shrink-0">
+        {activeTab === 'about' && (
+          <div className="flex flex-col gap-3">
+            <div className="text-[9px] text-forge-dim uppercase font-bold flex items-center justify-between border-b border-forge-dark pb-1 mb-1 font-mono">
+              <span>About Zeloryn • Copyleft Free Software</span>
+              <span className="text-[8px] bg-forge-very-dark text-forge-neon border border-forge-neon/40 px-1.5 py-0.5 rounded font-bold">GPL-3.0</span>
+            </div>
+
+            <div className="p-3.5 rounded border border-forge-dark bg-black/40 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Globe size={16} className="text-forge-neon" />
+                  <span className="text-sm font-bold text-white">Zeloryn</span>
+                  <span className="text-xs text-forge-neon font-mono font-bold">v{APP_VERSION}</span>
+                </div>
+                <span className="text-[8px] bg-emerald-950/60 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded font-mono font-bold">
+                  LOCAL-FIRST AGENT WORKSPACE
+                </span>
+              </div>
+              <p className="text-[10px] text-forge-dim leading-relaxed">
+                Zeloryn is a free, copyleft open-source agentic development environment built for pair-programming developers. Designed for complete local sovereignty, zero-telemetry privacy, and unified multi-engine orchestration.
+              </p>
+            </div>
+
+            {/* Version & Release Checker */}
+            <div className="flex flex-col gap-1.5 border border-forge-dark bg-black/40 p-3 rounded font-mono text-[9px]">
+              <div className="flex items-center justify-between">
+                <span className="text-forge-neon font-bold uppercase text-[9.5px] flex items-center gap-1.5">
+                  <RefreshCw size={11} className={isCheckingUpdates ? 'animate-spin text-forge-neon' : 'text-forge-dim'} />
+                  <span>Release Channel</span>
+                </span>
+                <span className={`text-[8px] border px-1.5 py-0.5 rounded font-bold ${
+                  updateAvailableVersion
+                    ? 'bg-amber-950 text-amber-300 border-amber-500/50 animate-pulse'
+                    : 'bg-forge-very-dark text-forge-dim border-forge-dark'
+                }`}>
+                  {updateAvailableVersion ? `v${updateAvailableVersion} AVAILABLE` : 'STABLE RELEASE'}
+                </span>
+              </div>
+              <span className="text-forge-dim text-[8.5px]">
+                {updateStatusText || 'Check GitHub for the latest releases, bug fixes, and security patches.'}
+              </span>
+              <div className="flex gap-2 mt-1">
+                <button
+                  type="button"
+                  onClick={handleManualCheckUpdates}
+                  disabled={isCheckingUpdates}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-forge-very-dark hover:bg-forge-dark text-forge-neon border border-forge-neon/40 rounded text-[9px] font-bold cursor-pointer transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw size={10} className={isCheckingUpdates ? 'animate-spin' : ''} />
+                  <span>{isCheckingUpdates ? 'Checking Releases...' : 'Check for Updates'}</span>
+                </button>
+                {updateAvailableVersion && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = 'https://github.com/yassin-kryleos/zeloryn/releases/latest';
+                      if ((window as any).electronAPI?.openExternal) {
+                        (window as any).electronAPI.openExternal(url);
+                      } else {
+                        window.open(url, '_blank');
+                      }
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded text-[9px] font-bold cursor-pointer transition-colors"
+                  >
+                    <span>Download v{updateAvailableVersion}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Community Links */}
+            <div className="flex flex-col gap-1.5 border border-forge-dark bg-black/40 p-3 rounded font-mono text-[9px]">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-forge-neon font-bold uppercase text-[9.5px] flex items-center gap-1.5">
+                  <Globe size={11} className="text-forge-neon" />
+                  <span>Free & Open Source</span>
+                </span>
+                <span className="text-[8px] bg-forge-very-dark text-forge-neon border border-forge-neon/40 px-1.5 py-0.5 rounded font-bold">GPL-3.0</span>
+              </div>
+              <p className="text-forge-dim text-[8.5px] mb-2 leading-relaxed">
+                Zeloryn is governed by the GNU General Public License v3.0. Contributions from developers worldwide are welcomed and encouraged!
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = 'https://github.com/yassin-kryleos/zeloryn';
+                    if ((window as any).electronAPI?.openExternal) {
+                      (window as any).electronAPI.openExternal(url);
+                    } else {
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-forge-very-dark hover:bg-forge-dark text-forge-text border border-forge-dark hover:border-forge-neon rounded text-[9px] font-bold cursor-pointer transition-colors"
+                >
+                  <Globe size={10} />
+                  <span>GitHub Repository</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = 'https://github.com/yassin-kryleos/zeloryn/issues';
+                    if ((window as any).electronAPI?.openExternal) {
+                      (window as any).electronAPI.openExternal(url);
+                    } else {
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-forge-very-dark hover:bg-forge-dark text-forge-text border border-forge-dark hover:border-forge-neon rounded text-[9px] font-bold cursor-pointer transition-colors"
+                >
+                  <BookOpen size={10} />
+                  <span>Issues & Bugs</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = 'https://github.com/yassin-kryleos/zeloryn/blob/main/CONTRIBUTING.md';
+                    if ((window as any).electronAPI?.openExternal) {
+                      (window as any).electronAPI.openExternal(url);
+                    } else {
+                      window.open(url, '_blank');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-forge-very-dark hover:bg-forge-dark text-forge-text border border-forge-dark hover:border-forge-neon rounded text-[9px] font-bold cursor-pointer transition-colors"
+                >
+                  <Heart size={10} />
+                  <span>Contributing Guide</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+              </div>
+            </div>
+
+            {/* Save Buttons Footer */}
+            <div className="flex justify-between items-center gap-3 border-t border-forge-dark px-4 py-2.5 shrink-0 bg-forge-very-dark">
               <button
                 type="button"
                 onClick={wipeLocalData}
-                className="px-3.5 py-1.5 border border-red-900 text-red-400 hover:text-white rounded text-[10px]"
+                className="px-2.5 py-1 border border-red-900 text-red-400 hover:text-white hover:bg-red-950/40 rounded text-[9.5px] font-mono transition-colors"
                 title="Workspace files and .kryleos folders are preserved"
               >
                 CLEAR CREDENTIALS + LOCAL APP DATA
               </button>
-              <div className="flex gap-3.5">
-              <button
-                type="button"
-                onClick={() => setShowConfigDrawer(false)}
-                className="px-3.5 py-1.5 border border-forge-dark text-forge-dim hover:text-forge-neon rounded text-[11px]"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="forge-btn text-[11px] font-bold py-1.5 px-3.5"
-              >
-                Save Settings
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigDrawer(false)}
+                  className="px-3 py-1 border border-forge-dark text-forge-dim hover:text-forge-neon rounded text-[10px] font-mono transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="forge-btn text-[10px] font-bold py-1 px-3.5"
+                >
+                  Save Settings
+                </button>
               </div>
             </div>
 

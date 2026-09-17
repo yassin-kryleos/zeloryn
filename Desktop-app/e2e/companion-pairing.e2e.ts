@@ -70,7 +70,11 @@ test.describe('Desktop renderer — companion pairing', () => {
 
   test('pairing code is displayed in the renderer UI', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    try {
+      await page.waitForLoadState('networkidle', { timeout: 5000 });
+    } catch {
+      // Background websockets/pollers may keep network active
+    }
 
     // Look for a 6-digit code rendered anywhere in the app
     const codeEl = page.locator('text=/\\b\\d{6}\\b/').first();

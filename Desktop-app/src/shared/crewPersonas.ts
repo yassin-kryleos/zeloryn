@@ -39,6 +39,34 @@ export const crewPersonas: CrewPersona[] = [
 
 export const agentFileName = (role: string) => role.toLowerCase().replace(/[^a-z0-9_-]+/g, '_');
 
+export interface AssigneeOption {
+  value: string;
+  label: string;
+  category: 'core' | 'specialist';
+}
+
+export const coreAssignees: AssigneeOption[] = [
+  { value: 'Builder', label: 'Builder (Developer)', category: 'core' },
+  { value: 'Planner', label: 'Planner (Architect)', category: 'core' },
+  { value: 'Analyst', label: 'Analyst (Researcher)', category: 'core' },
+  { value: 'Reviewer', label: 'Reviewer (QA/Review)', category: 'core' }
+];
+
+export const specialistAssignees: AssigneeOption[] = [
+  { value: 'React Expert', label: 'React Expert', category: 'specialist' },
+  { value: 'Security Auditor', label: 'Security Auditor', category: 'specialist' },
+  { value: 'Test Writer', label: 'Test Writer', category: 'specialist' },
+  { value: 'Documentation Writer', label: 'Documentation Writer', category: 'specialist' },
+  { value: 'Performance Reviewer', label: 'Performance Reviewer', category: 'specialist' },
+  { value: 'Technical Reviewer', label: 'Technical Reviewer', category: 'specialist' },
+  { value: 'Scope Guard', label: 'Scope Guard', category: 'specialist' },
+  { value: 'Post-Execution Reviewer', label: 'Post-Execution Reviewer', category: 'specialist' }
+];
+
+export function getAllAvailableAssignees(): AssigneeOption[] {
+  return [...coreAssignees, ...specialistAssignees];
+}
+
 // Install a persona into the workspace .kryleos/agents directory via the
 // existing file-create route. Returns nothing; throws on failure.
 export async function installCrewPersona(persona: CrewPersona): Promise<void> {

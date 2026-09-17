@@ -3,6 +3,7 @@ import { X, Play, Sparkles, ExternalLink, GitBranch, CheckCircle2, Circle, Trash
 import type { ProjectTask, AcceptanceCriterion, AcceptanceCriterionType } from '../backend/db';
 import { wouldCreateDependencyCycle } from '../shared/dependencies';
 import { getAssigneeColor } from '../shared/assigneeColor';
+import { coreAssignees, specialistAssignees } from '../shared/crewPersonas';
 
 interface TaskDetailDrawerProps {
   task: ProjectTask | null;
@@ -265,10 +266,28 @@ export const TaskDetailDrawer: React.FC<TaskDetailDrawerProps> = ({
                 ))}
               </select>
 
-              {/* Assignee */}
-              <span className={`px-2 py-0.5 rounded border border-forge-dark bg-black/40 ${getAssigneeColor(assignee)}`}>
-                @{assignee}
-              </span>
+              {/* Assignee Selector */}
+              <select
+                aria-label="Task assignee"
+                value={assignee}
+                onChange={(e) => {
+                  setAssignee(e.target.value);
+                  onSaveTask({ ...task, assignee: e.target.value });
+                }}
+                className={`bg-black/40 border border-forge-dark rounded px-2 py-0.5 outline-none cursor-pointer text-[9px] font-bold ${getAssigneeColor(assignee)}`}
+                title="Change task specialist assignee"
+              >
+                <optgroup label="Core Roles">
+                  {coreAssignees.map(a => (
+                    <option key={a.value} value={a.value}>@{a.label}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Specialist Agents">
+                  {specialistAssignees.map(a => (
+                    <option key={a.value} value={a.value}>@{a.label}</option>
+                  ))}
+                </optgroup>
+              </select>
             </div>
           </div>
 

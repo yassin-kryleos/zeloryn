@@ -14,7 +14,20 @@ export function getAssigneeColor(assignee?: string) {
       return 'text-purple-400';
     case 'reviewer':
     case 'debugger':
-      return 'neon-amber';
+      return 'text-amber-400';
+    case 'security auditor':
+    case 'risk identifier':
+      return 'text-rose-400';
+    case 'test writer':
+      return 'text-emerald-400';
+    case 'react expert':
+      return 'text-cyan-300';
+    case 'documentation writer':
+      return 'text-amber-300';
+    case 'technical reviewer':
+    case 'scope guard':
+    case 'post-execution reviewer':
+      return 'text-purple-300';
     default:
       return 'text-forge-text';
   }

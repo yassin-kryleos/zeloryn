@@ -909,23 +909,28 @@ function App() {
     }
   }, [fetchSessions, isStreaming]);
 
-  // Handle Space Switch tabs (keyboard shortcuts remain as tooltips/documentation).
+  // Handle Space Switch tabs (keyboard shortcuts: Alt+1..5 / Option+1..5 and F1..F5).
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isStreaming) return;
-      if (e.key === 'F1') {
+      const target = e.target as HTMLElement;
+      const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+      if (isInput && !e.altKey && !e.ctrlKey && !e.metaKey) return;
+
+      const isAltOrMod = e.altKey || (e.ctrlKey && !e.metaKey && !isInput);
+      if (e.key === 'F1' || (isAltOrMod && e.key === '1')) {
         e.preventDefault();
         handleSpaceChange('plan');
-      } else if (e.key === 'F2') {
+      } else if (e.key === 'F2' || (isAltOrMod && e.key === '2')) {
         e.preventDefault();
         handleSpaceChange('cowork');
-      } else if (e.key === 'F3') {
+      } else if (e.key === 'F3' || (isAltOrMod && e.key === '3')) {
         e.preventDefault();
         handleSpaceChange('project');
-      } else if (e.key === 'F4') {
+      } else if (e.key === 'F4' || (isAltOrMod && e.key === '4')) {
         e.preventDefault();
         handleSpaceChange('code');
-      } else if (e.key === 'F5') {
+      } else if (e.key === 'F5' || (isAltOrMod && e.key === '5')) {
         e.preventDefault();
         handleSpaceChange('vibe');
       }
@@ -1718,20 +1723,20 @@ function App() {
     <>
       <div className="app-container">
         
-        {/* Sleek Top Config Bar */}
-        <div className="forge-topbar flex items-center justify-between px-3 py-1 font-mono text-xs flex-wrap gap-y-2">
-          <div className="flex items-center gap-3 flex-wrap">
+        {/* Sleek Top Config Bar - Non-Wrapping 3-Zone Layout */}
+        <div className="forge-topbar flex items-center justify-between px-3 py-1 font-mono text-xs flex-nowrap select-none gap-2 overflow-x-auto">
+          {/* Zone 1: Left - Workspace Brand & Context */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="forge-secondary-button"
+              className="forge-secondary-button text-[10px] px-1.5 py-0.5"
               title="Toggle Sidebar"
             >
               {sidebarOpen ? 'Hide' : 'Show'}
             </button>
             <ZelorynLockup size="sm" />
 
-            {/* Header Context Breadcrumb & Workspace Switcher */}
-            <div className="flex items-center gap-1.5 ml-3 select-none text-[10px] font-mono">
+            <div className="flex items-center gap-1.5 ml-1 select-none text-[10px] font-mono">
               <button
                 type="button"
                 data-testid="add-project-button"
@@ -1741,34 +1746,23 @@ function App() {
                 className="flex items-center gap-1 px-2 py-0.5 rounded border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-200 hover:text-white transition-colors cursor-pointer"
               >
                 <FolderOpen size={11} className="text-zinc-400" />
-                <span className="font-semibold truncate max-w-[110px]">
+                <span className="font-semibold truncate max-w-[105px]">
                   {activeProject?.name || workspaceRoot.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || 'Workspace'}
                 </span>
               </button>
 
-              <span className="text-zinc-600">/</span>
+              <span className="text-zinc-600 hidden sm:inline">/</span>
 
               <button
                 type="button"
                 onClick={() => setIsDiffDrawerOpen(true)}
                 title="View git branch status & diff undo safety drawer"
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                className="hidden sm:flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
               >
                 <GitBranch size={10} />
                 <span className="font-semibold">{currentGitBranch}</span>
               </button>
 
-              <span className="text-zinc-600">/</span>
-
-              <div
-                title={`Active AI Model: ${model}`}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900/40 text-cyan-400 truncate max-w-[130px]"
-              >
-                <Cpu size={10} className="text-cyan-500 shrink-0" />
-                <span className="truncate">{model.replace(/^models\//, '')}</span>
-              </div>
-
-              {/* Safety Diff Trigger */}
               <button
                 type="button"
                 onClick={() => setIsDiffDrawerOpen(true)}
@@ -1776,10 +1770,9 @@ function App() {
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 transition-colors cursor-pointer text-[9px] font-bold"
               >
                 <ShieldAlert size={10} />
-                <span>Diff &amp; Undo</span>
+                <span className="hidden md:inline">Diff &amp; Undo</span>
               </button>
 
-              {/* Command Palette Trigger */}
               <button
                 type="button"
                 onClick={() => setIsCommandPaletteOpen(true)}
@@ -1790,48 +1783,50 @@ function App() {
                 <span className="text-[9px] text-zinc-400 font-bold bg-zinc-900 px-1 rounded border border-zinc-700">Ctrl+K</span>
               </button>
             </div>
+          </div>
 
-            {/* Switchable Spaces tab bar */}
-            <div className="forge-tabs ml-3">
+          {/* Zone 2: Center - Segmented Cockpit Space Navigation Pill */}
+          <div className="flex items-center justify-center shrink-0">
+            <div className="forge-tabs flex items-center bg-black/50 border border-forge-dark rounded p-0.5">
               <button
                 onClick={() => handleSpaceChange('plan')}
                 disabled={isStreaming}
-                className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'plan' ? 'forge-tab-active' : ''}`}
-                title="Plan (F1)"
+                className={`forge-tab px-2 py-0.5 text-[10px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'plan' ? 'forge-tab-active' : ''}`}
+                title="Plan (Alt+1 / F1)"
               >
                 Plan
               </button>
               <button
                 onClick={() => handleSpaceChange('cowork')}
                 disabled={isStreaming}
-                className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'cowork' ? 'forge-tab-active' : ''}`}
-                title="Crew (F2)"
+                className={`forge-tab px-2 py-0.5 text-[10px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'cowork' ? 'forge-tab-active' : ''}`}
+                title="Crew (Alt+2 / F2)"
               >
                 Crew
               </button>
               <button
                 onClick={() => handleSpaceChange('project')}
                 disabled={isStreaming}
-                className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'project' ? 'forge-tab-active' : ''}`}
-                title="Flow (F3)"
+                className={`forge-tab px-2 py-0.5 text-[10px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'project' ? 'forge-tab-active' : ''}`}
+                title="Flow (Alt+3 / F3)"
               >
                 Flow
               </button>
               <button
                 onClick={() => handleSpaceChange('code')}
                 disabled={isStreaming}
-                className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'code' ? 'forge-tab-active' : ''}`}
-                title="Forge (F4)"
+                className={`forge-tab px-2 py-0.5 text-[10px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${activeSpace === 'code' ? 'forge-tab-active' : ''}`}
+                title="Forge (Alt+4 / F4)"
               >
                 Forge
               </button>
               <button
                 onClick={() => handleSpaceChange('vibe')}
                 disabled={isStreaming}
-                className={`forge-tab transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${activeSpace === 'vibe' ? 'forge-tab-active text-forge-neon font-bold' : ''}`}
-                title="Vibe Coding Studio (F5)"
+                className={`forge-tab px-2 py-0.5 text-[10px] transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${activeSpace === 'vibe' ? 'forge-tab-active text-forge-neon font-bold' : ''}`}
+                title="Vibe Coding Studio (Alt+5 / F5)"
               >
-                <Sparkles size={11} className="text-emerald-400" />
+                <Sparkles size={10} className="text-emerald-400" />
                 <span>Vibe</span>
               </button>
 
@@ -1839,15 +1834,17 @@ function App() {
                 <button
                   type="button"
                   onClick={handleAbortWorkflow}
-                  className="forge-stop-button transition-all cursor-pointer ml-2"
+                  className="forge-stop-button transition-all cursor-pointer ml-1 text-[9px] px-1.5 py-0.5"
                 >
                   Stop
                 </button>
               )}
             </div>
           </div>
-          
-          <ConfigHeader
+
+          {/* Zone 3: Right - Configuration, Engine Status, & Model Routing */}
+          <div className="flex items-center gap-2 shrink-0">
+            <ConfigHeader
             apiKey={apiKey}
             geminiApiKey={geminiApiKey}
             openaiApiKey={openaiApiKey}
@@ -1897,6 +1894,7 @@ function App() {
             customPricing={customPricing}
             syncedCatalog={syncedCatalog}
           />
+          </div>
         </div>
 
         {/* Console Workspace Workspace */}

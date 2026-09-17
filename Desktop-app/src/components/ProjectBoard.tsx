@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square, GitBranch, GitFork, ExternalLink, RotateCcw, ShieldCheck, Sparkles, Terminal } from 'lucide-react';
+import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square, GitBranch, GitFork, ExternalLink, RotateCcw, ShieldCheck, Sparkles, Terminal, Kanban } from 'lucide-react';
 import type { AcceptanceCriterion, AcceptanceCriterionType, CriterionPhase, ProjectTask } from '../backend/db';
 import { scoreTodayTasks } from '../shared/todayScore';
 import { driftClass } from '../shared/driftClassification';
 import { getAssigneeColor } from '../shared/assigneeColor';
 import { wouldCreateDependencyCycle, findUnblockedTasks, getNextSchedulableTask, isTaskUnblocked } from '../shared/dependencies';
 import { resolveAgentForCategory, type InstalledAgent, type ItemCategory } from '../shared/agentCapabilities';
+import { coreAssignees, specialistAssignees } from '../shared/crewPersonas';
 import { FileBrowser } from './FileBrowser';
 import { SafeMarkdown } from './SafeMarkdown';
 import { TaskDetailDrawer } from './TaskDetailDrawer';
@@ -60,7 +61,21 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   const [criteriaDraft, setCriteriaDraft] = useState<AcceptanceCriterion[]>([]);
   const [criteriaBusy, setCriteriaBusy] = useState(false);
   const [enrichmentNotice, setEnrichmentNotice] = useState<string | null>(null);
-  const [todayOpen, setTodayOpen] = useState(true);
+  const [flowViewMode, setFlowViewMode] = useState<'kanban' | 'today'>(() => {
+    try {
+      const saved = localStorage.getItem('matrix_flow_view_mode');
+      return saved === 'today' || saved === 'list' ? 'today' : 'kanban';
+    } catch {
+      return 'kanban';
+    }
+  });
+
+  const handleSetFlowViewMode = (mode: 'kanban' | 'today') => {
+    setFlowViewMode(mode);
+    try {
+      localStorage.setItem('matrix_flow_view_mode', mode);
+    } catch { /* ignore */ }
+  };
   const [blockerTask, setBlockerTask] = useState<ProjectTask | null>(null);
   const [blockerDraft, setBlockerDraft] = useState<string[]>([]);
   const [worktrees, setWorktrees] = useState<Record<string, { branch: string; isClean: boolean }>>({});
@@ -856,10 +871,41 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   return (
     <div className="flex h-full overflow-hidden gap-3 font-mono p-2 select-none">
       <div className="flex-1 flex flex-col overflow-hidden forge-surface p-3">
-        <div className="flex items-center justify-between gap-3 border-b border-forge-dark pb-1 mb-2">
-          <div>
-            <span className="forge-panel-title block">Flow board</span>
-            <span className="forge-panel-subtitle">Prioritized work from plan to execution</span>
+        <div className="flex items-center justify-between gap-3 border-b border-forge-dark pb-1.5 mb-2">
+          <div className="flex items-center gap-3">
+            <div>
+              <span className="forge-panel-title block">Flow board</span>
+              <span className="forge-panel-subtitle">Prioritized work from plan to execution</span>
+            </div>
+            {/* View Mode Switcher: Kanban vs Today */}
+            <div className="flex items-center rounded border border-forge-dark bg-forge-very-dark/80 p-0.5 text-[9px] font-mono">
+              <button
+                type="button"
+                onClick={() => handleSetFlowViewMode('kanban')}
+                data-testid="flow-view-kanban"
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  flowViewMode === 'kanban'
+                    ? 'bg-forge-neon/20 text-forge-neon font-bold border border-forge-neon/40 shadow-sm'
+                    : 'text-forge-dim hover:text-forge-text'
+                }`}
+              >
+                <Kanban size={10} />
+                <span>Kanban</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSetFlowViewMode('today')}
+                data-testid="flow-view-today"
+                className={`px-2 py-0.5 rounded transition-colors flex items-center gap-1 ${
+                  flowViewMode === 'today'
+                    ? 'bg-forge-neon/20 text-forge-neon font-bold border border-forge-neon/40 shadow-sm'
+                    : 'text-forge-dim hover:text-forge-text'
+                }`}
+              >
+                <Clock size={10} />
+                <span>Today ({todayItems.length})</span>
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-2 text-[9px]">
             <span className="text-forge-dim">
@@ -923,95 +969,52 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           </div>
         </div>
 
-        <div className="mb-2 forge-surface">
-          <div className="flex items-center justify-between gap-2 px-2 py-1.5">
-            <button
-              type="button"
-              onClick={() => setTodayOpen(!todayOpen)}
-              className="text-[11px] text-forge-text font-bold flex items-center gap-1.5 hover:text-white"
-            >
-              <Clock size={11} />
-              <span>Today ({todayItems.length})</span>
-              <span className="text-forge-dim">{todayOpen ? 'Hide' : 'Show'}</span>
-            </button>
-            <div className="flex items-center gap-1.5">
+        {/* Kanban Mode: Compact 1-line Today Priorities strip */}
+        {flowViewMode === 'kanban' && (
+          <div className="mb-2 flex items-center justify-between gap-2 px-2.5 py-1 rounded border border-forge-dark/60 bg-forge-very-dark/50 text-[9px]">
+            <div className="flex items-center gap-2 min-w-0">
               <button
                 type="button"
-                onClick={executeNextToday}
-                disabled={isStreaming || todayItems.every(item => item.blocked)}
-                className="forge-btn text-[9px] px-2 py-0.5 flex items-center gap-1 disabled:opacity-40"
-                title="Run the highest-priority unblocked task"
+                onClick={() => handleSetFlowViewMode('today')}
+                data-testid="today-priority-badge"
+                className="flex items-center gap-1.5 font-bold text-forge-neon hover:underline cursor-pointer shrink-0"
+                title="Switch to Today priority list view"
               >
-                <Play size={8} />
-                <span>Execute next</span>
+                <Clock size={11} />
+                <span>Today Priorities:</span>
+                <span className="px-1.5 py-0.2 rounded bg-forge-neon/15 text-forge-neon font-mono text-[8.5px]">
+                  {todayItems.length} {todayItems.length === 1 ? 'task' : 'tasks'}
+                </span>
               </button>
-              <button
-                type="button"
-                onClick={executeAllToday}
-                disabled={isStreaming || todayItems.every(item => item.blocked)}
-                className="forge-secondary-button disabled:opacity-40"
-                title="Dispatch all unblocked Today tasks as a sequential batch"
-              >
-                Execute all
-              </button>
+              <span className="text-forge-dim text-[8.5px]">
+                • {todayItems.filter(i => !i.blocked).length} ready
+              </span>
             </div>
-          </div>
-          {todayOpen && (
-            <div className="border-t border-forge-dark px-2 py-1.5 space-y-1">
-              {todayItems.length === 0 ? (
-                <div className="text-[9px] text-forge-dim py-1">No open tasks. Add a task or move one out of DONE.</div>
-              ) : (
-                todayItems.map((item, idx) => (
-                  <div key={item.task.id} className="flex items-center gap-2 text-[9px]">
-                    <span className="text-forge-dim w-3 shrink-0">{idx + 1}.</span>
-                    <span
-                      onClick={() => setDrawerTask(item.task)}
-                      className={`flex-1 truncate cursor-pointer hover:text-white hover:underline transition-colors ${item.blocked ? 'text-forge-dim' : 'text-forge-text'}`}
-                      title="Click to view & edit task details"
-                    >
-                      <SafeMarkdown text={item.task.title} />
-                    </span>
-                    {item.blocked && <span className="text-[8px] uppercase border border-red-700 text-red-300 rounded px-1">blocked</span>}
-                    <span className="text-[8px] uppercase border border-forge-neon border-opacity-40 text-forge-neon rounded px-1" title="Priority score">
-                      {item.score}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => runTaskQuery(item.task)}
-                      disabled={item.blocked || isStreaming}
-                      title={item.blocked ? 'Blocked by unfinished dependency' : 'Run this task in Forge'}
-                      className="px-1.5 py-0.5 rounded border border-forge-neon/40 bg-forge-neon/10 text-forge-neon text-[8.5px] font-mono font-bold hover:bg-forge-neon/20 disabled:opacity-40 flex items-center gap-0.5 shrink-0 cursor-pointer"
-                    >
-                      <Play size={8} />
-                      <span>Run</span>
-                    </button>
-                    {onOpenVibeTask && (
-                      <button
-                        type="button"
-                        onClick={() => onOpenVibeTask(item.task.id)}
-                        disabled={item.blocked || isStreaming}
-                        title="Build this task visually in Vibe Studio"
-                        className="px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[8.5px] font-mono font-bold hover:bg-emerald-500/20 disabled:opacity-40 flex items-center gap-0.5 shrink-0 cursor-pointer"
-                      >
-                        <Sparkles size={8} />
-                        <span>Vibe</span>
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setHandoffModalTask(item.task)}
-                      title="Push to... (In-App CLI Runner or External AI Editor)"
-                      className="px-1.5 py-0.5 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-400 text-[8.5px] font-mono font-bold hover:bg-cyan-500/20 flex items-center gap-0.5 shrink-0 cursor-pointer"
-                    >
-                      <ExternalLink size={8} />
-                      <span>Push</span>
-                    </button>
-                  </div>
-                ))
+            <div className="flex items-center gap-1.5 shrink-0">
+              {todayItems.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={executeNextToday}
+                    disabled={isStreaming || todayItems.every(item => item.blocked)}
+                    className="forge-btn text-[8.5px] px-2 py-0.5 flex items-center gap-1 disabled:opacity-40"
+                    title="Run highest priority unblocked task"
+                  >
+                    <Play size={8} />
+                    <span>Execute next</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetFlowViewMode('today')}
+                    className="text-forge-dim hover:text-white text-[8.5px] underline ml-1"
+                  >
+                    View all →
+                  </button>
+                </>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {criteriaReviewPending > 0 && (
           <div className="mb-2 border border-amber-900 bg-amber-950/20 text-amber-200 rounded px-2 py-1.5 text-[9px] flex items-center justify-between gap-2">
@@ -1021,7 +1024,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleAddTask} className="grid grid-cols-[1fr_110px_110px_auto] gap-2 mb-3 forge-surface p-2">
+        <form onSubmit={handleAddTask} className="grid grid-cols-[1fr_130px_110px_auto] gap-2 mb-3 forge-surface p-2">
           <input
             type="text"
             placeholder="Add new task..."
@@ -1036,12 +1039,22 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
             aria-label="Task assignee"
             value={taskAssignee}
             onChange={(e) => setTaskAssignee(e.target.value)}
-            className="bg-forge-very-dark border border-forge-dark text-[10px] text-forge-neon px-0.5 rounded font-mono"
+            className="bg-forge-very-dark border border-forge-dark text-[10px] text-forge-neon px-1 rounded font-mono"
           >
-            <option value="Planner">Planner</option>
-            <option value="Builder">Builder</option>
-            <option value="Analyst">Analyst</option>
-            <option value="Reviewer">Reviewer</option>
+            <optgroup label="Core Roles">
+              {coreAssignees.map(a => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Specialist Agents">
+              {specialistAssignees.map(a => (
+                <option key={a.value} value={a.value}>
+                  {a.label}
+                </option>
+              ))}
+            </optgroup>
           </select>
           <select
             aria-label="Task category"
@@ -1058,33 +1071,189 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
         </form>
 
         {tasks.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center border border-dashed border-forge-dark rounded-lg bg-forge-very-dark/40">
-            <div className="text-sm font-bold text-forge-text mb-1.5">No tasks yet on the board</div>
-            <div className="text-xs text-forge-dim max-w-md mb-6 leading-relaxed">
-              Start by importing existing TODO comments from your codebase, verifying existing code structure, or creating your first task above.
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <div className="max-w-2xl w-full">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-forge-neon/30 bg-forge-neon/10 text-forge-neon text-xs font-mono mb-3">
+                <Sparkles size={12} />
+                <span>Workspace Ready • No Tasks Created</span>
+              </div>
+              <h3 className="text-base font-bold text-forge-text mb-1">Welcome to Flow Board</h3>
+              <p className="text-xs text-forge-dim mb-6 max-w-lg mx-auto">
+                Flow turns architectural plans and codebase state into actionable, tracked task cards with acceptance criteria and multi-engine runners.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left">
+                {/* Card 1: Import Code TODOs */}
+                <div className="p-3.5 rounded border border-forge-dark bg-forge-very-dark/80 hover:border-cyan-500/50 transition-all flex flex-col justify-between group">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2 text-cyan-400">
+                      <RefreshCw size={16} className={`group-hover:rotate-180 transition-transform duration-500 ${importingTodos ? 'animate-spin' : ''}`} />
+                      <span className="font-bold text-xs">Import Code TODOs</span>
+                    </div>
+                    <p className="text-[11px] text-forge-dim mb-4 leading-relaxed">
+                      Scans codebase files for <code className="text-cyan-300 bg-cyan-950/40 px-1 py-0.5 rounded">TODO</code> and <code className="text-cyan-300 bg-cyan-950/40 px-1 py-0.5 rounded">FIXME</code> annotations and imports them as cards.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleImportTodos}
+                    disabled={importingTodos}
+                    data-testid="hero-import-todos"
+                    className="forge-btn text-xs w-full py-1.5 flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw size={11} className={importingTodos ? 'animate-spin' : ''} />
+                    <span>{importingTodos ? 'Importing...' : 'Scan & Import'}</span>
+                  </button>
+                </div>
+
+                {/* Card 2: Generate Plan with AI */}
+                <div className="p-3.5 rounded border border-forge-dark bg-forge-very-dark/80 hover:border-forge-neon/50 transition-all flex flex-col justify-between group">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2 text-forge-neon">
+                      <Sparkles size={16} className="group-hover:scale-110 transition-transform" />
+                      <span className="font-bold text-xs">Generate AI Plan</span>
+                    </div>
+                    <p className="text-[11px] text-forge-dim mb-4 leading-relaxed">
+                      Prompts the Architect agent to analyze the project structure and suggest an engineering implementation roadmap.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onSendQuery?.('Analyze this codebase structure, dependencies, and git status, then propose an architectural plan with prioritized tasks.', { spaceOverride: 'project' })}
+                    data-testid="hero-generate-plan"
+                    className="forge-btn text-xs w-full py-1.5 flex items-center justify-center gap-1.5 border-forge-neon text-forge-neon"
+                  >
+                    <Sparkles size={11} />
+                    <span>Generate Plan</span>
+                  </button>
+                </div>
+
+                {/* Card 3: Bootstrap Structural Scan */}
+                <div className="p-3.5 rounded border border-forge-dark bg-forge-very-dark/80 hover:border-emerald-500/50 transition-all flex flex-col justify-between group">
+                  <div>
+                    <div className="flex items-center gap-2 mb-2 text-emerald-400">
+                      <FolderOpen size={16} className="group-hover:scale-110 transition-transform" />
+                      <span className="font-bold text-xs">Bootstrap Scan</span>
+                    </div>
+                    <p className="text-[11px] text-forge-dim mb-4 leading-relaxed">
+                      Validates directory structure, git worktrees, and checks if acceptance criteria for planned items are already fulfilled.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={bootstrapScan}
+                    disabled={bootstrapping}
+                    data-testid="hero-bootstrap-scan"
+                    className="forge-secondary-button text-xs w-full py-1.5 flex items-center justify-center gap-1.5 border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/20"
+                  >
+                    <FolderOpen size={11} />
+                    <span>{bootstrapping ? 'Scanning...' : 'Run Scan'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-3 justify-center">
-              <button
-                type="button"
-                onClick={handleImportTodos}
-                disabled={importingTodos}
-                className="forge-btn text-xs px-3 py-1.5 flex items-center gap-1.5"
-              >
-                <RefreshCw size={12} className={importingTodos ? 'animate-spin' : ''} />
-                <span>Import Code TODOs</span>
-              </button>
-              <button
-                type="button"
-                onClick={bootstrapScan}
-                disabled={bootstrapping}
-                className="forge-secondary-button text-xs px-3 py-1.5 flex items-center gap-1.5"
-              >
-                <FolderOpen size={12} />
-                <span>Verify Codebase Status</span>
-              </button>
+          </div>
+        ) : flowViewMode === 'today' ? (
+          /* Today Full Priority Queue View */
+          <div className="flex-1 flex flex-col overflow-hidden forge-surface">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-forge-dark bg-forge-very-dark/40">
+              <div className="text-[11px] text-forge-text font-bold flex items-center gap-2">
+                <Clock size={12} className="text-forge-neon" />
+                <span>Today Priority Queue ({todayItems.length})</span>
+                <span className="text-[9px] text-forge-dim font-normal">
+                  Ordered by dependency-unblocked priority score
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={executeNextToday}
+                  disabled={isStreaming || todayItems.every(item => item.blocked)}
+                  className="forge-btn text-[9px] px-2.5 py-1 flex items-center gap-1 disabled:opacity-40"
+                  title="Run the highest-priority unblocked task"
+                >
+                  <Play size={8} />
+                  <span>Execute next</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={executeAllToday}
+                  disabled={isStreaming || todayItems.every(item => item.blocked)}
+                  className="forge-secondary-button text-[9px] px-2.5 py-1 disabled:opacity-40"
+                  title="Dispatch all unblocked Today tasks as a sequential batch"
+                >
+                  Execute all
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+              {todayItems.length === 0 ? (
+                <div className="text-xs text-forge-dim py-12 text-center">
+                  No open tasks in Today queue. Add a task or move one out of DONE.
+                </div>
+              ) : (
+                todayItems.map((item, idx) => (
+                  <div
+                    key={item.task.id}
+                    className="flex items-center gap-2.5 p-2 rounded border border-forge-dark/60 bg-forge-very-dark/60 hover:border-forge-dark transition-colors text-[10px]"
+                  >
+                    <span className="text-forge-dim w-4 text-center shrink-0 font-bold">{idx + 1}.</span>
+                    <span
+                      onClick={() => setDrawerTask(item.task)}
+                      className={`flex-1 truncate cursor-pointer hover:text-white hover:underline transition-colors ${item.blocked ? 'text-forge-dim' : 'text-forge-text font-medium'}`}
+                      title="Click to view & edit task details"
+                    >
+                      <SafeMarkdown text={item.task.title} />
+                    </span>
+                    <span className={`text-[9px] px-1 py-0.5 rounded font-mono ${getAssigneeColor(item.task.assignee)}`}>
+                      [{item.task.assignee}]
+                    </span>
+                    {item.blocked && (
+                      <span className="text-[8px] uppercase border border-red-700 text-red-300 rounded px-1.5 py-0.5 font-bold">
+                        blocked
+                      </span>
+                    )}
+                    <span className="text-[8.5px] uppercase border border-forge-neon/40 text-forge-neon rounded px-1.5 py-0.5 font-mono" title="Priority score">
+                      score: {item.score}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => runTaskQuery(item.task)}
+                      disabled={item.blocked || isStreaming}
+                      title={item.blocked ? 'Blocked by unfinished dependency' : 'Run this task in Forge'}
+                      className="px-2 py-1 rounded border border-forge-neon/40 bg-forge-neon/10 text-forge-neon text-[9px] font-mono font-bold hover:bg-forge-neon/20 disabled:opacity-40 flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <Play size={8} />
+                      <span>Run</span>
+                    </button>
+                    {onOpenVibeTask && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenVibeTask(item.task.id)}
+                        disabled={item.blocked || isStreaming}
+                        title="Build this task visually in Vibe Studio"
+                        className="px-2 py-1 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[9px] font-mono font-bold hover:bg-emerald-500/20 disabled:opacity-40 flex items-center gap-1 shrink-0 cursor-pointer"
+                      >
+                        <Sparkles size={8} />
+                        <span>Vibe</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setHandoffModalTask(item.task)}
+                      title="Push to... (In-App CLI Runner or External AI Editor)"
+                      className="px-2 py-1 rounded border border-cyan-500/40 bg-cyan-500/10 text-cyan-400 text-[9px] font-mono font-bold hover:bg-cyan-500/20 flex items-center gap-1 shrink-0 cursor-pointer"
+                    >
+                      <ExternalLink size={8} />
+                      <span>Push</span>
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         ) : (
+          /* Kanban Columns View */
           <div className="flex-1 grid grid-cols-3 gap-2 overflow-hidden">
             {columns.map(column => (
               <div key={column.id} className="flex flex-col overflow-hidden forge-surface p-2">
