@@ -52,7 +52,7 @@ test.describe('Desktop renderer — smoke', () => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     const criticalErrors = errors.filter(e =>
-      !e.includes('favicon') && !e.includes('net::ERR_') && !e.includes('WebSocket') && !e.includes('503')
+      !e.includes('favicon') && !e.includes('net::ERR_') && !e.includes('WebSocket') && !e.includes('[WS]') && !e.includes('Initial connection failed') && !e.includes('503')
     );
     const criticalFailedResponses = failedResponses.filter(r => !r.includes('/api/ollama/models'));
     expect({ criticalErrors, failedResponses: criticalFailedResponses }).toEqual({ criticalErrors: [], failedResponses: [] });

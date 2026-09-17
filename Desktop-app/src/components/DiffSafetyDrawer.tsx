@@ -131,6 +131,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
             </button>
             <button
               type="button"
+              data-testid="close-diff-drawer"
               onClick={onClose}
               className="text-zinc-400 hover:text-white p-1 rounded hover:bg-zinc-800 transition-colors"
             >

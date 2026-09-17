@@ -2211,6 +2211,7 @@ function App() {
                  </span>
                  <button
                    type="button"
+                   data-testid="close-project-modal"
                    onClick={() => {
                      setIsProjectModalOpen(false);
                      setIsCreateProjectOpen(false);
