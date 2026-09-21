@@ -1,3 +1,4 @@
+import { usePlanningStore } from '../store/usePlanningStore';
 import { CostHistory } from './Planning/CostHistory';
 import { API_BASE_URL } from '../api/client';
 import React, { useState, useEffect, useCallback } from 'react';
@@ -135,37 +136,22 @@ export function PlanningScreen({
 }: PlanningScreenProps) {
   const defaultArchitectMessage = 'Hello! I am the Architect System Planning Agent. I can help you model your system design, plan database models, outline code changes, and construct task checklists. Let me know what feature we are scoping today!';
   
-  const [inputText, setInputText] = useState('');
+    const { inputText, setInputText, rightView, setRightView, generatingUtility, setGeneratingUtility, utilityContent, setUtilityContent, utilitySavePath, setUtilitySavePath, customUtilityPrompt, setCustomUtilityPrompt, savingUtility, setSavingUtility, currentCost, setCurrentCost, currentInputTokens, setCurrentInputTokens, currentOutputTokens, setCurrentOutputTokens, currentSavings, setCurrentSavings, sessionCost, setSessionCost, sessionTokens, setSessionTokens, sessionSavings, setSessionSavings, costHistory, setCostHistory, costRestricted, setCostRestricted, costHistoryLoading, setCostHistoryLoading, driftItems, setDriftItems, loopLoading, setLoopLoading, enriching, setEnriching, enrichDismissed, setEnrichDismissed, confirmingId, setConfirmingId, whatsLeft, setWhatsLeft, whatsLeftLoading, setWhatsLeftLoading, whatsLeftExport, setWhatsLeftExport, showRepoManager, setShowRepoManager, newRepoPath, setNewRepoPath, workspaceItems, setWorkspaceItems, feasibilityVerdicts, setFeasibilityVerdicts, isExtractModalOpen, setIsExtractModalOpen, extractedDrafts, setExtractedDrafts, isExtracting, setIsExtracting, isEditModalOpen, setIsEditModalOpen, editingItem, setEditingItem, isPushDiffModalOpen, setIsPushDiffModalOpen, isPushing, setIsPushing, isGithubModalOpen, setIsGithubModalOpen, gitIssues, setGitIssues, fetchingIssues, setFetchingIssues, importingIssues, setImportingIssues, gitIssuesSearch, setGitIssuesSearch, docTemplates, setDocTemplates, selectedTemplateId, setSelectedTemplateId, docsTargetFolder, setDocsTargetFolder, generatingDoc, setGeneratingDoc, patchingDoc, setPatchingDoc, savingDoc, setSavingDoc, docContent, setDocContent, docPathsList, setDocPathsList, selectedDocPath, setSelectedDocPath } = usePlanningStore();
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;
     title: string;
     message: string;
     onConfirm: () => void;
   } | null>(null);
-  const [rightView, setRightView] = useState<'draft' | 'loop' | 'docs' | 'cost' | 'utilities'>('draft'); // 'draft' is now the Plan Workspace list
-  const [generatingUtility, setGeneratingUtility] = useState(false);
-  const [utilityContent, setUtilityContent] = useState('');
-  const [utilitySavePath, setUtilitySavePath] = useState('');
-  const [customUtilityPrompt, setCustomUtilityPrompt] = useState('');
-  const [savingUtility, setSavingUtility] = useState(false);
-  const [agencyBranding, setAgencyBranding] = useState({
+   // 'draft' is now the Plan Workspace list
+            const [agencyBranding, setAgencyBranding] = useState({
     agencyName: 'Kryleos Partner Agency',
     logoUrl: 'https://raw.githubusercontent.com/thetimelord69/Kryleos-forge/main/logo.png',
     primaryColor: '#10b981'
   });
-  const [currentCost, setCurrentCost] = useState(0);
-  const [currentInputTokens, setCurrentInputTokens] = useState(0);
-  const [currentOutputTokens, setCurrentOutputTokens] = useState(0);
-  const [currentSavings, setCurrentSavings] = useState(0);
-
-  const [sessionCost, setSessionCost] = useState(0);
-  const [sessionTokens, setSessionTokens] = useState(0);
-  const [sessionSavings, setSessionSavings] = useState(0);
-
-  const [costHistory, setCostHistory] = useState<any[]>([]);
-  const [costRestricted, setCostRestricted] = useState(false);
-  const [costHistoryLoading, setCostHistoryLoading] = useState(false);
-
+        
+      
+      
   const loadCostHistory = useCallback(async () => {
     setCostHistoryLoading(true);
     try {
@@ -214,55 +200,22 @@ export function PlanningScreen({
       loadCostHistory();
     }
   }, [rightView, loadCostHistory]);
-  const [driftItems, setDriftItems] = useState<DriftItem[]>([]);
-  const [loopLoading, setLoopLoading] = useState(false);
-  const [enriching, setEnriching] = useState(false);
-  const [enrichDiff, setEnrichDiff] = useState<Array<{ taskId: string; title: string; added: AcceptanceCriterion[] }>>([]);
-  const [enrichDismissed, setEnrichDismissed] = useState(false);
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [whatsLeft, setWhatsLeft] = useState<WhatsLeftReport | null>(null);
-  const [whatsLeftLoading, setWhatsLeftLoading] = useState(false);
-  const [whatsLeftExport, setWhatsLeftExport] = useState(false);
-  const [showRepoManager, setShowRepoManager] = useState(false);
-  const [newRepoPath, setNewRepoPath] = useState('');
-  const [activeTargets, setActiveTargets] = useState<string[]>([workspaceRoot]);
+        const [enrichDiff, setEnrichDiff] = useState<Array<{ taskId: string; title: string; added: AcceptanceCriterion[] }>>([]);
+                const [activeTargets, setActiveTargets] = useState<string[]>([workspaceRoot]);
 
   // Plan Workspace state
-  const [workspaceItems, setWorkspaceItems] = useState<PlanWorkspaceItem[]>([]);
-  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+    const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
   const [expandedContextIds, setExpandedContextIds] = useState<Set<string>>(new Set());
-  const [feasibilityVerdicts, setFeasibilityVerdicts] = useState<{ [id: string]: { verdict: string; reason: string; loading?: boolean } }>({});
-  
+    
   // Modals state
-  const [isExtractModalOpen, setIsExtractModalOpen] = useState(false);
-  const [extractedDrafts, setExtractedDrafts] = useState<PlanWorkspaceItem[]>([]);
-  const [isExtracting, setIsExtracting] = useState(false);
-  
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<PlanWorkspaceItem | null>(null);
-  
-  const [isPushDiffModalOpen, setIsPushDiffModalOpen] = useState(false);
-  const [isPushing, setIsPushing] = useState(false);
-
-  const [isGithubModalOpen, setIsGithubModalOpen] = useState(false);
-  const [gitTokenInput, setGitTokenInput] = useState(githubToken);
+        
+      
+    
+    const [gitTokenInput, setGitTokenInput] = useState(githubToken);
   const [gitRepoInput, setGitRepoInput] = useState(githubRepoUrl);
-  const [gitIssues, setGitIssues] = useState<any[]>([]);
-  const [selectedGitIssueIds, setSelectedGitIssueIds] = useState<Set<number>>(new Set());
-  const [fetchingIssues, setFetchingIssues] = useState(false);
-  const [importingIssues, setImportingIssues] = useState(false);
-  const [gitIssuesSearch, setGitIssuesSearch] = useState('');
-
-  const [docTemplates, setDocTemplates] = useState<any[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [docsTargetFolder, setDocsTargetFolder] = useState('.kryleos/docs');
-  const [generatingDoc, setGeneratingDoc] = useState(false);
-  const [patchingDoc, setPatchingDoc] = useState(false);
-  const [savingDoc, setSavingDoc] = useState(false);
-  const [docContent, setDocContent] = useState('');
-  const [docPathsList, setDocPathsList] = useState<string[]>([]);
-  const [selectedDocPath, setSelectedDocPath] = useState('');
-
+    const [selectedGitIssueIds, setSelectedGitIssueIds] = useState<Set<number>>(new Set());
+      
+                  
   useEffect(() => {
     setGitTokenInput(githubToken);
   }, [githubToken]);
