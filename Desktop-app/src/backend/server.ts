@@ -577,6 +577,17 @@ async function startForgeRun(opts: {
 const defaultWorkspace = path.resolve(process.cwd());
 
 const sandbox = new WorkspaceSandbox(defaultWorkspace);
+
+app.use('/api/git', getGitRouter(sandbox));
+app.use('/api/projects', getProjectsRouter(sandbox));
+app.use('/api/plan', getPlanRouter(sandbox));
+app.use('/api/workspace', getWorkspaceRouter(sandbox));
+app.use('/api/mcp', getMcpRouter(sandbox));
+app.use('/api/worktrees', getWorktreesRouter(sandbox));
+app.use('/api/docs', getDocsRouter(sandbox));
+app.use('/api/cost', getCostRouter(sandbox));
+app.use('/api/sessions', getSessionsRouter(sandbox));
+app.use('/api/files', getFilesRouter(sandbox));
 companionHub.setWorkspaceRoot(defaultWorkspace);
 initDeviationStore(path.join(defaultWorkspace, '.kryleos', 'cc-deviations.json'));
 const pendingTerminalApprovals = new Map<string, (approved: boolean) => void>();
@@ -783,7 +794,7 @@ function stripHtml(value: unknown): unknown {
   return value.replace(/<[^>]*>/g, '');
 }
 
-function sanitizeTask(task: unknown): unknown {
+export function sanitizeTask(task: unknown): unknown {
   if (!task || typeof task !== 'object') return task;
   const t = task as Record<string, unknown>;
   return Object.fromEntries(
@@ -2683,7 +2694,7 @@ app.post('/api/crew/sync', async (req, res) => {
 });
 
 // --- GitHub & Docs Autopilot Integrations ---
-const templates = [
+export const templates = [
   { id: 'project_brief', name: 'Project Brief', description: 'High-level project goals, features, and non-goals.', requiredTier: 'free' },
   { id: 'user_guide', name: 'User Guide', description: 'Step-by-step user onboarding and workflow instructions.', requiredTier: 'free' },
   { id: 'architecture', name: 'System Architecture', description: 'Core components, data flow, and directory layout.', requiredTier: 'free' },

@@ -82,6 +82,6 @@ export async function installCrewPersona(persona: CrewPersona): Promise<void> {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || `install failed (HTTP ${res.status})`);
+    throw new Error((data as any).error || `install failed (HTTP ${res.status})`);
   }
 }
