@@ -1,3 +1,13 @@
+import { getSessionsRouter } from './routes/sessionsRouter';
+import { getCostRouter } from './routes/costRouter';
+import { getDocsRouter } from './routes/docsRouter';
+import { getWorktreesRouter } from './routes/worktreesRouter';
+import { getMcpRouter } from './routes/mcpRouter';
+import { getProjectsRouter } from './routes/projectsRouter';
+import { getWorkspaceRouter } from './routes/workspaceRouter';
+import { getPlanRouter } from './routes/planRouter';
+import { getGitRouter } from './routes/gitRouter';
+import { getFilesRouter } from './routes/filesRouter';
 import express from 'express';
 import * as http from 'http';
 import * as https from 'https';
@@ -413,13 +423,13 @@ companionServer.on('upgrade', (req, socket, head) => {
 
 companionWss.on('connection', (ws, req) => companionHub.handleConnection(ws, req));
 
-const chatDb = new ChatDatabase();
+export const chatDb = new ChatDatabase();
 // Active project id (set via POST /api/projects/active). The planning layer
 // must read the same FLOW board the renderer writes: project-scoped
 // `flow_board_<projectId>` when a project is active, global `flow_board` otherwise.
-let activeProjectId: string | null = null;
+export let activeProjectId: string | null = null;
 const activeFlowSessionId = () => (activeProjectId ? `flow_board_${activeProjectId}` : 'flow_board');
-const planningV2 = () => new PlanningV2Service(chatDb, sandbox.getWorkspaceRoot(), activeFlowSessionId());
+export const planningV2 = () => new PlanningV2Service(chatDb, sandbox.getWorkspaceRoot(), activeFlowSessionId());
 
 // Server-side blockedBy enforcement: locate the plan item across saved FLOW
 // boards (`flow_board` and project-scoped `flow_board_*` sessions) and return
@@ -440,7 +450,7 @@ async function findUnresolvedBlockers(planItemId: string): Promise<string[]> {
 // Phase 5.4: resolves a remote START_FORGE_RUN's planItemId to its
 // ProjectTask, the same way findUnresolvedBlockers locates it across saved
 // FLOW boards (`flow_board` and project-scoped `flow_board_*` sessions).
-async function findTaskById(planItemId: string): Promise<ProjectTask | null> {
+export async function findTaskById(planItemId: string): Promise<ProjectTask | null> {
   const sessions = await chatDb.listSessions('project');
   for (const meta of sessions) {
     const session = await chatDb.getSession(meta.id);
@@ -573,7 +583,7 @@ const pendingTerminalApprovals = new Map<string, (approved: boolean) => void>();
 
 // Terminal approval callback — looks up the session's ws via terminalManager
 // so it works at module scope where no bare `ws` variable exists.
-const terminalOnCommand = async (sessionId: string, command: string, classification: import('./tools').CommandClassification): Promise<boolean> => {
+export const terminalOnCommand = async (sessionId: string, command: string, classification: import('./tools').CommandClassification): Promise<boolean> => {
   const session = terminalManager.getSession(sessionId);
   if (!session) return false;
   const approvalPromise = new Promise<boolean>((resolve) => {
@@ -595,7 +605,7 @@ const terminalOnCommand = async (sessionId: string, command: string, classificat
   return result;
 };
 
-let terminalManager = new TerminalManager({
+export let terminalManager = new TerminalManager({
   workspaceRoot: defaultWorkspace,
   onCommand: terminalOnCommand,
   onTerminalOutput: (sessionId: string, data: string) => companionHub.broadcastTerminalOutput(sessionId, data),
@@ -662,8 +672,8 @@ function normalizeOllamaModel(model: string): string {
 // Last model selected by any connection. Lets REST routes (e.g. plan drift) reach
 // the configured provider outside the per-connection WebSocket scope. Falls back
 // gracefully: if no key is configured the call errors and callers no-op.
-let activeModel = 'ollama:qwen2.5-coder';
-const getModelClient = (overridePrivacy?: boolean): ChatClient => ({
+export let activeModel = 'ollama:qwen2.5-coder';
+export const getModelClient = (overridePrivacy?: boolean): ChatClient => ({
   async chatStream(messages, callbacks) {
     if ((globalZeroEgressMode || globalPrivacyMode) && !isOllamaModel(activeModel) && !(isCustomModel(activeModel) && isLocalCustomEndpoint(customClient.getBaseUrl()))) {
       if (globalPrivacyMode && overridePrivacy) {
@@ -704,7 +714,7 @@ const secretsRoot = process.env.KRYLEOS_DATA_DIR?.trim()
   ? path.resolve(process.env.KRYLEOS_DATA_DIR)
   : (process.env.USERPROFILE || process.env.HOME || defaultWorkspace);
 const secretsFilePath = path.join(secretsRoot, '.kryleos_forge_secrets.json');
-const dataFilePath = (name: string) => process.env.KRYLEOS_DATA_DIR?.trim()
+export const dataFilePath = (name: string) => process.env.KRYLEOS_DATA_DIR?.trim()
   ? path.resolve(process.env.KRYLEOS_DATA_DIR, name)
   : path.resolve(process.cwd(), name);
 let credentialsWriteQueue: Promise<void> = Promise.resolve();
@@ -761,47 +771,11 @@ if (fs.existsSync(secretsFilePath)) {
   }
 }
 
-app.get('/api/sessions', async (req, res) => {
-  try {
-    const list = await chatDb.listSessions(req.query.space as any);
-    res.json(list);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/sessions/:id', async (req, res) => {
-  try {
-    const session = await chatDb.getSession(req.params.id);
-    if (!session) {
-      if (req.params.id === 'flow_board' || req.params.id.startsWith('flow_board_')) {
-        return res.json({
-          id: req.params.id,
-          title: 'FLOW Board',
-          createdAt: new Date().toISOString(),
-          logs: [],
-          checklist: [],
-          space: 'project',
-          tasks: []
-        });
-      }
-      res.status(404).json({ error: 'Session not found' });
-      return;
-    }
-    res.json(session);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.delete('/api/sessions/:id', async (req, res) => {
-  try {
-    await chatDb.deleteSession(req.params.id);
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
+
+
+
 
 // Strip HTML tags from a string to prevent stored XSS (SEC-7).
 function stripHtml(value: unknown): unknown {
@@ -819,144 +793,17 @@ function sanitizeTask(task: unknown): unknown {
 
 // REST fallback for board persistence so task saves survive a closed
 // WebSocket. Mirrors the WS `save_tasks` path.
-app.put('/api/sessions/:id/tasks', async (req, res) => {
-  const tasks = req.body?.tasks;
-  if (!Array.isArray(tasks)) {
-    return res.status(400).json({ success: false, error: 'tasks array is required' });
-  }
-  try {
-    const existing = await chatDb.getSession(req.params.id);
-    const session: ChatSession = existing || {
-      id: req.params.id,
-      title: req.params.id === 'flow_board' ? 'FLOW Board' : 'Project Tasks',
-      createdAt: new Date().toISOString(),
-      logs: [],
-      checklist: [],
-      space: 'project' as const,
-      tasks: []
-    };
-    session.tasks = tasks.map(sanitizeTask) as ProjectTask[];
-    await chatDb.saveSession(session);
-    res.json({ success: true, tasks: session.tasks });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/workspace', (_req, res) => {
-  res.json({
-    workspaceRoot: sandbox.getWorkspaceRoot(),
-    defaultWorkspace
-  });
-});
 
-app.post('/api/workspace', (req, res) => {
-  const { path: newPath } = req.body;
-  if (!newPath) {
-    return res.status(400).json({ error: 'path is required' });
-  }
-  try {
-    sandbox.setWorkspaceRoot(newPath);
-    companionHub.setWorkspaceRoot(newPath);
-    terminalManager = new TerminalManager({ workspaceRoot: newPath, onCommand: terminalOnCommand, onTerminalOutput: (s: string, d: string) => companionHub.broadcastTerminalOutput(s, d) });
-    res.json({ success: true, workspaceRoot: sandbox.getWorkspaceRoot() });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/projects', (req, res) => {
-  try {
-    const projectsPath = dataFilePath('projects.json');
-    let projects = [];
-    if (fs.existsSync(projectsPath)) {
-      const content = fs.readFileSync(projectsPath, 'utf-8');
-      projects = JSON.parse(content || '[]');
-    }
-    res.json({ success: true, projects });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/projects/create', async (req, res) => {
-  const { name, folderPath, gitUrl, description } = req.body;
-  if (!name || !folderPath) {
-    return res.status(400).json({ error: 'name and folderPath are required' });
-  }
 
-  try {
-    const resolvedPath = path.resolve(folderPath);
-    if (!fs.existsSync(resolvedPath)) {
-      fs.mkdirSync(resolvedPath, { recursive: true });
-    }
 
-    const projectsPath = dataFilePath('projects.json');
-    let projects: any[] = [];
-    if (fs.existsSync(projectsPath)) {
-      const content = fs.readFileSync(projectsPath, 'utf-8');
-      projects = JSON.parse(content || '[]');
-    }
 
-    const newProject = {
-      id: `project_${Date.now()}`,
-      name,
-      workspaceFolder: resolvedPath,
-      gitUrl: gitUrl || '',
-      description: description || ''
-    };
 
-    const finalizeProject = () => {
-      // Avoid duplicate folder paths
-      const filtered = projects.filter((p: any) => p.workspaceFolder !== resolvedPath);
-      filtered.push(newProject);
-      fs.writeFileSync(projectsPath, JSON.stringify(filtered, null, 2), 'utf-8');
-      sandbox.setWorkspaceRoot(resolvedPath);
-      activeProjectId = newProject.id;
-      res.json({ success: true, project: newProject, workspaceRoot: resolvedPath });
-    };
 
-    if (gitUrl && gitUrl.trim()) {
-      if (!fs.existsSync(path.join(resolvedPath, '.git'))) {
-        execFile('git', ['clone', gitUrl, '.'], { cwd: resolvedPath }, (err, stdout, stderr) => {
-          if (err) {
-            console.error('Git clone failed:', stderr || err.message);
-            newProject.description = `${newProject.description} (Git clone failed — see server log for details)`.trim();
-            console.error('Git clone details:', err.message);
-          }
-          finalizeProject();
-        });
-        return;
-      }
-    }
 
-    finalizeProject();
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/projects/active', (req, res) => {
-  const { id } = req.body;
-  try {
-    const projectsPath = dataFilePath('projects.json');
-    let projects = [];
-    if (fs.existsSync(projectsPath)) {
-      const content = fs.readFileSync(projectsPath, 'utf-8');
-      projects = JSON.parse(content || '[]');
-    }
-    const project = projects.find((p: any) => p.id === id);
-    if (!project) {
-      return res.status(404).json({ error: 'Project not found' });
-    }
-    sandbox.setWorkspaceRoot(project.workspaceFolder);
-    activeProjectId = project.id;
-    planningV2().recoverInterruptedRun().catch(err => console.error('Interrupted trace recovery failed:', err));
-    res.json({ success: true, project, workspaceRoot: project.workspaceFolder });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
 app.post('/api/demo/start', async (_req, res) => {
   try {
@@ -1041,57 +888,13 @@ app.post('/api/demo/start', async (_req, res) => {
   }
 });
 
-app.delete('/api/projects/:id', (req, res) => {
-  try {
-    const projectsPath = dataFilePath('projects.json');
-    let projects = [];
-    if (fs.existsSync(projectsPath)) {
-      const content = fs.readFileSync(projectsPath, 'utf-8');
-      projects = JSON.parse(content || '[]');
-    }
-    const updated = projects.filter((p: any) => p.id !== req.params.id);
-    fs.writeFileSync(projectsPath, JSON.stringify(updated, null, 2), 'utf-8');
-    if (activeProjectId === req.params.id) activeProjectId = null;
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/workspace/revert', async (req, res) => {
-  const { path: filePath } = req.body;
-  if (!filePath) {
-    return res.status(400).json({ error: 'path is required' });
-  }
-  try {
-    const success = await sandbox.revertFile(filePath);
-    res.json({ success, message: success ? `Reverted ${path.basename(filePath)} to snapshot state` : 'No snapshot available for this file' });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/git/status', async (_req, res) => {
-  try {
-    const status = await sandbox.gitStatus();
-    res.json(status);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/git/stage', async (req, res) => {
-  const { path: filePath } = req.body;
-  if (!filePath) {
-    return res.status(400).json({ error: 'path is required' });
-  }
-  try {
-    const success = await sandbox.gitStage(filePath);
-    res.json({ success });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
+
+
+
+
 
 app.get('/api/review/current', async (_req, res) => {
   try {
@@ -1202,193 +1005,33 @@ app.post('/api/tools/invoke', async (req, res) => {
 });
 
 // ── MCP Server Management Endpoints ─────────────────────────────────────────
-app.get('/api/mcp/servers', (_req, res) => {
-  try {
-    const servers = mcpClientManager.listServers();
-    res.json({ success: true, servers });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.post('/api/mcp/servers', (req, res) => {
-  const config = req.body;
-  if (!config || !config.id || !config.name || !config.transport) {
-    return res.status(400).json({ error: 'id, name, and transport are required' });
-  }
-  try {
-    mcpClientManager.addServer({
-      id: config.id,
-      name: config.name,
-      transport: config.transport,
-      command: config.command,
-      args: config.args,
-      url: config.url,
-      authTokenRef: config.authTokenRef,
-      enabled: config.enabled ?? false,
-      discoveryStatus: config.discoveryStatus ?? 'not_started',
-      workspaceTrust: config.workspaceTrust ?? 'untrusted',
-      featureStatus: config.featureStatus ?? 'preview',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      allowedTools: config.allowedTools,
-      deniedTools: config.deniedTools,
-    });
-    res.json({ success: true, server: mcpClientManager.getServer(config.id) });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.post('/api/mcp/servers/:id/discover', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const tools = await mcpClientManager.discoverTools(id, toolApiGateway);
-    res.json({ success: true, count: tools.length, tools });
-  } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
-  }
-});
 
-app.delete('/api/mcp/servers/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const deleted = await mcpClientManager.removeServer(id, toolApiGateway);
-    res.json({ success: deleted });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.post('/api/git/commit', async (req, res) => {
-  const { message } = req.body;
-  if (!message) {
-    return res.status(400).json({ error: 'message is required' });
-  }
-  try {
-    const result = await sandbox.gitCommit(message);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/git/remote', async (req, res) => {
-  const { url, token } = req.body;
-  if (!url) {
-    return res.status(400).json({ error: 'url is required' });
-  }
-  try {
-    const result = await sandbox.gitSetRemote(url, token);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/git/push', async (req, res) => {
-  const { branch } = req.body;
-  try {
-    const result = await sandbox.gitPush(branch || 'main');
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/git/pull', async (req, res) => {
-  const { branch } = req.body;
-  try {
-    const result = await sandbox.gitPull(branch || 'main');
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/files', async (req, res) => {
-  const dirPath = (req.query.path as string) || '.';
-  try {
-    const list = await sandbox.listDir(dirPath);
-    res.json(list);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/workspace/graph', async (req, res) => {
-  try {
-    const rootPath = sandbox.resolvePath('.');
-    const graphData = await generateWorkspaceGraph(rootPath);
-    res.json(graphData);
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/files/content', async (req, res) => {
-  const filePath = (req.query.path as string);
-  if (!filePath) {
-    return res.status(400).json({ error: 'path query parameter is required' });
-  }
-  try {
-    const content = await sandbox.readFile(filePath);
-    const resolvedPath = sandbox.resolvePath(filePath);
-    let lastModified = '';
-    if (fs.existsSync(resolvedPath)) {
-      const stats = fs.statSync(resolvedPath);
-      lastModified = stats.mtime.toISOString();
-    }
-    res.json({ content, lastModified });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/files/create', async (req, res) => {
-  const { path: filePath, isDirectory, content } = req.body;
-  if (!filePath) {
-    return res.status(400).json({ error: 'path is required' });
-  }
-  try {
-    const resolved = sandbox.resolvePath(filePath);
-    if (isDirectory) {
-      await fs.promises.mkdir(resolved, { recursive: true });
-    } else {
-      await sandbox.writeFile(filePath, content || '');
-    }
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/files/save', async (req, res) => {
-  const { path: filePath, content } = req.body;
-  if (!filePath) {
-    return res.status(400).json({ error: 'path is required' });
-  }
-  try {
-    await sandbox.writeFile(filePath, content || '');
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.delete('/api/files', async (req, res) => {
-  const { path: filePath } = req.query;
-  if (!filePath) {
-    return res.status(400).json({ error: 'path query parameter is required' });
-  }
-  try {
-    const resolved = sandbox.resolvePath(filePath as string);
-    await fs.promises.unlink(resolved);
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2849,63 +2492,15 @@ app.post('/api/audit/export', async (req, res) => {
 });
 
 // --- WORKTREE ISOLATION API (Phase 5) ---
-app.get('/api/worktrees', async (_req, res) => {
-  try {
-    const worktrees = await sandbox.listCardWorktrees();
-    res.json({ success: true, worktrees });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.post('/api/worktrees/card/:taskId', async (req, res) => {
-  try {
-    const result = await sandbox.createCardWorktree(req.params.taskId, req.body?.branch);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.post('/api/worktrees/merge/:taskId', async (req, res) => {
-  try {
-    let cardData = req.body?.cardData;
-    if (!cardData) {
-      const task = await findTaskById(req.params.taskId);
-      if (task) {
-        cardData = {
-          title: task.title,
-          category: task.category,
-          description: (task as any).description || task.title,
-          acceptanceCriteria: task.acceptanceCriteria,
-          postExecutionReview: task.postExecutionReview
-        };
-      }
-    }
-    const result = await sandbox.mergeCardWorktree(req.params.taskId, req.body?.targetBranch, cardData);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.delete('/api/worktrees/:taskId', async (req, res) => {
-  try {
-    const result = await sandbox.removeCardWorktree(req.params.taskId, req.query?.force === 'true');
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.post('/api/worktrees/revert/:taskId', async (req, res) => {
-  try {
-    const result = await sandbox.revertCardWorktree(req.params.taskId);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+
+
+
+
+
 
 // --- CROSS-CARD DECISION MEMORY API (Phase 9a) ---
 app.get('/api/decisions', async (_req, res) => {
@@ -3010,129 +2605,29 @@ app.get('/api/security/approval-pubkey', (req, res) => {
   res.json({ publicKey: getPublicKey() });
 });
 
-app.get('/api/workspace/semantic-cache', async (req, res) => {
-  const { query } = req.query;
-  if (typeof query !== 'string') return res.status(400).json({ error: 'query string parameter is required' });
-  try {
-    const results = await sandbox.querySemanticCache(query);
-    res.json({ success: true, results });
-  } catch (err: any) {
-    res.status(403).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/workspace/semantic-cache/rebuild', async (req, res) => {
-  try {
-    const result = await sandbox.buildSemanticCache();
-    res.json(result);
-  } catch (err: any) {
-    res.status(403).json({ error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/workspace/command-policy', (req, res) => {
-  const { allowedPrefixes, blockedPrefixes, userRole } = req.body;
-  try {
-    if (userRole) {
-      sandbox.setUserRole(userRole);
-    }
-    if (allowedPrefixes || blockedPrefixes) {
-      sandbox.setCommandPolicies({ allowedPrefixes, blockedPrefixes });
-    }
-    res.json({ success: true, message: 'Sandbox command policies updated successfully.' });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/plan/items/:id/criteria', async (req, res) => {
-  try {
-    const result = await planningV2().getCriteria(req.params.id);
-    res.json({ success: true, task: result.task, criteria: result.criteria });
-  } catch (err: any) {
-    res.status(404).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/plan/items/:id/criteria', async (req, res) => {
-  try {
-    const task = await planningV2().saveCriteria(req.params.id, req.body.criteria);
-    res.json({ success: true, task, criteria: task.acceptanceCriteria || [] });
-  } catch (err: any) {
-    res.status(404).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/plan/bootstrap', (_req, res) => {
-  try {
-    res.json({ success: true, fingerprint: planningV2().bootstrapFingerprint() });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/plan/bootstrap/evaluate', async (_req, res) => {
-  try {
-    const result = await planningV2().bootstrapEvaluate(getModelClient());
-    res.json({ success: true, result });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/plan/items/:id/criteria/generate', async (req, res) => {
-  try {
-    const result = await planningV2().generateCriteria(getModelClient(), req.params.id);
-    res.json({ success: true, task: result.task, criteria: result.criteria, usedLlm: result.usedLlm });
-  } catch (err: any) {
-    res.status(404).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/plan/items/:id/criteria/enrich', async (req, res) => {
-  try {
-    const result = await planningV2().enrichCriteria(req.params.id);
-    res.json({
-      success: true,
-      task: result.task,
-      criteria: result.task.acceptanceCriteria || [],
-      added: result.added,
-      candidates: result.candidates
-    });
-  } catch (err: any) {
-    res.status(404).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.patch('/api/plan/items/:id/criteria', async (req, res) => {
-  try {
-    const task = await planningV2().patchCriteria(req.params.id, req.body.criteria || []);
-    res.json({ success: true, task, criteria: task.acceptanceCriteria || [] });
-  } catch (err: any) {
-    res.status(404).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/plan/items/:id/review', async (req, res) => {
-  try {
-    const { task } = await planningV2().getCriteria(req.params.id);
-    if (!task) return res.status(404).json({ success: false, error: 'Task not found' });
-    const review = await runPostExecutionReview(sandbox.getWorkspaceRoot(), task, getModelClient());
-    const updatedTask = await planningV2().savePostExecutionReview(req.params.id, review);
-    res.json({ success: true, task: updatedTask, review });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-app.post('/api/plan/items/:id/review/override', async (req, res) => {
-  try {
-    const updatedTask = await planningV2().overridePostExecutionReview(req.params.id);
-    res.json({ success: true, task: updatedTask });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+
+
+
+
+
+
+
+
+
+
+
+
 
 app.get('/api/traces/:itemId', (req, res) => {
   try {
@@ -3151,117 +2646,19 @@ app.post('/api/traces', async (req, res) => {
   }
 });
 
-app.get('/api/plan/whats-left', async (req, res) => {
-  try {
-    const report = await planningV2().whatsLeft(getModelClient(), null);
-    res.json({ success: true, report, exportAllowed: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/plan/drift', async (_req, res) => {
-  try {
-    const report = await planningV2().checkDrift(getModelClient());
-    res.json({ success: true, report });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.get('/api/plan/todos', async (req, res) => {
-  try {
-    const ws = (req.query.workspace as string) || (planningV2() as any).workspaceRoot || process.cwd();
-    let todos: Array<{ id: string; title: string; category: string; description: string; file: string; line: number }> = [];
-    try {
-      const { execSync } = await import('child_process');
-      const stdout = execSync('git grep -n -I -E "(TODO|FIXME|HACK):" -- ":!node_modules" ":!.git" ":!dist" ":!build" || true', {
-        cwd: ws,
-        encoding: 'utf-8',
-        maxBuffer: 10 * 1024 * 1024
-      });
-      const lines = stdout.split('\n').filter(Boolean);
-      todos = lines.slice(0, 50).map((line, idx) => {
-        const parts = line.split(':');
-        const file = parts[0] || '';
-        const lineNum = parseInt(parts[1] || '1', 10);
-        const text = parts.slice(2).join(':').trim();
-        const cleanTitle = text.replace(/^(\/\*|\/\/|\*|#)\s*/, '').trim() || `Code TODO in ${file}:${lineNum}`;
-        let category = 'frontend';
-        if (/\b(test|spec|qa)\b/i.test(file + ' ' + cleanTitle)) category = 'testing';
-        else if (/\b(auth|sec|perm)\b/i.test(file + ' ' + cleanTitle)) category = 'security';
-        else if (/\b(doc|readme)\b/i.test(file + ' ' + cleanTitle)) category = 'docs';
-        else if (/\b(server|api|db|backend)\b/i.test(file + ' ' + cleanTitle)) category = 'backend';
-        return {
-          id: `todo_${Date.now()}_${idx}`,
-          title: cleanTitle,
-          category,
-          description: `Extracted from ${file} line ${lineNum}`,
-          file,
-          line: lineNum
-        };
-      });
-    } catch {
-      // Fallback empty
-    }
-    res.json({ success: true, todos });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message || 'Operation failed.' });
-  }
-});
 
-app.get('/api/plan/workspace', (req, res) => {
-  try {
-    res.json({ success: true, items: planningV2().getWorkspaceItems() });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/plan/workspace', (req, res) => {
-  try {
-    planningV2().saveWorkspaceItems(req.body.items || []);
-    res.json({ success: true });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/plan/workspace/extract', async (req, res) => {
-  try {
-    const { sessionId } = req.body;
-    if (!sessionId) {
-      return res.status(400).json({ success: false, error: 'sessionId is required' });
-    }
-    const session = await chatDb.getSession(sessionId);
-    if (!session) {
-      return res.status(404).json({ success: false, error: 'Session not found' });
-    }
-    const items = await planningV2().extractWorkspaceItems(getModelClient(), session.messages || []);
-    res.json({ success: true, items });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
-app.post('/api/plan/workspace/feasibility', async (req, res) => {
-  try {
-    const { projectDescription, title, description, category } = req.body;
-    if (!title || !description) {
-      return res.status(400).json({ success: false, error: 'title and description are required' });
-    }
-    const result = await planningV2().checkFeasibility(
-      getModelClient(),
-      projectDescription || '',
-      title,
-      description,
-      category || 'frontend'
-    );
-    res.json({ success: true, feasibility: result });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
+
+
+
+
+
+
+
 
 app.post('/api/crew/sync', async (req, res) => {
   if (globalPrivacyMode) {
@@ -3413,159 +2810,13 @@ app.post('/api/integrations/github/import-issues', async (req, res) => {
   }
 });
 
-app.get('/api/docs/templates', (req, res) => {
-  res.json({ success: true, templates });
-});
 
-app.post('/api/docs/generate', async (req, res) => {
-  const { templateId } = req.body;
-  if (!templateId) return res.status(400).json({ success: false, error: 'templateId is required' });
 
-  const selectedTemplate = templates.find(t => t.id === templateId);
-  if (!selectedTemplate) return res.status(404).json({ success: false, error: 'Template not found' });
 
-  try {
-    const root = sandbox.getWorkspaceRoot();
-    const service = planningV2();
-    const scan = service.scanDocsContext();
-    const client = getModelClient();
 
-    const userPrompt = [
-      `You are Kryleos Docs Autopilot. Your task is to generate a professional, production-grade documentation document for this codebase.`,
-      `The document to generate is a: **${selectedTemplate.name}**`,
-      `Description: ${selectedTemplate.description}`,
-      ``,
-      `=== CODEBASE CONTEXT ===`,
-      `Workspace Directory: ${root}`,
-      scan.packageJson ? `Package Manifest: ${JSON.stringify(scan.packageJson, null, 2)}` : '',
-      scan.readmeExcerpt ? `README Excerpt:\n${scan.readmeExcerpt}` : '',
-      scan.sourceTree ? `Source Tree:\n${scan.sourceTree}` : '',
-      `Test Files Found: ${scan.testFilesCount}`,
-      scan.recentGitChanges ? `Recent Commits:\n${scan.recentGitChanges}` : '',
-      scan.gitStatus ? `Git Status:\n${scan.gitStatus}` : '',
-      ``,
-      `Write a comprehensive, professional Markdown document for this ${selectedTemplate.name}. Make sure it is detailed, accurate to the codebase details, and complete. Avoid generic placeholders.`
-    ].filter(Boolean).join('\n\n');
 
-    const messages: Message[] = [
-      { role: 'system', content: 'You generate high-quality technical documentation for codebases. Respond with ONLY the markdown content. Do not write chat intro or outro.' },
-      { role: 'user', content: userPrompt }
-    ];
 
-    let generatedContent = '';
-    await client.chatStream(messages, {
-      onContentChunk: (chunk) => { generatedContent += chunk; },
-      onComplete: (content) => { generatedContent = content; }
-    });
 
-    if (!generatedContent) {
-      throw new Error('LLM generated empty response.');
-    }
-
-    const { bypassSecrets } = req.body;
-    if (!bypassSecrets) {
-      const foundSecrets = scanSecrets(generatedContent);
-      if (foundSecrets.length > 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'Secrets detected in the generated documentation. Document generation blocked.',
-          secrets: foundSecrets,
-          requiresBypass: true,
-          content: generatedContent
-        });
-      }
-    }
-
-    res.json({ success: true, content: generatedContent, defaultPath: `.kryleos/docs/${templateId}.md` });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
-
-app.post('/api/docs/patch', async (req, res) => {
-  const { docPath } = req.body;
-  if (!docPath) return res.status(400).json({ success: false, error: 'docPath is required' });
-
-  try {
-    const root = sandbox.getWorkspaceRoot();
-    const absPath = path.isAbsolute(docPath) ? docPath : path.resolve(root, docPath);
-    if (!isPathInside(root, absPath)) {
-      return res.status(403).json({ success: false, error: 'Access Denied: Path is outside the workspace root.' });
-    }
-    if (!fs.existsSync(absPath)) {
-      return res.status(404).json({ success: false, error: 'Documentation file not found.' });
-    }
-
-    const currentDocContent = fs.readFileSync(absPath, 'utf-8');
-
-    let gitDiff = '';
-    try {
-      gitDiff = execSync('git diff HEAD~1 HEAD', { cwd: root, encoding: 'utf-8' }).trim();
-    } catch {
-      try {
-        gitDiff = execSync('git diff', { cwd: root, encoding: 'utf-8' }).trim();
-      } catch {}
-    }
-
-    if (!gitDiff) {
-      return res.json({ success: true, content: currentDocContent, message: 'No modifications found in git history.' });
-    }
-
-    const client = getModelClient();
-
-    const userPrompt = [
-      `You are Kryleos Docs Autopilot. Your task is to update this existing technical document based on the recent code changes (git diff).`,
-      ``,
-      `=== EXISTING DOCUMENT ===`,
-      currentDocContent,
-      ``,
-      `=== RECENT CHANGES (GIT DIFF) ===`,
-      gitDiff,
-      ``,
-      `Review the changes and update the document content to accurately reflect them. Keep the formatting and structure. Return the FULL updated Markdown document. Do not include chat intros/outros.`
-    ].join('\n\n');
-
-    const messages: Message[] = [
-      { role: 'system', content: 'You update technical documentation files based on git diffs. Return the complete updated markdown document only.' },
-      { role: 'user', content: userPrompt }
-    ];
-
-    let updatedContent = '';
-    await client.chatStream(messages, {
-      onContentChunk: (chunk) => { updatedContent += chunk; },
-      onComplete: (content) => { updatedContent = content; }
-    });
-
-    if (!updatedContent) {
-      throw new Error('LLM generated empty response.');
-    }
-
-    res.json({ success: true, content: updatedContent });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
-
-app.post('/api/docs/write', async (req, res) => {
-  const { docPath, content } = req.body;
-  if (!docPath) return res.status(400).json({ success: false, error: 'docPath is required' });
-  if (!content) return res.status(400).json({ success: false, error: 'content is required' });
-
-  try {
-    const root = sandbox.getWorkspaceRoot();
-    const absPath = path.isAbsolute(docPath) ? docPath : path.resolve(root, docPath);
-    if (!isPathInside(root, absPath)) {
-      return res.status(403).json({ success: false, error: 'Access Denied: Path is outside the workspace root.' });
-    }
-
-    fs.mkdirSync(path.dirname(absPath), { recursive: true });
-    fs.writeFileSync(absPath, content, 'utf-8');
-
-    res.json({ success: true, path: path.relative(root, absPath).replace(/\\/g, '/') });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
 
 app.post('/api/workflows/founder/generate', async (req, res) => {
   const { workflowId, customPrompt, bypassSecrets } = req.body;
@@ -3630,216 +2881,20 @@ app.post('/api/workflows/agency/export', async (req, res) => {
   }
 });
 
-function isPathInside(parent: string, child: string): boolean {
+export function isPathInside(parent: string, child: string): boolean {
   const relative = path.relative(parent, child);
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-app.post('/api/planning/import', async (req, res) => {
-  const { plan, basePlan, baseLastModified, workspacePaths } = req.body;
-  if (!plan) return res.status(400).json({ error: 'plan is required' });
-  try {
-    const root = sandbox.getWorkspaceRoot();
-    const targets = Array.isArray(workspacePaths) && workspacePaths.length > 0 ? workspacePaths : [root];
-    
-    let finalPlan = plan;
-    let conflictDetected = false;
 
-    // 1. Process files and write plans
-    for (const targetPath of targets) {
-      const resolvedTarget = path.isAbsolute(targetPath) ? path.resolve(targetPath) : path.resolve(root, targetPath);
-      if (!isPathInside(root, resolvedTarget)) {
-        return res.status(403).json({ error: `Access Denied: Path "${targetPath}" is outside the active workspace root.` });
-      }
-      sandbox.whitelistDirectory(resolvedTarget);
-      if (fs.existsSync(resolvedTarget)) {
-        const planPath = path.join(resolvedTarget, 'implementation_plan.md');
-        
-        let shouldMerge = false;
-        let currentDiskContent = '';
-        
-        if (fs.existsSync(planPath) && baseLastModified && basePlan !== undefined) {
-          const stats = fs.statSync(planPath);
-          const currentLastModified = stats.mtime.toISOString();
-          if (currentLastModified !== baseLastModified) {
-            shouldMerge = true;
-            currentDiskContent = fs.readFileSync(planPath, 'utf-8');
-          }
-        }
 
-        if (shouldMerge) {
-          const mergeResult = threeWayMerge(basePlan, plan, currentDiskContent);
-          finalPlan = mergeResult.merged;
-          if (mergeResult.hasConflicts) {
-            conflictDetected = true;
-          }
-        }
 
-        fs.writeFileSync(planPath, finalPlan, 'utf-8');
-      }
-    }
 
-    // Dependency reconciliation scan across package.json targets
-    const pkgDataMap = new Map<string, any>();
-    for (const targetPath of targets) {
-      const resolvedTarget = path.isAbsolute(targetPath) ? targetPath : path.resolve(root, targetPath);
-      const pkgPath = path.join(resolvedTarget, 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        try {
-          const content = fs.readFileSync(pkgPath, 'utf-8');
-          pkgDataMap.set(resolvedTarget, JSON.parse(content));
-        } catch {}
-      }
-    }
 
-    const depConflicts: Array<{ package: string; targetA: string; versionA: string; targetB: string; versionB: string }> = [];
-    if (pkgDataMap.size > 1) {
-      const workspaces = Array.from(pkgDataMap.keys());
-      const allDeps = new Map<string, Map<string, string>>();
 
-      for (const [targetPath, pkgJson] of pkgDataMap.entries()) {
-        const combine = { ...(pkgJson.dependencies || {}), ...(pkgJson.devDependencies || {}) };
-        for (const [name, version] of Object.entries(combine)) {
-          if (!allDeps.has(name)) allDeps.set(name, new Map());
-          allDeps.get(name)!.set(targetPath, version as string);
-        }
-      }
 
-      for (const [name, versionMap] of allDeps.entries()) {
-        if (versionMap.size > 1) {
-          const versions = Array.from(versionMap.entries());
-          const firstVal = versions[0][1];
-          for (let i = 1; i < versions.length; i++) {
-            if (versions[i][1] !== firstVal) {
-              depConflicts.push({
-                package: name,
-                targetA: path.basename(versions[0][0]),
-                versionA: firstVal,
-                targetB: path.basename(versions[i][0]),
-                versionB: versions[i][1]
-              });
-            }
-          }
-        }
-      }
 
-      if (depConflicts.length > 0) {
-        let reportContent = '# Dependency Reconciliation Report\n\n';
-        reportContent += 'The following dependency conflicts were detected across your target microservices/repositories:\n\n';
-        reportContent += '| Package | Workspace A | Version A | Workspace B | Version B |\n';
-        reportContent += '| :--- | :--- | :--- | :--- | :--- |\n';
-        for (const conflict of depConflicts) {
-          reportContent += `| \`${conflict.package}\` | \`${conflict.targetA}\` | \`${conflict.versionA}\` | \`${conflict.targetB}\` | \`${conflict.versionB}\` |\n`;
-        }
-        reportContent += '\n*Action Recommended: Resolve these mismatches to ensure library compatibility.*';
 
-        for (const targetPath of targets) {
-          const resolvedTarget = path.isAbsolute(targetPath) ? targetPath : path.resolve(root, targetPath);
-          if (fs.existsSync(resolvedTarget)) {
-            fs.writeFileSync(path.join(resolvedTarget, 'reconciliation_report.md'), reportContent, 'utf-8');
-          }
-        }
-      }
-    }
-
-    // 2. Parse checklist items from the final plan
-    const lines = finalPlan.split('\n');
-    const tasks: string[] = [];
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('- [ ]') || trimmed.startsWith('- [x]') || trimmed.startsWith('- [/]')) {
-        const cleanTask = trimmed.replace(/^-\s+\[[ x/]\]\s*/i, '').trim();
-        if (cleanTask) tasks.push(cleanTask);
-      }
-    }
-    
-    let taskContent = '# Checklist: Imported Planning Tasks\n\n';
-    if (tasks.length > 0) {
-      taskContent += tasks.map(task => `- [ ] ${task}`).join('\n') + '\n';
-    } else {
-      taskContent += '- [ ] Complete imported plan implementation\n';
-    }
-
-    let newLastModified = '';
-    for (const targetPath of targets) {
-      const resolvedTarget = path.isAbsolute(targetPath) ? targetPath : path.resolve(root, targetPath);
-      if (fs.existsSync(resolvedTarget)) {
-        const taskPath = path.join(resolvedTarget, 'task.md');
-        fs.writeFileSync(taskPath, taskContent, 'utf-8');
-
-        const planPath = path.join(resolvedTarget, 'implementation_plan.md');
-        if (fs.existsSync(planPath)) {
-          const stats = fs.statSync(planPath);
-          newLastModified = stats.mtime.toISOString();
-        }
-      }
-    }
-    
-    res.json({ 
-      success: true, 
-      conflict: conflictDetected,
-      depConflicts: depConflicts.length > 0 ? depConflicts : null,
-      tasks,
-      plan: finalPlan,
-      lastModified: newLastModified,
-      message: conflictDetected
-        ? 'Sync conflict detected! Merge conflict markers have been injected into the plan.'
-        : `Plan imported successfully. Files updated in ${targets.length} workspace(s).` 
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
-
-app.get('/api/cost/history', async (req, res) => {
-  try {
-    const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
-    const history = await costGuard.getHistory();
-    res.json({ success: true, history, restricted: false });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: 'Operation failed.' });
-  }
-});
-
-app.get('/api/cost/spend-cap', async (_req, res) => {
-  try {
-    const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
-    const status = await costGuard.checkSpendCap();
-    res.json({ success: true, ...status });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/cost/spend-cap', async (req, res) => {
-  try {
-    const costGuard = new CostGuard(sandbox.getWorkspaceRoot());
-    const updated = await costGuard.setSpendCap(req.body);
-    const status = await costGuard.checkSpendCap();
-    res.json({ success: true, ...status, cap: updated });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-app.post('/api/cost/estimate', async (req, res) => {
-  try {
-    const { prompt, model } = req.body;
-    if (!prompt) return res.status(400).json({ error: 'Prompt is required' });
-    const activeM = model || activeModel;
-    const inputTokens = estimateTokens(prompt);
-    const inputCost = estimateCost(prompt, activeM, false);
-    res.json({
-      success: true,
-      inputTokens,
-      inputCost,
-      model: activeM,
-      provider: getProviderForModel(activeM)
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Operation failed.' });
-  }
-});
 
 app.get('/api/providers/detect', async (req, res) => {
   try {
@@ -4015,3 +3070,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 export { app, server, companionServer };
+
+export function setActiveProjectId(id: string | null) { activeProjectId = id; }
+
+export function setTerminalManager(tm: any) { terminalManager = tm; }
