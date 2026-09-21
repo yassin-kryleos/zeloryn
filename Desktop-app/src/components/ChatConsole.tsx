@@ -181,7 +181,7 @@ export const ChatConsole: React.FC<ChatConsoleProps> = ({
   const executeRevert = async (logIndex: number, filePath: string) => {
     try {
       setRevertStatus(prev => ({ ...prev, [logIndex]: 'reverting...' }));
-      const response = await fetch('http://localhost:3001/api/workspace/revert', {
+      const response = await fetch(`${API_BASE_URL}/workspace/revert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath })

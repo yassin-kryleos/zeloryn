@@ -47,7 +47,7 @@ export const CodebaseGraph: React.FC<CodebaseGraphProps> = ({ onOpenFilePreview,
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('http://localhost:3001/api/workspace/graph');
+      const res = await fetch(`${API_BASE_URL}/workspace/graph`);
       if (!res.ok) {
         throw new Error(`Server returned status ${res.status}`);
       }

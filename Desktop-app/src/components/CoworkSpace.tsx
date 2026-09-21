@@ -322,7 +322,7 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
   const handleInstallStarterAgent = async (agent: CustomAgent) => {
     const filePath = `.kryleos/agents/${agentFileName(agent.role)}.json`;
     try {
-      const res = await fetch('http://localhost:3001/api/files/create', {
+      const res = await fetch(`${API_BASE_URL}/files/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -348,7 +348,7 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
   const handleShareAgent = async (agent: CustomAgent) => {
     const filePath = `.kryleos/agents/${agentFileName(agent.role)}.json`;
     try {
-      await fetch('http://localhost:3001/api/files/create', {
+      await fetch(`${API_BASE_URL}/files/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -357,7 +357,7 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
           content: JSON.stringify(agent, null, 2)
         })
       });
-      const res = await fetch('http://localhost:3001/api/artifacts/publish', {
+      const res = await fetch(`${API_BASE_URL}/artifacts/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath })
@@ -421,7 +421,7 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
     const filePath = `.matrix/skills/${skillName.trim()}${extension}`;
 
     try {
-      const res = await fetch('http://localhost:3001/api/files/create', {
+      const res = await fetch(`${API_BASE_URL}/files/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -452,7 +452,7 @@ export const CoworkSpace: React.FC<CoworkSpaceProps> = ({
     const filePath = `.matrix/skills/${name}${extension}`;
 
     try {
-      const res = await fetch(`http://localhost:3001/api/files?path=${encodeURIComponent(filePath)}`, {
+      const res = await fetch(`${API_BASE_URL}/files?path=${encodeURIComponent(filePath)}`, {
         method: 'DELETE'
       });
       if (res.ok) {

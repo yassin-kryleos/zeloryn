@@ -181,7 +181,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const handleUpdateCommandPolicy = async (role: 'admin' | 'developer', prefixesStr: string) => {
     try {
       const prefixes = prefixesStr.split(',').map(s => s.trim()).filter(Boolean);
-      await fetch('http://localhost:3001/api/workspace/command-policy', {
+      await fetch(`${API_BASE_URL}/workspace/command-policy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -198,7 +198,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     setIsBuildingIndex(true);
     setSemanticStatus('Building index...');
     try {
-      const res = await fetch('http://localhost:3001/api/workspace/semantic-cache/rebuild', {
+      const res = await fetch(`${API_BASE_URL}/workspace/semantic-cache/rebuild`, {
         method: 'POST'
       });
       const data = await res.json() as any;
@@ -349,7 +349,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
 
   const fetchPairedDevices = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/companion/devices');
+      const res = await fetch(`${API_BASE_URL}/companion/devices`);
       if (res.ok) {
         const data = await res.json();
         if (data.success) {
@@ -363,7 +363,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
 
   const handleRevokeDevice = async (deviceId: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/companion/devices/${deviceId}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/companion/devices/${deviceId}`, { method: 'DELETE' });
       if (res.ok) {
         setPairedDevices(prev => prev.filter(d => d.deviceId !== deviceId));
         onNotify?.('Device revoked.', 'success');
@@ -378,7 +378,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   useEffect(() => {
     const fetchCompanionStatus = async () => {
       try {
-        const res = await fetch('http://localhost:3001/api/companion/status');
+        const res = await fetch(`${API_BASE_URL}/companion/status`);
         if (res.ok) {
           const data = await res.json();
           if (data.success) {
@@ -444,7 +444,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       else if (provider === 'gemini' && inputGeminiBaseUrl) bUrl = inputGeminiBaseUrl;
       else if (provider === 'custom') bUrl = inputCustomBaseUrl;
 
-      const res = await fetch('http://localhost:3001/api/providers/health-check', {
+      const res = await fetch(`${API_BASE_URL}/providers/health-check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -489,7 +489,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     setIsLoadingCustomModels(true);
     setCustomStatus('Querying /v1/models...');
     try {
-      const res = await fetch('http://localhost:3001/api/providers/custom/models', {
+      const res = await fetch(`${API_BASE_URL}/providers/custom/models`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -521,7 +521,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     setDetectingOllama(true);
     setWizardOllamaStatus('Scanning localhost:11434...');
     try {
-      const res = await fetch(`http://localhost:3001/api/providers/detect?baseUrl=${encodeURIComponent(inputOllamaUrl)}`);
+      const res = await fetch(`${API_BASE_URL}/providers/detect?baseUrl=${encodeURIComponent(inputOllamaUrl)}`);
       const data = await res.json();
       if (res.ok && data.success && data.ollamaAvailable) {
         setWizardOllamaModels(data.models || []);
@@ -543,7 +543,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
     const confirmed = window.confirm('Clear stored credentials and Kryleos app data? Workspace files and repository .kryleos folders will remain.');
     if (!confirmed) return;
     try {
-      const res = await fetch('http://localhost:3001/api/local-data', { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/local-data`, { method: 'DELETE' });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
       localStorage.clear();
@@ -555,7 +555,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
 
   const handleLinkGoogle = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/google/auth-url');
+      const response = await fetch(`${API_BASE_URL}/google/auth-url`);
       const data = await response.json() as any;
       if (data.url) {
         window.open(data.url, '_blank');
@@ -563,7 +563,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
         let count = 0;
         const interval = setInterval(async () => {
           count++;
-          const res = await fetch('http://localhost:3001/api/google/status');
+          const res = await fetch(`${API_BASE_URL}/google/status`);
           const status = await res.json() as any;
           if (status.linked) {
             onUpdateGoogleStatus();
@@ -580,7 +580,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const handleSyncGoogle = async () => {
     try {
       setIsLocalSyncing(true);
-      const res = await fetch('http://localhost:3001/api/google/sync', { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/google/sync`, { method: 'POST' });
       const data = await res.json() as any;
       setIsLocalSyncing(false);
       onNotify?.(data.message || data.error || 'Sync status resolved.', data.error ? 'error' : 'success');
@@ -606,7 +606,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
   const refreshOllamaModels = React.useCallback(async (baseUrl: string) => {
     setIsLoadingOllamaModels(true);
     try {
-      const url = new URL('http://localhost:3001/api/ollama/models');
+      const url = new URL(`${API_BASE_URL}/ollama/models`);
       if (baseUrl && baseUrl.trim()) url.searchParams.set('baseUrl', baseUrl.trim());
       const res = await fetch(url.toString());
       const data = await res.json() as { success?: boolean; models?: OllamaModelOption[]; error?: string };
@@ -783,7 +783,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
       privacyMode: privacyInput
     });
     if (inputGithubRepoUrl) {
-      fetch('http://localhost:3001/api/git/remote', {
+      fetch(`${API_BASE_URL}/git/remote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: inputGithubRepoUrl, token: inputGithubToken })
@@ -3151,7 +3151,7 @@ export const ConfigHeader: React.FC<ConfigHeaderProps> = ({
                 type="button"
                 onClick={async () => {
                   try {
-                    const res = await fetch('http://localhost:3001/api/companion/pairing-code');
+                    const res = await fetch(`${API_BASE_URL}/companion/pairing-code`);
                     if (res.ok) {
                       const data = await res.json();
                       if (data.success) {

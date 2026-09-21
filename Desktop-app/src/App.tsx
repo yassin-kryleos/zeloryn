@@ -190,7 +190,7 @@ function App() {
     let mounted = true;
     const fetchGitBranch = async () => {
       try {
-        const res = await fetch('http://localhost:3001/api/git/status');
+        const res = await fetch(`${API_BASE_URL}/git/status`);
         if (res.ok) {
           const data = await res.json();
           if (mounted && data.currentBranch) {
@@ -227,7 +227,7 @@ function App() {
 
   const handleImportTodosFromPalette = async () => {
     try {
-      const res = await fetch(`http://localhost:3001/api/plan/todos?workspace=${encodeURIComponent(workspaceRoot)}`);
+      const res = await fetch(`${API_BASE_URL}/plan/todos?workspace=${encodeURIComponent(workspaceRoot)}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.todos) && data.todos.length > 0) {
         const newTasks: ProjectTask[] = data.todos.map((t: any) => ({
@@ -325,7 +325,7 @@ function App() {
     let cancelled = false;
     const detect = async () => {
       try {
-        const res = await fetch(`http://localhost:3001/api/providers/detect?baseUrl=${encodeURIComponent(ollamaUrl)}`);
+        const res = await fetch(`${API_BASE_URL}/providers/detect?baseUrl=${encodeURIComponent(ollamaUrl)}`);
         const data = await res.json();
         if (!cancelled) setOllamaDetected(Boolean(res.ok && data.success && data.ollamaAvailable));
       } catch {
@@ -491,7 +491,7 @@ function App() {
 
   const fetchWorkspace = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/workspace');
+      const response = await fetch(`${API_BASE_URL}/workspace`);
       if (response.ok) {
         const data = await response.json();
         setWorkspaceRoot(data.workspaceRoot || data.defaultWorkspace || '');
@@ -503,7 +503,7 @@ function App() {
 
   const fetchProjects = useCallback(async (autoSelectId?: string) => {
     try {
-      const res = await fetch('http://localhost:3001/api/projects');
+      const res = await fetch(`${API_BASE_URL}/projects`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.projects)) {
@@ -514,7 +514,7 @@ function App() {
             const found = data.projects.find((p: any) => p.id === storedId);
             if (found) {
               setActiveProject(found);
-              await fetch('http://localhost:3001/api/projects/active', {
+              await fetch(`${API_BASE_URL}/projects/active`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: storedId })
@@ -530,7 +530,7 @@ function App() {
 
   const handleSelectProject = async (project: any) => {
     try {
-      const res = await fetch('http://localhost:3001/api/projects/active', {
+      const res = await fetch(`${API_BASE_URL}/projects/active`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: project.id })
@@ -567,7 +567,7 @@ function App() {
 
         const flowSessionId = `flow_board_${project.id}`;
         try {
-          const tasksRes = await fetch(`http://localhost:3001/api/sessions/${flowSessionId}`);
+          const tasksRes = await fetch(`${API_BASE_URL}/sessions/${flowSessionId}`);
           if (tasksRes.ok) {
             const tasksData = await tasksRes.json();
             if (Array.isArray(tasksData.tasks)) {
@@ -589,7 +589,7 @@ function App() {
   const handleDeleteProject = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`http://localhost:3001/api/projects/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/projects/${id}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -609,7 +609,7 @@ function App() {
 
   const handleCreateProject = async (name: string, folderPath: string, gitUrl: string, description: string) => {
     try {
-      const res = await fetch('http://localhost:3001/api/projects/create', {
+      const res = await fetch(`${API_BASE_URL}/projects/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, folderPath, gitUrl, description })
@@ -629,7 +629,7 @@ function App() {
 
   const fetchCredentials = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/credentials');
+      const response = await fetch(`${API_BASE_URL}/credentials`);
       if (response.ok) {
         const data = await response.json();
         const electronAPI = (window as any).electronAPI;
@@ -750,7 +750,7 @@ function App() {
         if (v !== undefined) payload[k] = v;
       }
 
-      const res = await fetch('http://localhost:3001/api/credentials', {
+      const res = await fetch(`${API_BASE_URL}/credentials`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -792,7 +792,7 @@ function App() {
 
   const fetchSessions = useCallback(async () => {
     try {
-      const response = await fetch(`http://localhost:3001/api/sessions?space=${activeSpace}`);
+      const response = await fetch(`${API_BASE_URL}/sessions?space=${activeSpace}`);
       if (response.ok) {
         const data = await response.json();
         setSessions(data);
@@ -804,7 +804,7 @@ function App() {
 
   const fetchGoogleStatus = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/google/status');
+      const res = await fetch(`${API_BASE_URL}/google/status`);
       if (res.ok) {
         const data = await res.json();
         setIsGoogleLinked(data.linked);
@@ -838,7 +838,7 @@ function App() {
       return;
     }
     try {
-      const res = await fetch(`http://localhost:3001/api/sessions/${flowSessionId}/tasks`, {
+      const res = await fetch(`${API_BASE_URL}/sessions/${flowSessionId}/tasks`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tasks: updatedTasks })
@@ -854,7 +854,7 @@ function App() {
   const hydrateFlowBoard = useCallback(async () => {
     const flowSessionId = activeProject ? `flow_board_${activeProject.id}` : 'flow_board';
     try {
-      const res = await fetch(`http://localhost:3001/api/sessions/${flowSessionId}`);
+      const res = await fetch(`${API_BASE_URL}/sessions/${flowSessionId}`);
       if (!res.ok) return;
       const data = await res.json();
       if (Array.isArray(data.tasks)) setTasks(data.tasks);
@@ -1327,7 +1327,7 @@ function App() {
     if (!isConnected) return;
     const fetchTelemetry = async () => {
       try {
-        const res = await fetch('http://localhost:3001/api/telemetry');
+        const res = await fetch(`${API_BASE_URL}/telemetry`);
         if (res.ok) {
           const data = await res.json();
           setTelemetry(data);
@@ -1499,7 +1499,7 @@ function App() {
     // Create AND activate a real project so PLAN opens ready to use — the
     // Scratchbook requires an active project.
     try {
-      const res = await fetch('http://localhost:3001/api/projects/create', {
+      const res = await fetch(`${API_BASE_URL}/projects/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1523,7 +1523,7 @@ function App() {
   };
 
   const handleRunDemo = async () => {
-    const res = await fetch('http://localhost:3001/api/demo/start', { method: 'POST' });
+    const res = await fetch(`${API_BASE_URL}/demo/start`, { method: 'POST' });
     const data = await res.json();
     if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
     localStorage.setItem('matrix_setup_done', 'true');
@@ -1546,7 +1546,7 @@ function App() {
     let flowTasks = tasks;
     const flowSessionId = activeProject ? `flow_board_${activeProject.id}` : 'flow_board';
     try {
-      const res = await fetch(`http://localhost:3001/api/sessions/${flowSessionId}`);
+      const res = await fetch(`${API_BASE_URL}/sessions/${flowSessionId}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.tasks)) flowTasks = data.tasks;
@@ -1573,7 +1573,7 @@ function App() {
     e.stopPropagation();
     if (isStreaming) return;
     try {
-      const res = await fetch(`http://localhost:3001/api/sessions/${sessionId}`, {
+      const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
         method: 'DELETE'
       });
       if (res.ok) {
@@ -1621,7 +1621,7 @@ function App() {
 
   const handleOpenAppGraphPreview = async (filePath: string) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/files/content?path=${encodeURIComponent(filePath)}`);
+      const res = await fetch(`${API_BASE_URL}/files/content?path=${encodeURIComponent(filePath)}`);
       const data = await res.json();
       setAppGraphPreviewFile({ path: filePath, content: data.content || '' });
       setAppGraphEditedContent(data.content || '');
@@ -1634,7 +1634,7 @@ function App() {
   const handleSaveAppGraphFile = async () => {
     if (!appGraphPreviewFile) return;
     try {
-      const res = await fetch('http://localhost:3001/api/files/save', {
+      const res = await fetch(`${API_BASE_URL}/files/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

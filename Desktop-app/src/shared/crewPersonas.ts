@@ -70,7 +70,7 @@ export function getAllAvailableAssignees(): AssigneeOption[] {
 // Install a persona into the workspace .kryleos/agents directory via the
 // existing file-create route. Returns nothing; throws on failure.
 export async function installCrewPersona(persona: CrewPersona): Promise<void> {
-  const res = await fetch('http://localhost:3001/api/files/create', {
+  const res = await fetch(`${API_BASE_URL}/files/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -167,7 +167,7 @@ export function PlanningScreen({
   const loadCostHistory = useCallback(async () => {
     setCostHistoryLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/cost/history', {
+      const res = await fetch(`${API_BASE_URL}/cost/history`, {
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
       });
       if (res.ok) {
@@ -271,7 +271,7 @@ export function PlanningScreen({
 
   const loadDocTemplates = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/docs/templates');
+      const res = await fetch(`${API_BASE_URL}/docs/templates`);
       if (res.ok) {
         const data = await res.json();
         setDocTemplates(data.templates || []);
@@ -284,7 +284,7 @@ export function PlanningScreen({
 
   const loadSavedDocs = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/artifacts');
+      const res = await fetch(`${API_BASE_URL}/artifacts`);
       if (res.ok) {
         const data = await res.json();
         const docs = (data.artifacts || [])
@@ -316,7 +316,7 @@ export function PlanningScreen({
     try {
       onUpdateGithubConfig?.({ githubToken: gitTokenInput, githubRepoUrl: gitRepoInput });
 
-      const res = await fetch('http://localhost:3001/api/integrations/github/fetch-issues', {
+      const res = await fetch(`${API_BASE_URL}/integrations/github/fetch-issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: gitTokenInput, repoUrl: gitRepoInput })
@@ -343,7 +343,7 @@ export function PlanningScreen({
     setImportingIssues(true);
     const issuesToImport = gitIssues.filter(issue => selectedGitIssueIds.has(issue.id));
     try {
-      const res = await fetch('http://localhost:3001/api/integrations/github/import-issues', {
+      const res = await fetch(`${API_BASE_URL}/integrations/github/import-issues`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -373,7 +373,7 @@ export function PlanningScreen({
     setGeneratingDoc(true);
     setDocContent('');
     try {
-      const res = await fetch('http://localhost:3001/api/docs/generate', {
+      const res = await fetch(`${API_BASE_URL}/docs/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ templateId: selectedTemplateId })
@@ -399,8 +399,8 @@ export function PlanningScreen({
     try {
       const isFounder = workflowType === 'founder';
       const endpoint = isFounder 
-        ? 'http://localhost:3001/api/workflows/founder/generate'
-        : 'http://localhost:3001/api/workflows/agency/export';
+        ? `${API_BASE_URL}/workflows/founder/generate`
+        : `${API_BASE_URL}/workflows/agency/export`;
 
       const body: any = {
         workflowId,
@@ -437,7 +437,7 @@ export function PlanningScreen({
     if (!utilitySavePath || !utilityContent) return;
     setSavingUtility(true);
     try {
-      const res = await fetch('http://localhost:3001/api/docs/write', {
+      const res = await fetch(`${API_BASE_URL}/docs/write`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -467,7 +467,7 @@ export function PlanningScreen({
     }
     setPatchingDoc(true);
     try {
-      const res = await fetch('http://localhost:3001/api/docs/patch', {
+      const res = await fetch(`${API_BASE_URL}/docs/patch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ docPath: selectedDocPath })
@@ -502,7 +502,7 @@ export function PlanningScreen({
       onConfirm: async () => {
         setSavingDoc(true);
         try {
-          const res = await fetch('http://localhost:3001/api/docs/write', {
+          const res = await fetch(`${API_BASE_URL}/docs/write`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ docPath: finalPath, content: docContent })
@@ -555,7 +555,7 @@ export function PlanningScreen({
       return;
     }
     try {
-      const res = await fetch('http://localhost:3001/api/plan/workspace');
+      const res = await fetch(`${API_BASE_URL}/plan/workspace`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.items)) {
@@ -639,7 +639,7 @@ export function PlanningScreen({
     setIsExtracting(true);
     setIsExtractModalOpen(true);
     try {
-      const res = await fetch('http://localhost:3001/api/plan/workspace/extract', {
+      const res = await fetch(`${API_BASE_URL}/plan/workspace/extract`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId })
@@ -663,7 +663,7 @@ export function PlanningScreen({
     // Append drafts to current workspace items
     const updatedItems = [...workspaceItems, ...extractedDrafts];
     try {
-      const res = await fetch('http://localhost:3001/api/plan/workspace', {
+      const res = await fetch(`${API_BASE_URL}/plan/workspace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: updatedItems })
@@ -691,7 +691,7 @@ export function PlanningScreen({
     
     try {
       const projectDescription = localStorage.getItem('matrix_project_description') || '';
-      const res = await fetch('http://localhost:3001/api/plan/workspace/feasibility', {
+      const res = await fetch(`${API_BASE_URL}/plan/workspace/feasibility`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -719,7 +719,7 @@ export function PlanningScreen({
           return it;
         });
         
-        await fetch('http://localhost:3001/api/plan/workspace', {
+        await fetch(`${API_BASE_URL}/plan/workspace`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ items: updatedItems })
@@ -755,7 +755,7 @@ export function PlanningScreen({
     });
     
     try {
-      const res = await fetch('http://localhost:3001/api/plan/workspace', {
+      const res = await fetch(`${API_BASE_URL}/plan/workspace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: updated })
@@ -784,7 +784,7 @@ export function PlanningScreen({
     });
 
     try {
-      const res = await fetch('http://localhost:3001/api/plan/workspace', {
+      const res = await fetch(`${API_BASE_URL}/plan/workspace`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: updated })
@@ -809,7 +809,7 @@ export function PlanningScreen({
       onConfirm: async () => {
         const updated = workspaceItems.filter(it => it.id !== id);
         try {
-          const res = await fetch('http://localhost:3001/api/plan/workspace', {
+          const res = await fetch(`${API_BASE_URL}/plan/workspace`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ items: updated })
@@ -845,7 +845,7 @@ export function PlanningScreen({
     setIsPushing(true);
     const selectedItemsList = workspaceItems.filter(it => selectedItemIds.has(it.id));
     try {
-      const res = await fetch('http://localhost:3001/api/crew/sync', {
+      const res = await fetch(`${API_BASE_URL}/crew/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -914,7 +914,7 @@ export function PlanningScreen({
   const loadBuildLoop = useCallback(async () => {
     setLoopLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/plan/drift');
+      const res = await fetch(`${API_BASE_URL}/plan/drift`);
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'drift route failed');
       setDriftItems(Array.isArray(data.report?.items) ? data.report.items : []);
@@ -942,7 +942,7 @@ export function PlanningScreen({
       for (const item of enrichCandidates) {
         try {
           const res = await fetch(
-            `http://localhost:3001/api/plan/items/${encodeURIComponent(item.taskId)}/criteria/enrich`,
+            `${API_BASE_URL}/plan/items/${encodeURIComponent(item.taskId)}/criteria/enrich`,
             { method: 'POST' }
           );
           const data = await res.json();
@@ -969,11 +969,11 @@ export function PlanningScreen({
 
   const discardEnrichedCriterion = async (taskId: string, criterionId: string) => {
     try {
-      const current = await fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(taskId)}/criteria`);
+      const current = await fetch(`${API_BASE_URL}/plan/items/${encodeURIComponent(taskId)}/criteria`);
       const currentData = await current.json();
       if (!current.ok || !currentData.success) throw new Error(currentData.error || 'criteria fetch failed');
       const remaining = (currentData.criteria as AcceptanceCriterion[]).filter(c => c.id !== criterionId);
-      const res = await fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(taskId)}/criteria`, {
+      const res = await fetch(`${API_BASE_URL}/plan/items/${encodeURIComponent(taskId)}/criteria`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ criteria: remaining })
@@ -1006,7 +1006,7 @@ export function PlanningScreen({
   const runWhatsLeft = async () => {
     setWhatsLeftLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/plan/whats-left', {
+      const res = await fetch(`${API_BASE_URL}/plan/whats-left`, {
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
       });
       const data = await res.json();
@@ -1037,7 +1037,7 @@ export function PlanningScreen({
     const content = lines.join('\n');
 
     try {
-      const scanRes = await fetch('http://localhost:3001/api/security/scan', {
+      const scanRes = await fetch(`${API_BASE_URL}/security/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: content })

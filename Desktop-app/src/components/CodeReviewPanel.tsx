@@ -201,7 +201,7 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
   const refreshCcDeviations = useCallback(async () => {
     try {
       setCcLoading(true);
-      const res = await fetch('http://localhost:3001/api/cc-deviations');
+      const res = await fetch(`${API_BASE_URL}/cc-deviations`);
       const data = await res.json() as { success: boolean; records: CcDeviationRecord[] };
       if (data.success) setCcDeviations(data.records);
     } catch {
@@ -214,7 +214,7 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
   const updateCcDeviationStatus = useCallback(async (id: string, status: 'accepted' | 'rejected') => {
     setCcDeviations(prev => prev.map(d => d.id === id ? { ...d, status } : d));
     try {
-      await fetch('http://localhost:3001/api/cc-deviations/status', {
+      await fetch(`${API_BASE_URL}/cc-deviations/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, status }),
@@ -232,7 +232,7 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
   const refreshReview = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/api/review/current');
+      const response = await fetch(`${API_BASE_URL}/review/current`);
       const data = await response.json() as ReviewStateResponse;
       setReviewState(data);
     } catch {
@@ -256,7 +256,7 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
   const updateStatus = async (change: ChangeRecord, status: ReviewStatus) => {
     setLocalStatus(prev => ({ ...prev, [change.id]: status }));
     if (change.source === 'git') {
-      await fetch('http://localhost:3001/api/review/status', {
+      await fetch(`${API_BASE_URL}/review/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: change.filePath, status })
@@ -271,7 +271,7 @@ export const CodeReviewPanel: React.FC<CodeReviewPanelProps> = ({ logs, onOpenFi
   const stageChange = async (change: ChangeRecord, staged: boolean) => {
     if (change.source !== 'git') return;
     setLocalStatus(prev => ({ ...prev, [change.id]: staged ? 'staged' : 'pending' }));
-    const response = await fetch('http://localhost:3001/api/review/stage', {
+    const response = await fetch(`${API_BASE_URL}/review/stage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path: change.filePath, staged })

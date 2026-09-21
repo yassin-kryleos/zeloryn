@@ -94,7 +94,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   const handleImportTodos = async () => {
     setImportingTodos(true);
     try {
-      const res = await fetch(`http://localhost:3001/api/plan/todos?workspace=${encodeURIComponent(workspaceRoot)}`);
+      const res = await fetch(`${API_BASE_URL}/plan/todos?workspace=${encodeURIComponent(workspaceRoot)}`);
       const data = await res.json();
       if (data.success && Array.isArray(data.todos) && data.todos.length > 0) {
         const newTasks: ProjectTask[] = data.todos.map((t: any) => ({
@@ -128,7 +128,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
 
   const loadWorktrees = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/worktrees');
+      const res = await fetch(`${API_BASE_URL}/worktrees`);
       if (res.ok) {
         const data = await res.json();
         const map: Record<string, { branch: string; isClean: boolean }> = {};
@@ -143,8 +143,8 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   const loadRunnersAndTargets = async () => {
     try {
       const [runnersRes, targetsRes] = await Promise.all([
-        fetch('http://localhost:3001/api/runners'),
-        fetch('http://localhost:3001/api/handoff/targets'),
+        fetch(`${API_BASE_URL}/runners`),
+        fetch(`${API_BASE_URL}/handoff/targets`),
       ]);
       if (runnersRes.ok) {
         const data = await runnersRes.json();
@@ -164,7 +164,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
 
   const handleExecuteHandoff = async (task: ProjectTask, targetAppId: string) => {
     try {
-      const res = await fetch('http://localhost:3001/api/handoff/export', {
+      const res = await fetch(`${API_BASE_URL}/handoff/export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,7 +197,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
 
   const handleCreateWorktree = async (task: ProjectTask) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/worktrees/card/${encodeURIComponent(task.id)}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/worktrees/card/${encodeURIComponent(task.id)}`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         onNotify?.(data.message || `Created isolated worktree on branch ${data.branch}`, 'success');
@@ -212,7 +212,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
 
   const handleMergeWorktree = async (task: ProjectTask) => {
     try {
-      const res = await fetch(`http://localhost:3001/api/worktrees/merge/${encodeURIComponent(task.id)}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/worktrees/merge/${encodeURIComponent(task.id)}`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         onNotify?.(data.message || 'Merged card worktree into workspace', 'success');
@@ -232,7 +232,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`http://localhost:3001/api/worktrees/revert/${encodeURIComponent(task.id)}`, { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/worktrees/revert/${encodeURIComponent(task.id)}`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         onNotify?.(data.message || `Reverted worktree and branch for card ${task.id}`, 'success');
@@ -248,7 +248,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   const handleRunPostExecutionReview = async (task: ProjectTask) => {
     try {
       onNotify?.(`Running Post-Execution CREW Review on "${task.title}"...`, 'info');
-      const res = await fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(task.id)}/review`, { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/plan/items/${encodeURIComponent(task.id)}/review`, { method: 'POST' });
       const data = await res.json();
       if (data.success && data.task) {
         const updated = tasks.map(t => t.id === task.id ? data.task : t);
@@ -354,7 +354,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
         return;
       }
       target.postExecutionReview.override = true;
-      fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(taskId)}/review/override`, { method: 'POST' }).catch(() => {});
+      fetch(`${API_BASE_URL}/plan/items/${encodeURIComponent(taskId)}/review/override`, { method: 'POST' }).catch(() => {});
     }
 
     const updated = tasks.map(t => {
@@ -474,7 +474,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
     setCriteriaBusy(true);
     try {
       // AI-draft Phase 1 criteria for review — not persisted until the user saves.
-      const res = await fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(task.id)}/criteria/generate`, {
+      const res = await fetch(`${API_BASE_URL}/plan/items/${encodeURIComponent(task.id)}/criteria/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -506,7 +506,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
           target: criterion.target.trim()
         }))
         .filter(criterion => criterion.description && criterion.target);
-      const res = await fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(criteriaTask.id)}/criteria`, {
+      const res = await fetch(`${API_BASE_URL}/plan/items/${encodeURIComponent(criteriaTask.id)}/criteria`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ criteria: cleaned })
@@ -530,7 +530,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
     setCriteriaBusy(true);
     setEnrichmentNotice(null);
     try {
-      const res = await fetch(`http://localhost:3001/api/plan/items/${encodeURIComponent(criteriaTask.id)}/criteria/enrich`, {
+      const res = await fetch(`${API_BASE_URL}/plan/items/${encodeURIComponent(criteriaTask.id)}/criteria/enrich`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -631,7 +631,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   const bootstrapScan = async () => {
     setBootstrapping(true);
     try {
-      const res = await fetch('http://localhost:3001/api/plan/bootstrap/evaluate', { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/plan/bootstrap/evaluate`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'bootstrap route failed');
       // Reflect updated likely-complete flags + criteria from the evaluation
@@ -649,7 +649,7 @@ export const ProjectBoard: React.FC<ProjectBoardProps> = ({
   const checkDrift = async () => {
     setDriftChecking(true);
     try {
-      const res = await fetch('http://localhost:3001/api/plan/drift');
+      const res = await fetch(`${API_BASE_URL}/plan/drift`);
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'drift route failed');
       const reportItems = data.report?.items || [];

@@ -48,7 +48,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
       : `${currentPath}/${newItemName.trim()}`;
 
     try {
-      const response = await fetch('http://localhost:3001/api/files/create', {
+      const response = await fetch(`${API_BASE_URL}/files/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -76,7 +76,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
     if (!previewFile) return;
     const filePath = currentPath === '.' ? previewFile.name : `${currentPath}/${previewFile.name}`;
     try {
-      const response = await fetch('http://localhost:3001/api/files/save', {
+      const response = await fetch(`${API_BASE_URL}/files/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -147,7 +147,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
   const handleGitPush = async () => {
     try {
       setGitSyncing(true);
-      const response = await fetch('http://localhost:3001/api/git/push', {
+      const response = await fetch(`${API_BASE_URL}/git/push`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: gitBranch })
@@ -165,7 +165,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
   const handleGitPull = async () => {
     try {
       setGitSyncing(true);
-      const response = await fetch('http://localhost:3001/api/git/pull', {
+      const response = await fetch(`${API_BASE_URL}/git/pull`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: gitBranch })
@@ -183,7 +183,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
 
   const fetchGitStatus = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/git/status');
+      const response = await fetch(`${API_BASE_URL}/git/status`);
       if (response.ok) {
         const data = await response.json();
         setGitActive(data.success);
@@ -197,7 +197,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
 
   const handleStageFile = async (filePath: string) => {
     try {
-      const response = await fetch('http://localhost:3001/api/git/stage', {
+      const response = await fetch(`${API_BASE_URL}/git/stage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath })
@@ -216,7 +216,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
     if (!commitMessage.trim()) return;
     setGitLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/git/commit', {
+      const response = await fetch(`${API_BASE_URL}/git/commit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: commitMessage.trim() })
@@ -244,7 +244,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(`http://localhost:3001/api/files?path=${encodeURIComponent(dirPath)}`);
+      const response = await fetch(`${API_BASE_URL}/files?path=${encodeURIComponent(dirPath)}`);
       if (!response.ok) {
         throw new Error(`HTTP Error ${response.status}`);
       }
@@ -282,7 +282,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
   const handleFileClick = async (fileName: string) => {
     const filePath = currentPath === '.' ? fileName : `${currentPath}/${fileName}`;
     try {
-      const response = await fetch(`http://localhost:3001/api/files/content?path=${encodeURIComponent(filePath)}`);
+      const response = await fetch(`${API_BASE_URL}/files/content?path=${encodeURIComponent(filePath)}`);
       if (!response.ok) {
         throw new Error('Failed to read file');
       }
@@ -297,7 +297,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
 
   const handleImportFromDrive = async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/google/import-folder', { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/google/import-folder`, { method: 'POST' });
       const data = await res.json() as any;
       onNotify?.(data.message || data.error || 'Import result resolved.', data.error ? 'error' : 'info');
       fetchFiles(currentPath);
@@ -310,7 +310,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
     if (!previewFile) return;
     const filePath = currentPath === '.' ? previewFile.name : `${currentPath}/${previewFile.name}`;
     try {
-      const response = await fetch('http://localhost:3001/api/artifacts/publish', {
+      const response = await fetch(`${API_BASE_URL}/artifacts/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath })
@@ -322,7 +322,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
       } else if (data.requiresBypass) {
         const proceed = window.confirm(`WARNING: Secrets detected in the file:\n${data.secrets.map((s: any) => `- ${s.secretType} (line ${s.line || 'unknown'})`).join('\n')}\n\nForce publish anyway?`);
         if (proceed) {
-          const retryRes = await fetch('http://localhost:3001/api/artifacts/publish', {
+          const retryRes = await fetch(`${API_BASE_URL}/artifacts/publish`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path: filePath, bypassSecrets: true })
@@ -346,7 +346,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({ workspaceRoot, onUpdat
   const handleDeployVercel = async () => {
     try {
       onNotify?.('Deployment in progress. This may take a few seconds.', 'info');
-      const response = await fetch('http://localhost:3001/api/artifacts/deploy', {
+      const response = await fetch(`${API_BASE_URL}/artifacts/deploy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider: 'vercel' })

@@ -45,7 +45,7 @@ export function ProjectSetupScreen({
     setScanning(true);
     setScanError(null);
     try {
-      const res = await fetch('http://localhost:3001/api/plan/bootstrap');
+      const res = await fetch(`${API_BASE_URL}/plan/bootstrap`);
       const data = await res.json();
       if (res.ok && data.success) setFingerprint(data.fingerprint as WorkspaceFingerprint);
       else throw new Error(data.error || `Scan failed (HTTP ${res.status})`);

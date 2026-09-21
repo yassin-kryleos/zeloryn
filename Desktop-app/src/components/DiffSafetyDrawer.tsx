@@ -40,7 +40,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
   const fetchDiffStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:3001/api/review/current');
+      const res = await fetch(`${API_BASE_URL}/review/current`);
       if (res.ok) {
         const data = await res.json();
         if (data.success !== false) {
@@ -68,7 +68,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
 
   const handleAcceptFile = async (filePath: string) => {
     try {
-      const res = await fetch('http://localhost:3001/api/review/status', {
+      const res = await fetch(`${API_BASE_URL}/review/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath, status: 'accepted' })
@@ -84,7 +84,7 @@ export const DiffSafetyDrawer: React.FC<DiffSafetyDrawerProps> = ({
 
   const handleDiscardFile = async (filePath: string) => {
     try {
-      const res = await fetch('http://localhost:3001/api/review/revert', {
+      const res = await fetch(`${API_BASE_URL}/review/revert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: filePath })

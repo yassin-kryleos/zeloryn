@@ -78,7 +78,7 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
 
   const loadArtifacts = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:3001/api/artifacts');
+      const res = await fetch(`${API_BASE_URL}/artifacts`);
       if (!res.ok) throw new Error('artifact route unavailable');
       const data = await res.json();
       setArtifacts(data.artifacts || []);
@@ -90,7 +90,7 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
   const loadArtifactContent = async (artifact: ArtifactItem) => {
     setSelectedArtifact(artifact);
     try {
-      const res = await fetch(`http://localhost:3001/api/artifacts/content?path=${encodeURIComponent(artifact.path)}`);
+      const res = await fetch(`${API_BASE_URL}/artifacts/content?path=${encodeURIComponent(artifact.path)}`);
       if (!res.ok) throw new Error('artifact preview unavailable');
       const data = await res.json();
       setArtifactContent(data.content || '');
@@ -102,7 +102,7 @@ export const PreviewDeck: React.FC<PreviewDeckProps> = ({
   const handleExportAuditTrail = async () => {
     setIsExportingAudit(true);
     try {
-      const res = await fetch('http://localhost:3001/api/audit/export', { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/audit/export`, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
         onNotify?.(`Audit trail exported to ${data.exportDir}`, 'success');
