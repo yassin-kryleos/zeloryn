@@ -1,8 +1,10 @@
 import { API_BASE_URL } from './api/client';
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, Component, type ErrorInfo, type ReactNode } from 'react';
 import { useSettingsStore } from './store/useSettingsStore';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useAppStore } from './store/useAppStore';
 import { ConfigHeader } from './components/ConfigHeader';
+import { SettingsDrawer } from './components/SettingsDrawer';
 import { ChatConsole } from './components/ChatConsole';
 import { AgentDashboard } from './components/AgentDashboard';
 import { NotificationCenter, type AppNotification, type NotificationKind } from './components/NotificationCenter';
@@ -80,6 +82,22 @@ class ErrorBoundary extends Component<
 function App() {
   const { apiKey, setApiKey, workspaceRoot, setWorkspaceRoot, theme, setTheme } = useSettingsStore();
   const { sidebarOpen, setSidebarOpen, activeSpace, setActiveSpace, isProjectModalOpen, setIsProjectModalOpen } = useAppStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.pathname !== `/${activeSpace}`) {
+      navigate(`/${activeSpace}`);
+    }
+  }, [activeSpace, navigate, location.pathname]);
+
+  useEffect(() => {
+    const space = location.pathname.replace('/', '');
+    if (space && space !== activeSpace && ['vibe', 'code', 'chat', 'cowork', 'project', 'plan'].includes(space)) {
+      setActiveSpace(space as any);
+    }
+  }, [location.pathname, setActiveSpace, activeSpace]);
+
   
   // API keys live in memory and persist only through the encrypted backend
   // credential store (safeStorage IPC) — never in plaintext localStorage.
@@ -1835,6 +1853,56 @@ function App() {
           {/* Zone 3: Right - Configuration, Engine Status, & Model Routing */}
           <div className="flex items-center gap-2 shrink-0">
             <ConfigHeader
+            apiKey={apiKey}
+            geminiApiKey={geminiApiKey}
+            openaiApiKey={openaiApiKey}
+            anthropicApiKey={anthropicApiKey}
+            openrouterApiKey={openrouterApiKey}
+            ollamaUrl={ollamaUrl}
+            customApiKey={customApiKey}
+            customBaseUrl={customBaseUrl}
+            customProviderName={customProviderName}
+            customModels={customModels}
+            anthropicBaseUrl={anthropicBaseUrl}
+            openaiBaseUrl={openaiBaseUrl}
+            geminiBaseUrl={geminiBaseUrl}
+            useSearch={useSearch}
+            model={model}
+            fastModel={fastModel}
+            workspaceRoot={workspaceRoot}
+            isConnected={isConnected}
+            theme={theme}
+            customInstructions={customInstructions}
+            responseMode={responseMode}
+            thinkingCapability={thinkingCapability}
+            isGoogleLinked={isGoogleLinked}
+            isSyncingGoogle={isSyncingGoogle}
+            onUpdateGoogleStatus={fetchGoogleStatus}
+            githubToken={githubToken}
+            githubRepoUrl={githubRepoUrl}
+            onOpenGuide={() => setIsTutorialOpen(true)}
+            onUpdateConfig={handleUpdateConfig}
+            piiFilterEnabled={piiFilterEnabled}
+            onTogglePiiFilter={(val) => {
+              setPiiFilterEnabled(val);
+              localStorage.setItem('matrix_pii_filter_enabled', String(val));
+            }}
+            workspacePaths={workspacePaths}
+            onUpdateWorkspacePaths={(paths) => {
+              setWorkspacePaths(paths);
+              localStorage.setItem('matrix_workspace_paths', JSON.stringify(paths));
+            }}
+            telemetry={telemetry}
+            collabActive={collabActive}
+            onStartCollabSession={handleStartCollabSession}
+            onNotify={notify}
+            zeroEgressMode={zeroEgressMode}
+            privacyMode={privacyMode}
+            modelRoles={modelRoles}
+            customPricing={customPricing}
+            syncedCatalog={syncedCatalog}
+          />
+<SettingsDrawer
             apiKey={apiKey}
             geminiApiKey={geminiApiKey}
             openaiApiKey={openaiApiKey}
