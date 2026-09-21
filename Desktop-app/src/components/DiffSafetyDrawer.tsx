@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   X,

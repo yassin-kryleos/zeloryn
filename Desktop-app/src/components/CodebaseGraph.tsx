@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pin, Eye, RefreshCw, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 

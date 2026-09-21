@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, ExternalLink, FileText, FolderOpen, GitBranch, Globe, Monitor, RefreshCw, Smartphone, Tablet, Terminal } from 'lucide-react';
 import type { AgentLog } from '../backend/agents';

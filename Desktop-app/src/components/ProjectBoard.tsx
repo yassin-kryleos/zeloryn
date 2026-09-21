@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Play, CheckCircle, Clock, Trash2, ArrowRight, ArrowLeft, FolderOpen, RefreshCw, ListChecks, Link2, X, Square, GitBranch, GitFork, ExternalLink, RotateCcw, ShieldCheck, Sparkles, Terminal, Kanban } from 'lucide-react';
 import type { AcceptanceCriterion, AcceptanceCriterionType, CriterionPhase, ProjectTask } from '../backend/db';

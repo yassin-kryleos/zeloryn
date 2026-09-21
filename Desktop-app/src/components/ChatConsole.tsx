@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useState, useRef, useEffect } from 'react';
 import { Brain, ChevronDown, ChevronRight, Mic, MicOff, Pencil, Square } from 'lucide-react';
 import type { AgentLog, AgentRole } from '../backend/agents';

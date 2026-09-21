@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useEffect, useState } from 'react';
 import { Rocket, FolderOpen, Sparkles, Database, GitBranch, FlaskConical, AlertTriangle, CheckCircle, Circle, Play } from 'lucide-react';
 

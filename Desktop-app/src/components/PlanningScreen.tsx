@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Send, Download, FileText, Sparkles, Edit, Eye, CheckCircle, Mic, MicOff, GitBranch, Layers, RefreshCw, X, FileCode, Terminal, Pencil, Square, Check, AlertTriangle, AlertCircle, Trash2, Plus, ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { useVoiceInput } from '../hooks/useVoiceInput';

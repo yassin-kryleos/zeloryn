@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ExternalLink, FileDiff, GitBranch, RefreshCw, RotateCcw, ShieldAlert, Terminal, XCircle } from 'lucide-react';
 import type { AgentLog } from '../backend/agents';

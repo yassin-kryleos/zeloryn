@@ -1,4 +1,7 @@
+import { API_BASE_URL } from './api/client';
 import { useState, useEffect, useRef, useCallback, lazy, Suspense, Component, type ErrorInfo, type ReactNode } from 'react';
+import { useSettingsStore } from './store/useSettingsStore';
+import { useAppStore } from './store/useAppStore';
 import { ConfigHeader } from './components/ConfigHeader';
 import { ChatConsole } from './components/ChatConsole';
 import { AgentDashboard } from './components/AgentDashboard';
@@ -75,12 +78,14 @@ class ErrorBoundary extends Component<
 }
 
 function App() {
+  const { apiKey, setApiKey, workspaceRoot, setWorkspaceRoot, theme, setTheme } = useSettingsStore();
+  const { sidebarOpen, setSidebarOpen, activeSpace, setActiveSpace, isProjectModalOpen, setIsProjectModalOpen } = useAppStore();
+  
   // API keys live in memory and persist only through the encrypted backend
   // credential store (safeStorage IPC) — never in plaintext localStorage.
   // They load on mount via fetchCredentials(); legacy plaintext entries are
   // migrated (and removed) by the migration effect below.
-  const [apiKey, setApiKey] = useState<string>('');
-  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+    const [geminiApiKey, setGeminiApiKey] = useState<string>('');
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
   const [anthropicApiKey, setAnthropicApiKey] = useState<string>('');
   const [openrouterApiKey, setOpenrouterApiKey] = useState<string>('');
@@ -132,17 +137,7 @@ function App() {
   });
   const [ollamaDetected, setOllamaDetected] = useState(false);
   const [activationRevision, setActivationRevision] = useState(0);
-  const [workspaceRoot, setWorkspaceRoot] = useState<string>('');
-  const [theme, setTheme] = useState<string>(() => {
-    const saved = localStorage.getItem('matrix_theme');
-    // Design Identity: strictly Dark (default) and Light themes.
-    // Legacy themes ('forge', 'slate', 'terminal', etc.) map onto 'dark'.
-    if (saved === 'light') {
-      return 'light';
-    }
-    return 'dark';
-  });
-  const [customInstructions, setCustomInstructions] = useState<string>(() => localStorage.getItem('matrix_custom_instructions') || '');
+      const [customInstructions, setCustomInstructions] = useState<string>(() => localStorage.getItem('matrix_custom_instructions') || '');
   const [responseMode, setResponseMode] = useState<ResponseMode>(() => (localStorage.getItem('matrix_response_mode') as ResponseMode) || 'balanced');
   const [thinkingCapability, setThinkingCapability] = useState<'low' | 'medium' | 'high' | 'ultra'>(() => (localStorage.getItem('matrix_thinking_capability') as any) || 'medium');
   const [isGoogleLinked, setIsGoogleLinked] = useState<boolean>(false);
@@ -350,8 +345,7 @@ function App() {
   const [telemetry, setTelemetry] = useState<{ bytesSent: number; bytesReceived: number; compressionSavingsRatio: number } | null>(null);
   const [projects, setProjects] = useState<any[]>([]);
   const [activeProject, setActiveProject] = useState<any | null>(null);
-  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
-  const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+    const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
 
   useEffect(() => {
     document.body.className = `theme-${theme}`;
@@ -365,23 +359,9 @@ function App() {
   // Connection, Sidebar & Space Toggles
   const [isConnected, setIsConnected] = useState<boolean>(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
-  // Returning users (setup already completed) land on the FLOW Today view;
+    // Returning users (setup already completed) land on the FLOW Today view;
   // first-run users start in PLAN behind the project-setup screen.
-  const [activeSpace, setActiveSpace] = useState<'vibe' | 'code' | 'chat' | 'cowork' | 'project' | 'plan'>(
-    () => {
-      try {
-        const saved = localStorage.getItem('matrix_active_space') as any;
-        if (saved && ['vibe', 'code', 'chat', 'cowork', 'project', 'plan'].includes(saved)) {
-          return saved;
-        }
-      } catch {
-        // ignore
-      }
-      return 'vibe';
-    }
-  );
-  const [showSetup, setShowSetup] = useState<boolean>(() => localStorage.getItem('matrix_setup_done') !== 'true');
+    const [showSetup, setShowSetup] = useState<boolean>(() => localStorage.getItem('matrix_setup_done') !== 'true');
   const [appGraphPreviewFile, setAppGraphPreviewFile] = useState<{ path: string; content: string } | null>(null);
   const [isAppGraphEditing, setIsAppGraphEditing] = useState<boolean>(false);
   const [appGraphEditedContent, setAppGraphEditedContent] = useState<string>('');
@@ -768,7 +748,7 @@ function App() {
   // so a downed backend never loses the user's keys.
   useEffect(() => {
     const legacyEntries: Array<{ storageKey: string; configKey: string; apply: (v: string) => void }> = [
-      { storageKey: 'matrix_api_key', configKey: 'apiKey', apply: v => setApiKey(prev => prev || v) },
+      { storageKey: 'matrix_api_key', configKey: 'apiKey', apply: v => setApiKey(apiKey || v) },
       { storageKey: 'matrix_gemini_api_key', configKey: 'geminiApiKey', apply: v => setGeminiApiKey(prev => prev || v) },
       { storageKey: 'matrix_openai_api_key', configKey: 'openaiApiKey', apply: v => setOpenaiApiKey(prev => prev || v) },
       { storageKey: 'matrix_anthropic_api_key', configKey: 'anthropicApiKey', apply: v => setAnthropicApiKey(prev => prev || v) },

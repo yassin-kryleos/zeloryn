@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useState, useEffect } from 'react';
 import { Settings, Key, FolderOpen, Eye, EyeOff, Search, HelpCircle, RefreshCw, Shield, ShieldAlert, CheckCircle2, XCircle, AlertTriangle, Check, BookOpen, Globe, Smartphone, Trash2, Heart, Cpu, Zap, ChevronDown } from 'lucide-react';
 import type { ResponseMode } from '../backend/agents';

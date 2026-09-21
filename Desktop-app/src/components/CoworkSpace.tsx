@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useState } from 'react';
 import { Plus, Clock, Trash2, ArrowRight, ArrowLeft, Terminal, ClipboardList, Code, FolderOpen, UserPlus, ShieldAlert, X, GitBranch, Download, ExternalLink } from 'lucide-react';
 import type { AgentLog, AgentRole } from '../backend/agents';

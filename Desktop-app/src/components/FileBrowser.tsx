@@ -1,3 +1,4 @@
+import { API_BASE_URL } from '../api/client';
 import React, { useState, useEffect } from 'react';
 import { Folder, File, ArrowLeft, Eye } from 'lucide-react';
 
