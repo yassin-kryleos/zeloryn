@@ -3,7 +3,7 @@ import { Send, Sparkles, Mic, MicOff, FileCode, Pencil, Square } from "lucide-re
 import { usePlanningStore } from "../../store/usePlanningStore";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 
-export const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "deepseek-chat": { input: 0.14 / 1000000, output: 0.28 / 1000000 },
   "deepseek-reasoner": { input: 0.55 / 1000000, output: 2.19 / 1000000 },
   "gemini-2.5-flash": { input: 0.075 / 1000000, output: 0.30 / 1000000 },
@@ -16,7 +16,7 @@ export const MODEL_PRICING: Record<string, { input: number; output: number }> = 
   "qwen/qwen-2.5-coder-32b-instruct": { input: 0.40 / 1000000, output: 0.40 / 1000000 },
 };
 
-export function getPricingForModel(model: string): { input: number; output: number } {
+function getPricingForModel(model: string): { input: number; output: number } {
   const m = (model || "").toLowerCase();
   if (m.startsWith("ollama:") || m === "llama3" || m === "qwen2.5-coder") {
     return { input: 0, output: 0 };

@@ -28,7 +28,7 @@ import type {
   PlanWorkspaceItem
 } from "../../backend/db";
 
-export function criterionStatusClass(status?: "pass" | "fail" | "unknown") {
+function criterionStatusClass(status?: "pass" | "fail" | "unknown") {
   switch (status) {
     case "pass":
       return "text-forge-neon";
@@ -39,14 +39,14 @@ export function criterionStatusClass(status?: "pass" | "fail" | "unknown") {
   }
 }
 
-export function isLowCapacityModel(modelName: string): boolean {
+function isLowCapacityModel(modelName: string): boolean {
   const m = (modelName || "").toLowerCase();
   if (m.startsWith("ollama:") || m === "llama3" || m === "qwen2.5-coder") return true;
   if (m === "gpt-4o-mini" || m.startsWith("claude-3-5-haiku") || m === "gemini-2.5-flash") return true;
   return false;
 }
 
-export const getCategoryColor = (cat: string) => {
+const getCategoryColor = (cat: string) => {
   switch ((cat || "").toLowerCase()) {
     case "frontend": return "border-cyan-800 text-cyan-300 bg-cyan-950/40";
     case "backend": return "border-purple-800 text-purple-300 bg-purple-950/40";
@@ -58,7 +58,7 @@ export const getCategoryColor = (cat: string) => {
   }
 };
 
-export const getFeasibilityVerdictClass = (verd: string) => {
+const getFeasibilityVerdictClass = (verd: string) => {
   switch (verd) {
     case "feasible": return "border-forge-neon text-forge-neon bg-green-950/20";
     case "needs_clarification": return "border-amber-600 text-amber-300 bg-amber-950/20";
